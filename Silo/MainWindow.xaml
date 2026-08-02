@@ -1,0 +1,64 @@
+﻿<Window x:Class="Silo.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:t="http://schemas.telerik.com/2008/xaml/presentation"
+        xmlns:tt="http://schemas.telerik.com/2008/xaml/presentation/pivot"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:Silo"
+        mc:Ignorable="d"
+        Title="MainWindow" Height="450" Width="800">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+        <MenuBar />
+        <ToolBar />
+        <DockPanel LastChildFill="True">
+            <t:RadNavigationView FontWeight="Normal" FontSize="18" DockPanel.Dock="Left" 
+                                 DisplayMode="Expanded">
+                <t:RadNavigationView.Items>
+                    <t:RadNavigationViewItem Content="Silo" IsExpanded="True">
+                        <t:RadNavigationViewItem.Items>
+                        <t:RadNavigationViewItem Content="Schema" />
+                        <t:RadNavigationViewItem Content="Data" />
+                        <t:RadNavigationViewItem Content="Visualization" />
+                        <t:RadNavigationViewItem Content="Analysis" />
+                        </t:RadNavigationViewItem.Items>
+                    </t:RadNavigationViewItem>
+                    <t:RadNavigationViewItem Content="Connections" IsExpanded="True">
+                        <t:RadNavigationViewItem.Items>
+                            <t:RadNavigationViewItem Content="Destinations" />
+                            <t:RadNavigationViewItem Content="Credentials" />
+                            <t:RadNavigationViewItem Content="Movements" />
+                            <t:RadNavigationViewItem Content="Jobs" />
+                            <t:RadNavigationViewItem Content="Connector Space" />
+                        </t:RadNavigationViewItem.Items>
+
+                    </t:RadNavigationViewItem>
+                </t:RadNavigationView.Items>
+            </t:RadNavigationView>
+        </DockPanel>
+        <t:RadDocking Grid.Row="1">
+            <t:RadSplitContainer InitialPosition="DockedRight">
+                <t:RadSplitContainer InitialPosition="DockedTop">
+                    <t:RadPaneGroup>
+                        <t:RadPane Header="Toolbox">
+
+                        </t:RadPane>
+                    </t:RadPaneGroup>
+                </t:RadSplitContainer>
+                <t:RadPaneGroup>
+                    <t:RadPane Header="Selected Item">
+                        
+                    </t:RadPane>
+                </t:RadPaneGroup>
+            </t:RadSplitContainer>
+        </t:RadDocking>
+        <StatusBar Grid.Row="2">
+            <StatusBarItem Name="Status9"></StatusBarItem>
+        </StatusBar>
+    </Grid>
+</Window>
