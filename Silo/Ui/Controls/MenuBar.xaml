@@ -1,0 +1,46 @@
+﻿<t:RadMenu x:Class="Silo.Ui.MenuBar"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:ui="clr-namespace:Silo.Ui"
+             xmlns:l="clr-namespace:Silo"
+             xmlns:t="http://schemas.telerik.com/2008/xaml/presentation"
+             mc:Ignorable="d" 
+             d:DesignHeight="32" d:DesignWidth="800">
+    <t:RadMenuItem Header="_File">
+        <t:RadMenuItem Header="_New">
+            <t:RadMenuItem Header="_Silo" Command="New" />
+            <t:RadMenuItem Header="C_onnection" Command="{l:AppCommands.NewConnection}" />
+            <t:RadMenuItem Header="_Credential" Command="{l:AppCommands.NewCredential}" />
+        </t:RadMenuItem>
+        <t:RadMenuSeparatorItem />
+        <t:RadMenuItem Header="_Open Silo" Command="Open" />
+        <t:RadMenuItem Header="_Save Silo" Command="Save" />
+        <t:RadMenuItem Header="Save Silo _As..." Command="SaveAs" />
+        <t:RadMenuSeparatorItem />
+        <t:RadMenuItem Header="_Export/Backup" >
+            <t:RadMenuItem Header="_Logs..." Command="{l:AppCommands.ExportLogs}" />
+            <t:RadMenuItem Header="_State..." Command="{l:AppCommands.ExportState}" />
+            <t:RadMenuSeparatorItem />
+            <t:RadMenuItem Header="_All..." Command="{l:AppCommands.ExportAll}" />
+
+        </t:RadMenuItem>
+        <t:RadMenuItem Header="_Import" >
+            <t:RadMenuItem Header="_Data..." Command="{l:AppCommands.ImportData}" />
+            <t:RadMenuSeparatorItem />
+            <t:RadMenuItem Header="_Merge Silo into current..." />
+        </t:RadMenuItem>
+        <t:RadMenuSeparatorItem />
+        <t:RadMenuItem Header="E_xit" Command="Close" />
+    </t:RadMenuItem>
+    <t:RadMenuItem Header="_Edit">
+
+    </t:RadMenuItem>
+    <t:RadMenuItem Header="_View">
+
+    </t:RadMenuItem>
+    <t:RadMenuItem Header="_Run">
+
+    </t:RadMenuItem>
+</t:RadMenu>

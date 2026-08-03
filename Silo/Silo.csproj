@@ -9,6 +9,15 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Serilog" Version="4.4.0" />
+    <PackageReference Include="Serilog.Enrichers.Environment" Version="3.0.1" />
+    <PackageReference Include="Serilog.Extensions.Logging" Version="10.0.0" />
+    <PackageReference Include="Serilog.Formatting.Compact" Version="3.0.0" />
+    <PackageReference Include="Serilog.Settings.Configuration" Version="10.0.1" />
+    <PackageReference Include="Serilog.Sinks.Async" Version="2.1.0" />
+    <PackageReference Include="Serilog.Sinks.Debug" Version="3.0.0" />
+    <PackageReference Include="Serilog.Sinks.File" Version="7.0.0" />
+    <PackageReference Include="Telefrag.Common" Version="2026.7.8.458" />
     <PackageReference Include="Telerik.Documents.Core" Version="2025.3.806" />
     <PackageReference Include="Telerik.Documents.Flow" Version="2025.3.806" />
     <PackageReference Include="Telerik.Documents.Spreadsheet" Version="2025.3.806" />
@@ -16,5 +25,7 @@
     <PackageReference Include="Telerik.Pivot.Core" Version="0.1.6" />
     <PackageReference Include="Telerik.UI.for.Wpf.AllControls.Xaml" Version="2025.3.813" />
   </ItemGroup>
+
+
 
 </Project>

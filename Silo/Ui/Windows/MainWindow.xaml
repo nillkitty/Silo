@@ -6,6 +6,7 @@
         xmlns:tt="http://schemas.telerik.com/2008/xaml/presentation/pivot"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:Silo"
+        xmlns:controls="clr-namespace:Silo.Ui.Controls"
         mc:Ignorable="d"
         Title="MainWindow" Height="450" Width="800">
     <Grid>
@@ -14,7 +15,7 @@
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
-        <MenuBar />
+        <controls:MenuBar />
         <ToolBar />
         <DockPanel LastChildFill="True">
             <t:RadNavigationView FontWeight="Normal" FontSize="18" DockPanel.Dock="Left" 
