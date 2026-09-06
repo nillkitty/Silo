@@ -1,4 +1,5 @@
-﻿using System.Collections.ObjectModel;
+﻿using System.Collections;
+using System.Collections.ObjectModel;
 using System.Media;
 using System.Resources;
 using System.Security.Cryptography.X509Certificates;
@@ -6,11 +7,13 @@ using System.Text;
 using System.Windows;
 using Microsoft.Win32;
 using Serilog;
+using Silo.Commanding;
 using Silo.Connectors;
 using Silo.Contracts;
 using Silo.Extensions;
 using Silo.Model;
 using Silo.Ui.Windows;
+using Telefrag.Collections;
 using Telefrag.Common;
 using Telefrag.DI;
 using Telefrag.Exceptions;
@@ -23,10 +26,18 @@ namespace Silo;
 /// </summary>
 public partial class App : Application, IContainerHost
 {
+    private readonly FragTable<OpenSilo, string> _silos = [];
     protected ILogger Logger { get; } = Log.ForContext<App>();
-    public    ObservableCollection<Serilog.Events.LogEvent> Logs { get; } = [];
+    public ObservableCollection<Serilog.Events.LogEvent> Logs { get; } = [];
+    public IEnumerable<OpenSilo> OpenSilos => _silos.Values;
+
 
     public Container Components { get; } = new(nameof(App));
+
+    public static     AppCommand NewSiloCommand  => new NewSiloCommand();
+    public static     AppCommand OpenSiloCommand => new OpenSiloCommand();
+    public static new AppCommand ExitCommand     => new AppExitCommand();
+    public static     AppCommand About           => new AppAboutCommand();
 
 
     public string GetLogs()
@@ -201,5 +212,10 @@ public partial class App : Application, IContainerHost
     public static TService? Resolve<TService>() where TService : class
     {
         return App.Instance?.Components?.Resolve<TService>();
+    }
+
+    public void Unhandled(Exception exception)
+    {
+        throw exception;
     }
 }

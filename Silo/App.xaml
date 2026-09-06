@@ -4,6 +4,7 @@
              xmlns:local="clr-namespace:Silo"
              StartupUri="/Ui/Windows/MainWindow.xaml">
     <Application.Resources>
-         
+
+        <local:ObjectExistsToBoolConverter x:Key="ObjectExistsToBool" />
     </Application.Resources>
 </Application>

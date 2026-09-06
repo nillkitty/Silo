@@ -56,7 +56,18 @@ public record SoftValidator<TType>(IValidatable Inner) : ISoftValidate
 
 public interface IDatabaseProvider
 {
-    bool ItemExists<TItem>(TItem item);
-    bool RemoveItem<TItem>(TItem required);
-    bool AddItem<TItem>(TItem    item);
+    bool             ItemExists<TItem>(TItem item);
+    bool             RemoveItem<TItem>(TItem required);
+    bool             AddItem<TItem>(TItem    item);
+    ISiloUserContext GetUserContext();
+    Task<bool>       ShutdownAsync();
+}
+
+public interface ISiloUserContext
+{
+    bool IsAuthorable { get; }
+    bool IsWritable   { get; }
+    bool IsReadable   { get; }
+    bool IsDeveloper  { get; }
+    bool IsOwner      { get; }
 }

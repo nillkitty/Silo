@@ -4,35 +4,49 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
              xmlns:ui="clr-namespace:Silo.Ui"
+             xmlns:c="clr-namespace:Silo.Commanding"
              xmlns:l="clr-namespace:Silo"
              xmlns:t="http://schemas.telerik.com/2008/xaml/presentation"
              mc:Ignorable="d" 
+             x:Name="MenuTop"
+             DataContext="{Binding ., RelativeSource={RelativeSource AncestorType={x:Type l:MainWindow}, Mode=FindAncestor}}"
              d:DesignHeight="32" d:DesignWidth="800">
-    <t:RadMenuItem Header="_File">
-        <t:RadMenuItem Header="_New">
-            <t:RadMenuItem Header="_Silo" Command="New" />
-            <t:RadMenuItem Header="C_onnection" Command="{x:Static l:AppCommands.NewConnection}" />
-            <t:RadMenuItem Header="_Credential" Command="{x:Static l:AppCommands.NewCredential}" />
-        </t:RadMenuItem>
+    <t:RadMenu.Resources>
+        <Style TargetType="{x:Type t:RadMenuItem}">
+            <Setter Property="Header" Value="{Binding Command.Header, RelativeSource={RelativeSource Self}}" />
+            <Setter Property="ToolTip" Value="{Binding Command.ToolTip, RelativeSource={RelativeSource Self}}" />
+            <Setter Property="Icon" Value="{Binding Command.Icon, RelativeSource={RelativeSource Self}}" />
+            <Setter Property="IsCheckable" Value="{Binding Command.IsCheckable, RelativeSource={RelativeSource Self}}" />
+            <Setter Property="IsChecked" Value="{Binding Command.IsChecked, Mode=TwoWay, RelativeSource={RelativeSource Self}}" />
+        </Style>
+    </t:RadMenu.Resources>
+    <t:RadMenuItem Header="_File" DataContext="{Binding App}">
+        <t:RadMenuItem Header="_New Silo" Command="{Binding NewSiloCommand}"   />
+        <t:RadMenuItem Header="_Open Silo" Command="{Binding OpenSiloCommand}" />
         <t:RadMenuSeparatorItem />
-        <t:RadMenuItem Header="_Open Silo" Command="Open" />
-        <t:RadMenuItem Header="_Save Silo" Command="Save" />
-        <t:RadMenuItem Header="Save Silo _As..." Command="SaveAs" />
+        <t:RadMenuItem Header="E_xit"  Command="{Binding ExitCommand}" />
+    </t:RadMenuItem>
+    <t:RadMenuItem Header="_Silo"
+                   IsEnabled="{Binding ., Converter={StaticResource ObjectExistsToBool}}"
+                   DataContext="{Binding App.ActiveSilo}">
+        <t:RadMenuItem Header="C_onnection" 
+                       CommandTarget="{Binding .}" 
+                       Command="{Binding Commands.NewConnection}" />
+        <t:RadMenuItem Header="_Credential" Command="{Binding Commands.NewCredential}" />
+        <t:RadMenuItem Header="_Save Silo" CommandTarget="{Binding .}" Command="{Binding Commands.SaveSilo}" />
+        <t:RadMenuItem Header="Save Silo _As..." CommandTarget="{Binding .}"  Command="{Binding Commands.SaveSiloAs}" />
         <t:RadMenuSeparatorItem />
         <t:RadMenuItem Header="_Export/Backup" >
-            <t:RadMenuItem Header="_Logs..." Command="{x:Static l:AppCommands.ExportLogs}" />
-            <t:RadMenuItem Header="_State..." Command="{x:Static l:AppCommands.ExportState}" />
+            <t:RadMenuItem Header="_Logs..." CommandTarget="{Binding .}"  Command="{Binding Commands.ExportLogs}" />
+            <t:RadMenuItem Header="_State..." CommandTarget="{Binding .}"  Command="{Binding Commands.ExportState}" />
             <t:RadMenuSeparatorItem />
-            <t:RadMenuItem Header="_All..." Command="{x:Static l:AppCommands.ExportAll}" />
+            <t:RadMenuItem Header="_All..." CommandTarget="{Binding .}"  Command="{Binding Commands.ExportAll}" />
 
         </t:RadMenuItem>
         <t:RadMenuItem Header="_Import" >
-            <t:RadMenuItem Header="_Data..." Command="{x:Static l:AppCommands.ImportData}" />
-            <t:RadMenuSeparatorItem />
-            <t:RadMenuItem Header="_Merge Silo into current..." />
+            <t:RadMenuItem Header="_Data..." CommandTarget="{Binding .}"  Command="{Binding Commands.ImportData}" />
         </t:RadMenuItem>
-        <t:RadMenuSeparatorItem />
-        <t:RadMenuItem Header="E_xit" Command="Close" />
+
     </t:RadMenuItem>
     <t:RadMenuItem Header="_Edit">
 
@@ -42,5 +56,9 @@
     </t:RadMenuItem>
     <t:RadMenuItem Header="_Run">
 
+    </t:RadMenuItem>
+    <t:RadMenuItem Header="_Help">
+        <t:RadMenuItem Header="_About Silo..." 
+                       Command="{Binding App.About}"/>
     </t:RadMenuItem>
 </t:RadMenu>
