@@ -29,24 +29,8 @@ public static class Ui
         DockPanel.SetDock(button1, Dock.Right);
         DockPanel.SetDock(button2, Dock.Right);
 
-        button1.Click += (object o, RoutedEventArgs e) =>
-                         {
-                             if (o is Button
-                                      {
-                                          Parent: DockPanel
-                                                  {
-                                                      Parent: StackPanel
-                                                              {
-                                                                  Parent:
-                                                                  RadWindow ww
-                                                              }
-                                                  }
-                                      })
-                             {
-                                 ww.DialogResult = true;
-                                 ww.Close();
-                             }
-                         };
+        button1.Click += Handlers.OkButton;
+        button2.Click += Handlers.CancelButton;
 
         var stack = new StackPanel()
                     {

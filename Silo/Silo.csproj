@@ -26,6 +26,19 @@
     <PackageReference Include="Telerik.UI.for.Wpf.AllControls.Xaml" Version="2025.3.813" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Update="README.md">
+      <Generator>MSBuild:Compile</Generator>
+    </None>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="DbModel\Meta\" />
+    <Folder Include="DbModel\Temp\" />
+    <Folder Include="DbModel\Universal\" />
+    <Folder Include="DbModel\World\" />
+  </ItemGroup>
+
 
 
 </Project>

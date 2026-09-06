@@ -6,7 +6,7 @@
         xmlns:tt="http://schemas.telerik.com/2008/xaml/presentation/pivot"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:Silo"
-        xmlns:controls="clr-namespace:Silo.Ui.Controls"
+        xmlns:ui="clr-namespace:Silo.Ui"
         mc:Ignorable="d"
         Title="MainWindow" Height="450" Width="800">
     <Grid>
@@ -15,9 +15,9 @@
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
-        <controls:MenuBar />
-        <ToolBar />
-        <DockPanel LastChildFill="True">
+        <ui:MenuBar Grid.Row="0" />
+        <ToolBar Grid.Row="1" />
+        <DockPanel Grid.Row="2" LastChildFill="True">
             <t:RadNavigationView FontWeight="Normal" FontSize="18" DockPanel.Dock="Left" 
                                  DisplayMode="Expanded">
                 <t:RadNavigationView.Items>
@@ -59,7 +59,7 @@
             </t:RadSplitContainer>
         </t:RadDocking>
         <StatusBar Grid.Row="2">
-            <StatusBarItem Name="Status9"></StatusBarItem>
+            <StatusBarItem Name="StatusError"></StatusBarItem>
         </StatusBar>
     </Grid>
 </Window>

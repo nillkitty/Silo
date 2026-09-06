@@ -12,17 +12,22 @@ public static class AppCommands
     public static ILogger Logger = Log.ForContext<App>();
 
     public static AppCommand NewConnection => new("New C_onnection",
-                                                  o => App.NewConnection(),
-                                                  o => true,
-                                                  o => false);
+                                                  o => OnNewConnection(),
+                                                  o => true, o => false);
+
+    private async static Task OnNewConnection()
+    {
+        if (App.Instance?.NewConnection() is { } c)
+        {
+        }
+    }
 
     public static AppCommand NewCredential => new("New _Credential",
                                                   o =>
                                                       App
                                                          .NewCredential(o as
                                                                             OpenSilo),
-                                                  o => true,
-                                                  o => false);
+                                                  o => true, o => false);
 }
 
 public record AppCommand(

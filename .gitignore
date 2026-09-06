@@ -1,0 +1,45 @@
+## Build and output directories
+[Bb]in/
+[Oo]bj/
+[Oo]ut/
+[Ll]og/
+[Ll]ogs/
+
+## Visual Studio user-specific & temporary files
+.vs/
+*.user
+*.userosscache
+*.sln.docstates
+*.suo
+*.userprefs
+testSettings.json‎
+
+## User-specific build files
+*.csproj.user
+*.fsproj.user
+*.sqlproj.user
+*.vcxproj.user
+*.vcxproj.filters
+
+## ReSharper / JetBrains files
+_ReSharper*/
+*.DotSettings.user
+
+## Package directories
+/packages/
+*.nuget.props
+*.nuget.targets
+
+## Test results & coverage
+TestResults/
+*.coverage
+*.coveragexml
+
+## Web / Azure deployment
+*.PublishSettings
+*.pubxml
+*.pubxml.user
+
+## OS / System files
+.DS_Store
+Thumbs.db

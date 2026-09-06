@@ -1,11 +1,16 @@
 ﻿using System.Collections.ObjectModel;
+using System.Media;
+using System.Resources;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Windows;
 using Microsoft.Win32;
 using Serilog;
 using Silo.Connectors;
+using Silo.Extensions;
 using Silo.Model;
+using Silo.Ui.Windows;
+using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace Silo;
 
@@ -16,7 +21,6 @@ public partial class App : Application
 {
     protected ILogger Logger { get; } = Log.ForContext<App>();
     public    ObservableCollection<Serilog.Events.LogEvent> Logs { get; } = [];
-
 
     public string GetLogs()
     {
@@ -29,14 +33,21 @@ public partial class App : Application
         return sb.ToString();
     }
 
-    public IConnection NewConnection()
+    public IConnection? NewConnection()
     {
+        if (ConnectionWindow.Modal() is IConnection c)
+        {
+            return c;
+        }
+
+        Status("New connection cancelled");
+        return null;
     }
 
     /// <summary>
     /// Creates a new Silo file at a path chosen by the user via modal file save dialog.
     /// </summary>
-    public OpenSilo NewSilo()
+    public OpenSilo? NewSilo()
     {
         var s = new SaveFileDialog()
                 {
@@ -57,42 +68,86 @@ public partial class App : Application
         return null;
     }
 
-    public void ExportAs(string  content, string filter,
-                         string? defaultFilename)
+    public void ExportAs(string content, string filter, string? defaultFilename)
     {
         var s = new SaveFileDialog()
                 {
                     Title    = "Export As",
                     Filter   = filter,
-                    FileName = defaultFilename
+                    FileName = defaultFilename!
                 };
         if (s.ShowDialog() is true)
         {
             System.IO.File.WriteAllText(s.FileName, content);
             string msg = "Wrote {n} bytes to file '{file}'";
-            Logger.Debug(msg, content.Length,
-                         content);
+            Logger.Debug(msg, content.Length, content);
             MessageBox.Show(msg, "Success", MessageBoxButton.OK,
                             MessageBoxImage.Information);
         }
     }
 
     public void ExportLogs() => ExportAs(Instance?.GetLogs(),
-                                         "Log Files (*.log)|*.log",
-                                         null);
+                                         "Log Files (*.log)|*.log", null);
 
     public static App? Instance => Application.Current as App;
 
-    public OpenSilo ActiveSilo { get; set; }
+    public OpenSilo? ActiveSilo { get; set; }
+
+    public bool Status(string text)
+    {
+        if (!Dispatcher.CheckAccess())
+            return Dispatcher.Invoke(() => InterError(text));
+        (MainWindow as MainWindow)?.StatusError.Content = text;
+        return false;
+    }
+
+    public bool InterError(string error)
+    {
+        Beep();
+        return Status(error);
+    }
+
+    public bool Beep()
+    {
+        try
+        {
+            SystemSounds.Exclamation.Play();
+            return true;
+        }
+        catch
+        {
+            /* intentional */
+        }
+
+        return false;
+    }
+
+    public bool InterAdd<TItem>(TItem item)
+    {
+        if (ActiveSilo is null)
+            return
+                InterError("No silo is active.  Create, open, or select a silo first.");
+
+        if (Exists(item))
+            return InterError("Error:  Item not found in silo.");
+
+        // _validateItem(item);
+        // _validateChild(item, null);
+        return _db.AddItem(item);
+    }
+
+    public bool Exists<TItem>(TItem item) => _db.ItemExists(item);
+
+    public bool Remove<TItem>(TItem item) => _db.RemoveItem(item.Required());
 
     public static Task<Credential?> NewCredential(OpenSilo? target)
     {
-        target ??= Instance?.ActiveSilo ?? OpenSilo.OnlySilo
-                ?? throw new
+        target ??= Instance?.ActiveSilo ?? OpenSilo.OnlySilo ??
+                   throw new
                        InvalidOperationException("Could not determine the target silo for the operation.");
-        if (Ui.ModalModel(new Credential()) is Credential c)
+        if (Ui.Ui.ModalModel(new Credential()) is Credential c)
         {
-            if (Add(c))
+            if (Instance.InterAdd(c))
                 return Task.FromResult(c);
         }
 
