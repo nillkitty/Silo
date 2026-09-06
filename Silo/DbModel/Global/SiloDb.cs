@@ -41,17 +41,20 @@ public record Window(
 /// <summary>
 /// Tracks changes, one row per event
 /// </summary>
-public record Audit(int Id, DateTime TimeUtc, User User, string Message);
+public record Audit(int Id, DateTime TimeUtc, User User, string Message)
+    : TimedUserEntity(User, TimeUtc, TimeUtc);
 
 /// <summary>
 /// Configured connected system, one row per destination
 /// </summary>
-public record Connection(int Id, string DisplayName, Uri SourceUri);
+public record Connection(int Id, User User, string DisplayName, Uri SourceUri)
+    : TimedUserEntity(User);
 
 /// <summary>
 /// Stored location
 /// </summary>
-public record Location(int Id, Uri Uri, string DisplayName);
+public record Location(int Id, User User, Uri Uri, string DisplayName)
+    : TimedUserEntity(User);
 
 /// <summary>
 /// The identity of each user that's authorized/opened the Silo (successfully).
@@ -64,27 +67,36 @@ public record User(int Id, string Domain, string Name, string SID, bool Group);
 /// <summary>
 /// User preference, one row per pref key
 /// </summary>
-public record Pref(int Id, User User, string Key, string Data);
+public record Pref(int Id, User User, string Key, string Data)
+    : TimedUserEntity(User);
 
 /// <summary>
 /// Stored secret blob;  one row per record
 /// </summary>
-public record Secret(int Id, string Key, byte[] Data);
+public record Secret(int Id, User User, string Key, byte[] Data)
+    : TimedUserEntity(User);
 
 /// <summary>
 /// Navigation tree nodes as configured by the user, one row per node
 /// </summary>
-public record Node(int Id, string Name, Uri Uri, Uri IconUri, int Expanded);
+public record Node(
+    int    Id,
+    User   User,
+    string Name,
+    Uri    Uri,
+    Uri    IconUri,
+    int    Expanded) : TimedUserEntity(User);
 
 /// <summary>
 /// Other files in this silo, one row per file.
 /// </summary>
 public record File(
     int          Id,
+    User         User,
     string       Filename,
     SiloFileType Type,
     int          ExpectedSize,
-    byte[]       Crc32);
+    byte[]       Crc32) : TimedUserEntity(User);
 
 public enum SiloFileType
 {
@@ -132,7 +144,17 @@ public record Authorization(
     int           Id,
     User          AuthorizedUser,
     User          AuthorizingUser,
-    SiloUserLevel Level);
+    SiloUserLevel Level) : TimedUserEntity(AuthorizingUser);
+
+/// <summary>
+/// Stores a reference to an assembly which is to be loaded at load-time.
+/// </summary>
+public record Assembly(
+    int    Id,
+    User   User,
+    string AssemblyName,
+    Uri    SourceUri,
+    bool   Critical) : TimedUserEntity(User);
 
 [Flags]
 public enum SiloUserLevel

@@ -41,7 +41,7 @@ The stub database must contain exactly 1 of:
 And can contain any of:
 
 * **Password** record(s) - the key for the encrypted archive, encrypted with a human-enterable password which can be used to unlock the Silo.
-* **UserKey** record(s) - the key for the encrypted archive, encrypted using the public key of a user from one of their user certificates, salted by their SID.
+* **UserKey** record(s) - the key for the encrypted archive, encrypted using the public key of a user from one of their user certificates, salted by their Sid.
  
 ### Global Index
 **z.db** is the only required database in a silo and it
@@ -65,13 +65,19 @@ e.g. for synchronization.
 The scratch database (**x.db**) is where all session information, such as variables, temporarily defined functions, pasted data,
 and any other trasient data.
 
-* var
-* table_var
-* func_var
-* ref_var
-* pasted
-* ref
-
+* Scalar
+* Table
+* Function
+* Synonym
+* Pasted
+* ReplStack
+* OpenFile
+* OpenFileMru
+* VariableMru
+* PeopleMru
+* ColorMru
+* TextMru
+* AssemblyMru
 
 ### World Database(s)
 World databases (**w-*.db**) store cached and/or mirrored data in the source schema of the system it was read from.  All data read via connectors is read into a world database for manipulation.
@@ -86,5 +92,5 @@ The metaverse database (**y.db**) is used to define and store the aggregate, nor
 * mv_obj
 
 ### Universal Database
-The universal databse (**u.db**) stores data which is authoritative outside of the Silo and all connected worlds;  ambient data which theoretically is the same for everyone, such as the list of all Zip codes, Area codes, or US states.
+The universal databse (**u.db**) stores data which is authoritative outSide of the Silo and all connected worlds;  ambient data which theoretically is the same for everyone, such as the list of all Zip codes, Area codes, or US states.
 

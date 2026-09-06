@@ -5,7 +5,7 @@
         xmlns:t="http://schemas.telerik.com/2008/xaml/presentation"
         xmlns:tt="http://schemas.telerik.com/2008/xaml/presentation/pivot"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        xmlns:local="clr-namespace:Silo"
+        xmlns:l="clr-namespace:Silo"
         xmlns:ui="clr-namespace:Silo.Ui"
         mc:Ignorable="d"
         Title="MainWindow" Height="450" Width="800">

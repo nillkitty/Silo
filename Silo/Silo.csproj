@@ -33,10 +33,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Folder Include="DbModel\Meta\" />
-    <Folder Include="DbModel\Temp\" />
-    <Folder Include="DbModel\Universal\" />
-    <Folder Include="DbModel\World\" />
+    <Folder Include="Providers\Uri\" />
   </ItemGroup>
 
 

@@ -1,6 +1,8 @@
 ﻿using System.Collections.ObjectModel;
 using System.Reflection;
+using Silo.Contracts;
 using Silo.Extensions;
+using Telefrag.Common;
 
 namespace Silo.Model;
 
@@ -10,16 +12,17 @@ public class OpenSilo
     public static ObservableCollection<OpenSilo> OpenSilos { get; } = [];
     public        SiloMeta Meta { get; private set; } = new();
     public static OpenSilo OnlySilo => OpenSilos is [OpenSilo os] ? os : null;
+    public        IDatabaseProvider Data { get; private set; }
 
     public static OpenSilo CreateFile(SiloFile file)
     {
         file.Required();
 
-
         OpenSilo c = new()
                      {
                          File = file,
-                         Meta = new()
+                         Meta = new(),
+                         Data = Database.CreateNewSilo(file.FilePath)
                      };
         return c;
     }
@@ -31,10 +34,10 @@ public class OpenSilo
                      {
                          File = file
                      };
-        if (_load(c))
+        if (Database.Load(file) is IDatabaseProvider dbp)
         {
+            c.Data = dbp;
             OpenSilos.Add(c);
-            SiloOpened?.Invoke();
         }
 
         return c;

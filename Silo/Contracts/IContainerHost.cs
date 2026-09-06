@@ -4,5 +4,5 @@ namespace Silo.Connectors;
 
 public interface IContainerHost
 {
-    Container Resources { get; }
+    Container Components { get; }
 }

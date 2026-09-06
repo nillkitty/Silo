@@ -4,8 +4,10 @@ namespace Silo.Connectors;
 
 public abstract class ConnectorBase : IConnection
 {
-    public Container Resources { get; } = new(Guid.NewGuid().ToString());
+    public Container Components { get; } = new(Guid.NewGuid().ToString());
 
+    protected abstract Type OnGetStateType();
+    Type IConnection.       GetStateType() => OnGetStateType();
 
     public void InitProvider(IReceiver<Container> receiver)
     {

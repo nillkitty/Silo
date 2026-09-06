@@ -11,8 +11,8 @@
     <t:RadMenuItem Header="_File">
         <t:RadMenuItem Header="_New">
             <t:RadMenuItem Header="_Silo" Command="New" />
-            <t:RadMenuItem Header="C_onnection" Command="{l:AppCommands.NewConnection}" />
-            <t:RadMenuItem Header="_Credential" Command="{l:AppCommands.NewCredential}" />
+            <t:RadMenuItem Header="C_onnection" Command="{x:Static l:AppCommands.NewConnection}" />
+            <t:RadMenuItem Header="_Credential" Command="{x:Static l:AppCommands.NewCredential}" />
         </t:RadMenuItem>
         <t:RadMenuSeparatorItem />
         <t:RadMenuItem Header="_Open Silo" Command="Open" />
@@ -20,14 +20,14 @@
         <t:RadMenuItem Header="Save Silo _As..." Command="SaveAs" />
         <t:RadMenuSeparatorItem />
         <t:RadMenuItem Header="_Export/Backup" >
-            <t:RadMenuItem Header="_Logs..." Command="{l:AppCommands.ExportLogs}" />
-            <t:RadMenuItem Header="_State..." Command="{l:AppCommands.ExportState}" />
+            <t:RadMenuItem Header="_Logs..." Command="{x:Static l:AppCommands.ExportLogs}" />
+            <t:RadMenuItem Header="_State..." Command="{x:Static l:AppCommands.ExportState}" />
             <t:RadMenuSeparatorItem />
-            <t:RadMenuItem Header="_All..." Command="{l:AppCommands.ExportAll}" />
+            <t:RadMenuItem Header="_All..." Command="{x:Static l:AppCommands.ExportAll}" />
 
         </t:RadMenuItem>
         <t:RadMenuItem Header="_Import" >
-            <t:RadMenuItem Header="_Data..." Command="{l:AppCommands.ImportData}" />
+            <t:RadMenuItem Header="_Data..." Command="{x:Static l:AppCommands.ImportData}" />
             <t:RadMenuSeparatorItem />
             <t:RadMenuItem Header="_Merge Silo into current..." />
         </t:RadMenuItem>

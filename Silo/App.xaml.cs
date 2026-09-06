@@ -7,9 +7,13 @@ using System.Windows;
 using Microsoft.Win32;
 using Serilog;
 using Silo.Connectors;
+using Silo.Contracts;
 using Silo.Extensions;
 using Silo.Model;
 using Silo.Ui.Windows;
+using Telefrag.Common;
+using Telefrag.DI;
+using Telefrag.Exceptions;
 using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace Silo;
@@ -17,10 +21,13 @@ namespace Silo;
 /// <summary>
 /// Interaction logic for App.xaml
 /// </summary>
-public partial class App : Application
+public partial class App : Application, IContainerHost
 {
     protected ILogger Logger { get; } = Log.ForContext<App>();
     public    ObservableCollection<Serilog.Events.LogEvent> Logs { get; } = [];
+
+    public Container Components { get; } = new(nameof(App));
+
 
     public string GetLogs()
     {
@@ -91,7 +98,34 @@ public partial class App : Application
 
     public static App? Instance => Application.Current as App;
 
-    public OpenSilo? ActiveSilo { get; set; }
+    public OpenSilo? ActiveSilo
+    {
+        get;
+        set
+        {
+            field = value;
+            ActiveSiloChanged?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    public event EventHandler?           ActiveSiloChanged;
+    public event EventHandler<OpenSilo>? SiloOpened;
+    public event EventHandler<OpenSilo>? SiloOpening;
+    public event EventHandler<OpenSilo>? SiloClosing;
+    public event EventHandler?           SiloClosed;
+
+    internal void NotifySiloOpening(object sender, OpenSilo o) =>
+        SiloOpening?.Invoke(sender, o);
+
+    internal void NotifySiloOpened(object sender, OpenSilo o) =>
+        SiloOpened?.Invoke(sender, o);
+
+    internal void NotifySiloClosing(object sender, OpenSilo o) =>
+        SiloClosing?.Invoke(sender, o);
+
+    internal void NotifySiloClosed(object sender, OpenSilo o) =>
+        SiloClosed?.Invoke(sender, EventArgs.Empty);
+
 
     public bool Status(string text)
     {
@@ -121,6 +155,8 @@ public partial class App : Application
 
         return false;
     }
+
+    private IDatabaseProvider _db => ActiveSilo?.Data;
 
     public bool InterAdd<TItem>(TItem item)
     {
@@ -152,5 +188,18 @@ public partial class App : Application
         }
 
         return Task.FromResult<Credential?>(null);
+    }
+
+    public static TService Require<TService>() where TService : class
+    {
+        return Resolve<TService>() ??
+               throw new
+                   RequiredComponentMissingException($"Component '{typeof(TService)}' is required but is not a registered" +
+                                                     $" service, component, or resource.");
+    }
+
+    public static TService? Resolve<TService>() where TService : class
+    {
+        return App.Instance?.Components?.Resolve<TService>();
     }
 }
