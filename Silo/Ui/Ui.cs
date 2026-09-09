@@ -16,8 +16,8 @@ public static class Ui
         m.Required();
 
         var form    = new RadDataForm() { CurrentItem = m };
-        var button1 = new Button() { Content = "Cancel", IsCancel = true };
-        var button2 = new Button() { Content = "OK", IsDefault = true };
+        var button1 = new Button() { Content          = "Cancel", IsCancel = true };
+        var button2 = new Button() { Content          = "OK", IsDefault    = true };
         var dock = new DockPanel()
                    {
                        LastChildFill = false,

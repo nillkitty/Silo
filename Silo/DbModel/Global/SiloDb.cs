@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Text;
+using Silo.Model;
 
 namespace Silo.DbModel.Global;
 
@@ -74,7 +75,13 @@ public record Pref(int Id, User User, string Key, string Data)
 /// Stored secret blob;  one row per record
 /// </summary>
 public record Secret(int Id, User User, string Key, byte[] Data)
-    : TimedUserEntity(User);
+    : TimedUserEntity(User)
+{
+    public OpenSilo UpdateCredential(string user, string pass, string? domain)
+    {
+        throw new NotImplementedException();
+    }
+}
 
 /// <summary>
 /// Navigation tree nodes as configured by the user, one row per node

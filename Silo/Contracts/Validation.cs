@@ -61,6 +61,9 @@ public interface IDatabaseProvider
     bool             AddItem<TItem>(TItem    item);
     ISiloUserContext GetUserContext();
     Task<bool>       ShutdownAsync();
+    Task             SaveAsync();
+    Task             MigrateToCopyAsync(string path);
+    Task<bool>       ImportFileAsync(object    fn);
 }
 
 public interface ISiloUserContext
