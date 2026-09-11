@@ -1,10 +1,11 @@
 ﻿using Microsoft.EntityFrameworkCore.Metadata.Conventions;
+using Silo.DbModel.Meta;
 using Silo.Extensions;
 using Silo.Meta;
 using Telefrag.Collections;
 using Telefrag.Common;
 
-namespace Silo.DbModel.Meta;
+namespace Silo.Parsing;
 
 public class UnitParser
 {
@@ -51,15 +52,13 @@ public class UnitParser
         var u = Schema.Find(ps.Read().ToString());
         return u switch
                {
-                   null => null,
-                   { Type: UnitType.Alias, Target: Unit uu } =>
-                       new ParsedUnit(ps, uu),
-                   { Type: UnitType.Unit }       => new ParsedUnit(ps, u),
-                   { Type: UnitType.Conversion } => new ParsedConversion(ps, u),
-                   { Type: UnitType.Prefix }     => new ParsedPrefix(ps, u),
-                   { Type: UnitType.Suffix }     => new ParsedSuffix(ps, u),
-                   _ => throw new
-                            InvalidOperationException($"Unexpected unit type '{u.Type}'")
+                   null                                      => null,
+                   { Type: UnitType.Alias, Target: Unit uu } => new ParsedUnit(ps, uu),
+                   { Type: UnitType.Unit }                   => new ParsedUnit(ps, u),
+                   { Type: UnitType.Conversion }             => new ParsedConversion(ps, u),
+                   { Type: UnitType.Prefix }                 => new ParsedPrefix(ps, u),
+                   { Type: UnitType.Suffix }                 => new ParsedSuffix(ps, u),
+                   _                                         => throw new InvalidOperationException($"Unexpected unit type '{u.Type}'")
                };
     }
 }
@@ -85,8 +84,7 @@ public record UnitSchema
     {
         var e = _units[name];
         if (e != null && e != u)
-            throw new
-                InvalidOperationException($"The name '{name}' is already in use for unit or conversion '{e}'");
+            throw new InvalidOperationException($"The name '{name}' is already in use for unit or conversion '{e}'");
 
         _units[name] = u;
     }
@@ -125,8 +123,7 @@ public struct Fragment(int offset, int length, string input)
     public bool Is(string s)
     {
         s.Required();
-        return Telefrag.Common.TelefragCommonExtensions
-                       .Is(s, Read().ToString());
+        return Telefrag.Common.TelefragCommonExtensions.Is(s, Read().ToString());
     }
 }
 
@@ -134,16 +131,12 @@ public record ParsedText(Fragment Fragment);
 
 public record ParsedSlash(Fragment Fragment) : ParsedText(Fragment);
 
-public record ParsedNumber(Fragment Fragment, double Value)
-    : ParsedText(Fragment);
+public record ParsedNumber(Fragment Fragment, double Value) : ParsedText(Fragment);
 
 public record ParsedUnit(Fragment Fragment, Unit Unit) : ParsedText(Fragment);
 
-public record ParsedPrefix(Fragment Fragment, Unit Prefix)
-    : ParsedText(Fragment);
+public record ParsedPrefix(Fragment Fragment, Unit Prefix) : ParsedText(Fragment);
 
-public record ParsedSuffix(Fragment Fragment, Unit Suffix)
-    : ParsedText(Fragment);
+public record ParsedSuffix(Fragment Fragment, Unit Suffix) : ParsedText(Fragment);
 
-public record ParsedConversion(Fragment Fragment, Unit Conversion)
-    : ParsedText(Fragment);
+public record ParsedConversion(Fragment Fragment, Unit Conversion) : ParsedText(Fragment);
