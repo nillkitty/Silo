@@ -19,7 +19,7 @@
     <PackageReference Include="Serilog.Sinks.Debug" Version="3.0.0" />
     <PackageReference Include="Serilog.Sinks.File" Version="7.0.0" />
     <PackageReference Include="Serilog.Sinks.Trace" Version="4.0.0" />
-    <PackageReference Include="Telefrag.Common" Version="2026.7.8.458" />
+    <PackageReference Include="Telefrag.Common" Version="2026.9.11.372" />
     <PackageReference Include="Telerik.Documents.Core" Version="2025.3.806" />
     <PackageReference Include="Telerik.Documents.Flow" Version="2025.3.806" />
     <PackageReference Include="Telerik.Documents.Spreadsheet" Version="2025.3.806" />
@@ -36,6 +36,7 @@
 
   <ItemGroup>
     <Folder Include="Providers\Uri\" />
+    <Folder Include="ViewModel\Features\" />
   </ItemGroup>
 
 

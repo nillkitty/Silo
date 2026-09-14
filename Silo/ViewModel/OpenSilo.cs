@@ -13,29 +13,36 @@ using Telefrag.DI;
 
 namespace Silo.Model;
 
+/// <summary>
+/// ViewModel for an open Silo file.
+/// If <see cref="Solo"/> is true, the Silo was opened in its own process,
+/// because it defines a custom set of assemblies.
+/// </summary>
 public class OpenSilo : ModelBase
 {
-    public        SiloFile? File { get; private set; }
-    public static ObservableCollection<OpenSilo> OpenSilos { get; } = [];
-    public        SiloMeta Meta { get; private set; } = new();
-    public static OpenSilo OnlySilo => OpenSilos is [OpenSilo os] ? os : null;
+    public        SiloFile?                      File      { get; private set; }
+    public static ObservableCollection<OpenSilo> OpenSilos { get; }              = [];
+    public        OpenSiloMeta                   Meta      { get; private set; } = new();
+    public static OpenSilo                       OnlySilo  => OpenSilos is [OpenSilo os] ? os : null;
 
     public required Container Components { get; init; }
 
-    public IDatabaseProvider Data { get; private set; }
-    public ISiloUserContext  UserContext { get; private set; }
+    public IDatabaseProvider Data         { get; private set; }
+    public ISiloUserContext  UserContext  { get; private set; }
+    public bool              IsSolo       { get; private set; }
+    public bool              IsOpensSolo  => UserContext.IsSoloSilo;
     public bool              IsAuthorable => UserContext.IsAuthorable;
-    public bool              IsWritable => UserContext.IsWritable;
-    public bool              IsReadable => UserContext.IsReadable;
-    public bool              IsDeveloper => UserContext.IsDeveloper;
-    public bool              IsOwner => UserContext.IsOwner;
-    public string?           Name => FileInfo?.Name;
-    public string?           FilePath => FileInfo?.FullName;
-    public FileInfo?         FileInfo => File is { } f ? new(f.FilePath) : null;
+    public bool              IsWritable   => UserContext.IsWritable;
+    public bool              IsReadable   => UserContext.IsReadable;
+    public bool              IsDeveloper  => UserContext.IsDeveloper;
+    public bool              IsOwner      => UserContext.IsOwner;
+    public string?           Name         => FileInfo?.Name;
+    public string?           FilePath     => FileInfo?.FullName;
+    public FileInfo?         FileInfo     => File is { } f ? new(f.FilePath) : null;
 
     public SiloCommands    Commands   => field ??= new(this);
     public ISiloEncryption Encryption => Components.Require<ISiloEncryption>();
-
+    
     public static OpenSilo CreateFile(SiloFile file)
     {
         file.Required();
@@ -102,13 +109,11 @@ public class OpenSilo : ModelBase
             System.IO.File.WriteAllText(s.FileName, content);
             string msg = "Wrote {n} bytes to file '{file}'";
             Log.Debug(msg, content.Length, content);
-            MessageBox.Show(msg, "Success", MessageBoxButton.OK,
-                            MessageBoxImage.Information);
+            MessageBox.Show(msg, "Success", MessageBoxButton.OK, MessageBoxImage.Information);
         }
     }
 
-    public void ExportLogs() => ExportAs(App.Instance!.GetLogs(),
-                                         "Log Files (*.log)|*.log", null);
+    public void ExportLogs() => ExportAs(App.Instance!.GetLogs(), "Log Files (*.log)|*.log", null);
 
     public async Task<bool> Shutdown()
     {

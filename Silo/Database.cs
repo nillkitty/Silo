@@ -1,10 +1,19 @@
 ﻿using System.IO;
-using Silo.Contracts;
-using Silo.Extensions;
+using System.Windows;
 using Silo.Model;
-using Telefrag.Common;
 
 namespace Silo;
+
+public static class AppIdentity
+{
+    public static string AppName => BrandedAppIdentity.AppName ?? "Silo";
+}
+
+public static class BrandedAppIdentity
+{
+    public static string? AppName { get; set; }
+    public static string? AppIcon { get; set; }
+}
 
 public static class Database
 {
@@ -19,9 +28,7 @@ public static class Database
         file.Required();
         var fi = new FileInfo(file.FilePath);
         if (!fi.Exists)
-            throw new
-                FileNotFoundException($"File not found or no access to file:  {file.FilePath}",
-                                      file.FilePath);
+            throw new FileNotFoundException($"File not found or no access to file:  {file.FilePath}", file.FilePath);
 
         var sl = App.Require<ISiloLoader>();
         return sl.Load(fi);

@@ -270,9 +270,9 @@ public partial class App : Application, IContainerHost
     /// <summary>
     /// Invoked when an unhandled exception has occured off the primary thread
     /// </summary>
-    public void Unhandled(Exception exception)
+    public void Unhandled(Exception e)
     {
-        throw exception;
+        throw new Exception("Unhandled exception in handler", e);
     }
 
     public static void RunSafe(Action action)

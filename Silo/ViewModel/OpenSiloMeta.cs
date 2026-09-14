@@ -1,14 +1,13 @@
-﻿namespace Silo.Model;
+﻿using System.Windows;
+
+namespace Silo.Model;
 
 /// <summary>
 /// Metadata associated with a Silo
 /// </summary>
-public class SiloMeta
+public class OpenSiloMeta : ModelBase
 {
-    public Version? VersionCreated { get; set; } = System
-                                                  .Reflection.Assembly
-                                                  .GetExecutingAssembly()
-                                                  .GetName()?.Version;
+    public Version? VersionCreated { get; set; } = System.Reflection.Assembly.GetExecutingAssembly().GetName()?.Version;
 
     public Version?  VersionSaved       { get; set; }
     public DateTime? TimeSiloCreatedUtc { get; set; } = DateTime.UtcNow;

@@ -40,11 +40,8 @@ public record AppCommand : ICommand, INotifyPropertyChanged
         _toggle = toggle.Required();
     }
 
-    public AppCommand(string               header, Func<object?, Task> execute,
-                      Enabler.EnablerFunc? enabler = null,
-                      string?              toolTip = null, object? icon = null,
-                      bool                 isCheckable = false,
-                      Checker.CheckerFunc? checker = null)
+    public AppCommand(string  header,      Func<object?, Task> execute, Enabler.EnablerFunc? enabler = null, string? toolTip = null,
+                      object? icon = null, bool                isCheckable = false, Checker.CheckerFunc? checker = null)
     {
         _header         = header;
         _executeHandler = execute;
@@ -127,8 +124,7 @@ public record AppCommand : ICommand, INotifyPropertyChanged
             if (App.Instance is { } i)
                 i.Unhandled(ex);
             else
-                Environment.FailFast("Unhandled exception in async handler",
-                                     ex);
+                Environment.FailFast("Unhandled exception in async handler", ex);
         }
 
         return;
@@ -146,14 +142,11 @@ public record AppCommand : ICommand, INotifyPropertyChanged
     // --- INotifyPropertyChanged ---
     public event PropertyChangedEventHandler? PropertyChanged;
 
-    protected virtual bool SetField<T>(ref T storage, T value,
-                                       [CallerMemberName] string? propertyName =
-                                           null)
+    protected virtual bool SetField<T>(ref T storage, T value, [CallerMemberName] string? propertyName = null)
     {
         if (EqualityComparer<T>.Default.Equals(storage, value)) return false;
         storage = value;
-        PropertyChanged?.Invoke(this,
-                                new PropertyChangedEventArgs(propertyName));
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
         return true;
     }
 }

@@ -1,57 +1,21 @@
 ﻿using System.Windows;
 using System.Windows.Controls;
-using Microsoft.EntityFrameworkCore.Infrastructure;
+using Silo.Commanding;
 using Silo.Model;
+using Silo.UI;
+using Silo.Ui.Controls;
 
-namespace Silo.Commanding;
+namespace Silo;
 
+/// <summary>
+/// Imterface for app components which contributes to the About Box
+/// </summary>
 public interface IAboutBox
 {
+    /// <summary>
+    /// Gets the content to be added to the About Box.
+    /// </summary>
     Control AboutContent { get; }
-}
-
-public class ModelControl<TModel> : UserControl
-{
-    private IUiBuilder<TModel> _ib;
-    public  TModel             Model { get; }
-
-    public ModelControl(TModel model)
-    {
-        Model = model.Required()!;
-        _ib   = App.Require<IUiBuilder<TModel>>();
-        string text = Model?.ToString() ?? Model?.GetType().ShortDisplayName() ?? "";
-        Content     =  _placeholder(text);
-        this.Loaded += OnLoaded;
-    }
-
-    UIElement _placeholder(string message) => new TextBlock()
-                                              {
-                                                  Text                = message,
-                                                  FontSize            = 18.0,
-                                                  HorizontalAlignment = HorizontalAlignment.Center,
-                                                  VerticalAlignment   = VerticalAlignment.Center,
-                                                  Padding             = new Thickness(5.0)
-                                              };
-
-    private void OnLoaded(object sender, RoutedEventArgs e)
-    {
-        try
-        {
-            Content = _build(Model);
-        }
-        catch (Exception ex)
-        {
-            Content = _placeholder($"Failed to initialize ({ex.GetType().Name}).  {ex.Message}");
-        }
-    }
-
-    private UIElement _build(TModel model)
-    {
-        if (model is null)
-            return _placeholder($"Model for '{typeof(TModel).ShortDisplayName()}' was null.");
-
-        return _ib.Build(model);
-    }
 }
 
 public class ContentWindow : Window
@@ -59,6 +23,8 @@ public class ContentWindow : Window
     public ContentWindow(UIElement content)
     {
         Content = content.Required();
+        var hg = new HunterGatherer<IWindowChrome>(content);
+        hg.GatherAndApplyTo(this);
     }
 }
 
@@ -73,6 +39,7 @@ public static class AboutBox
     }
 
 
+    [ModalDialog]
     public class AboutModel : ModelBase
     {
         internal string AboutText => App.Instance!.FindResource("AboutText")?.ToString() ?? "\n\nCant find about text resource!\n\n";

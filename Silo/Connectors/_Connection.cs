@@ -3,12 +3,15 @@ using Telefrag.DI;
 
 namespace Silo.Connectors;
 
-public abstract class ConnectorBase : IConnection
+public class ConnectionBase : IConnection
 {
-    /// <summary>
-    ///     Gets or sets the subscribed receiver
-    /// </summary>
-    public IReceiver<Container>? Receiver { get; protected set; }
+    internal ConnectionBase(IConnector owner)
+    {
+        Connector = owner.Required();
+        Metadata  = [];
+    }
+
+    public IConnector Connector { get; }
 
     /// <summary>
     ///     Gets or sets the value stored for this connection in the persistent configuration
@@ -31,22 +34,18 @@ public abstract class ConnectorBase : IConnection
     /// </summary>
     public Container Components { get; } = new(Guid.NewGuid().ToString());
 
-    Type IConnection.GetStateType()
+    public bool? ConnectionState =>
+        Connector.IsConnectionless ? null : (State as IConnectionState)?.IsConnected;
+
+    public bool      IsInTree => Node?.IsVisible ?? false;
+    public SiloNode? Node     { get; protected set; }
+
+    public Window? BuildWindow()
     {
-        return OnGetStateType();
+        throw new NotImplementedException();
     }
 
-    public bool      IsConnected => (State as IConnectionState)?.IsConnected ?? false;
-    public bool      IsInTree    => Node?.IsVisible                          ?? false;
-    public SiloNode? Node        { get; protected set; }
-
-    /// <summary>
-    ///     Initializes the provider
-    /// </summary>
-    public void InitProvider(IReceiver<Container> receiver)
-    {
-        Receiver = receiver.Required();
-    }
+    public List<object> Metadata { get; }
 
     string? IConnection.PersistentConfig => PersistentConfig;
 
@@ -96,7 +95,7 @@ public abstract class ConnectorBase : IConnection
     protected virtual async Task OnShutdown()
     {
         // disconnect it if we're connected
-        if (IsConnected)
+        if (ConnectionState is true)
             await Disconnect();
 
         // clean up
@@ -131,11 +130,9 @@ public abstract class ConnectorBase : IConnection
     {
         return OnGetStateType();
     }
-}
 
-public interface IConnectionState
-{
-    bool IsConnected { get; }
-    bool IsFailed    { get; }
-    bool IsDisposed  { get; }
+    public void InitProvider(IReceiver<Container> receiver)
+    {
+        throw new NotImplementedException();
+    }
 }
