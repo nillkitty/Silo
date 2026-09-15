@@ -13,7 +13,7 @@ public abstract class ConnectorBase : IConnector
     public          Exception?          LastError { get; protected set; }
     public          ConnectorSetupFlags Flags     { get; protected set; }
     public abstract IConnection         CreateConnection();
-    public          List<object>        Metadata      { get; } = [];
+    public          List<object>        Metadata { get; } = [];
     public abstract Type                GetStateType();
 
     /// <summary>

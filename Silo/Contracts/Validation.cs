@@ -72,24 +72,29 @@ public interface ISiloUserContext
     /// Gets whether this silo must open solo
     /// </summary>
     bool IsSoloSilo { get; }
+
     /// <summary>
     /// Gets whether this user can author the silo
     /// </summary>
     bool IsAuthorable { get; }
+
     /// <summary>
     /// Gets whether this user can write to the silo
     /// </summary>
-    bool IsWritable   { get; }
+    bool IsWritable { get; }
+
     /// <summary>
     /// Gets whether this user can read/see/open the silo
     /// </summary>
-    bool IsReadable   { get; }
+    bool IsReadable { get; }
+
     /// <summary>
     /// Gets whether this ussr can develop for this Silo
     /// </summary>
-    bool IsDeveloper  { get; }
+    bool IsDeveloper { get; }
+
     /// <summary>
     /// Gets whether this user owns the silo
     /// </summary>
-    bool IsOwner      { get; }
+    bool IsOwner { get; }
 }

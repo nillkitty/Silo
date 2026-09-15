@@ -42,7 +42,7 @@ public class OpenSilo : ModelBase
 
     public SiloCommands    Commands   => field ??= new(this);
     public ISiloEncryption Encryption => Components.Require<ISiloEncryption>();
-    
+
     public static OpenSilo CreateFile(SiloFile file)
     {
         file.Required();
