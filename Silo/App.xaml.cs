@@ -10,6 +10,7 @@ using Serilog.Debugging;
 using Serilog.Events;
 using Silo.Commanding;
 using Silo.Connectors;
+using Silo.Design;
 using Silo.Model;
 using Silo.Theming;
 using Silo.Ui;
@@ -84,6 +85,13 @@ public partial class App : Application, IContainerHost
     ///     Gets the app's current Light/Dark/System theme setting (View -> Theme).
     /// </summary>
     public AppTheme Theme => AppTheme.Instance;
+
+    /// <summary>
+    ///     Gets the app's current User/Author/Developer/Debug design level (View -> User Level),
+    ///     which gates whether the pink design menus (see <see cref="Silo.Design.DesignMenu"/>)
+    ///     are reachable via Ctrl+right-click.
+    /// </summary>
+    public AppDesignLevel DesignLevel => AppDesignLevel.Instance;
 
     /// <summary>
     ///     Application level logger
@@ -205,6 +213,9 @@ public partial class App : Application, IContainerHost
         _configLogging();
         _discoverRegs();
         AppTheme.Apply();
+        AppDesignSettings.Apply();
+        AppDesignLevel.Apply();
+        DesignMenu.Register();
 
         base.OnStartup(e);
     }

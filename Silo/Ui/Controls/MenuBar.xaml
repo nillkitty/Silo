@@ -94,6 +94,33 @@
                            Command="{Binding}"
                            CommandParameter="System" />
         </t:RadMenuItem>
+        <!--
+            HyperCard-style User/Author/Developer/Debug mode (see Design/DesignLevel.cs).
+            Author or above is required to reach the pink Ctrl+right-click design menus
+            (see Design/DesignMenu.cs) - this is how you get there in the first place.
+        -->
+        <t:RadMenuItem Header="_User Level" DataContext="{Binding App.DesignLevel}">
+            <t:RadMenuItem Header="_User"
+                           IsCheckable="True"
+                           IsChecked="{Binding IsUser, Mode=OneWay}"
+                           Command="{Binding}"
+                           CommandParameter="User" />
+            <t:RadMenuItem Header="_Author"
+                           IsCheckable="True"
+                           IsChecked="{Binding IsAuthor, Mode=OneWay}"
+                           Command="{Binding}"
+                           CommandParameter="Author" />
+            <t:RadMenuItem Header="_Developer"
+                           IsCheckable="True"
+                           IsChecked="{Binding IsDeveloper, Mode=OneWay}"
+                           Command="{Binding}"
+                           CommandParameter="Developer" />
+            <t:RadMenuItem Header="De_bug"
+                           IsCheckable="True"
+                           IsChecked="{Binding IsDebug, Mode=OneWay}"
+                           Command="{Binding}"
+                           CommandParameter="Debug" />
+        </t:RadMenuItem>
     </t:RadMenuItem>
     <t:RadMenuItem Header="_Run">
 

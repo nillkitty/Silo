@@ -2,6 +2,7 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:local="clr-namespace:Silo"
+             xmlns:design="clr-namespace:Silo.Design"
              xmlns:sys="clr-namespace:System;assembly=System.Runtime"
              StartupUri="/Ui/Windows/MainWindow.xaml">
     <Application.Resources>
@@ -35,6 +36,40 @@
                 Ryley Raines, whom we lost way too soon
             </sys:String>
             <local:ObjectExistsToBoolConverter x:Key="ObjectExistsToBool" />
+
+            <!--
+                Default template for AppIcon (see AppIcon.cs). Implicit (no x:Key -> applies
+                to every AppIcon that doesn't set its own Style), so it's real XAML that XAML
+                Hot Reload/Live Visual Tree can patch live while debugging - unlike the
+                code-behind object graph the old AppIconExtension markup extension built.
+                Fill/Stroke are TemplateBound to the control's own (ordinarily-inherited)
+                Foreground, so an AppIcon placed anywhere automatically matches its container's
+                text color, with no ancestor-type binding or hardcoded fallback color needed.
+            -->
+            <Style TargetType="{x:Type local:AppIcon}">
+                <!--
+                    Bound (not a literal) so the Ctrl+right-click "Icon Size" design-menu slider
+                    (see Design/DesignMenu.cs, wired up on the navigation tree in
+                    MainWindow.xaml.cs) changes every AppIcon in the app live. This only takes
+                    effect for an AppIcon that didn't get an explicit Size elsewhere - any local
+                    value (Style setters lose to those) still wins, same as ordinary WPF
+                    property precedence.
+                -->
+                <Setter Property="Size" Value="{Binding Source={x:Static design:AppDesignSettings.Instance}, Path=IconSize}" />
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="{x:Type local:AppIcon}">
+                            <Viewbox Width="{TemplateBinding Size}" Height="{TemplateBinding Size}">
+                                <Path Data="{TemplateBinding Icon}"
+                                      Stretch="Uniform"
+                                      Fill="{TemplateBinding Foreground}"
+                                      Stroke="{TemplateBinding Foreground}"
+                                      StrokeThickness="{TemplateBinding StrokeThickness}" />
+                            </Viewbox>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
         </ResourceDictionary>
     </Application.Resources>
 </Application>

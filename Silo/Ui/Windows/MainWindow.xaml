@@ -9,6 +9,9 @@
         xmlns:ui="clr-namespace:Silo.Ui"
         mc:Ignorable="d"
         Title="MainWindow" Height="450" Width="800">
+    <Window.Resources>
+ 
+    </Window.Resources>
     <Grid>
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="300" />
@@ -22,26 +25,34 @@
         </Grid.RowDefinitions>
         <ui:MenuBar Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="2" />
         <ToolBar Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2" />
-        <t:RadNavigationView
+        <t:RadNavigationView x:Name="NavTree" AllowMultipleExpandedItems="True" AutoChangeDisplayMode="True"
+                             IsPaneOpen="True"
                     Grid.Row="2" Grid.Column="0"
                     FontWeight="Normal" FontSize="18"
-                               DisplayMode="Compact">
+                               DisplayMode="Expanded">
                 <t:RadNavigationView.Items>
-                    <t:RadNavigationViewItem Content="Silo" IsExpanded="True">
-                        <t:RadNavigationViewItem.Items>
-                        <t:RadNavigationViewItem Content="Schema" />
-                        <t:RadNavigationViewItem Content="Data" />
-                        <t:RadNavigationViewItem Content="Visualization" />
-                        <t:RadNavigationViewItem Content="Analysis" />
-                        </t:RadNavigationViewItem.Items>
+                <t:RadNavigationViewItem Content="Silo" IsExpanded="True"
+                                         Icon="{l:AppIcon Icon={StaticResource DataModel}}">
+                    
+                    <t:RadNavigationViewItem.Items>
+                        <t:RadNavigationViewItem Content="Schema"        Icon="{l:AppIcon {StaticResource FlowDiagram}}" />
+                        <t:RadNavigationViewItem Content="Data"           Icon="{l:AppIcon {StaticResource Database6}}"/>
+                        <t:RadNavigationViewItem Content="Visualization" Icon="{l:AppIcon {StaticResource MindMap}}" />
+                        <t:RadNavigationViewItem Content="Analysis"      Icon="{l:AppIcon {StaticResource Analytics}}" /> 
+                    </t:RadNavigationViewItem.Items>
                     </t:RadNavigationViewItem>
-                    <t:RadNavigationViewItem Content="Connections" IsExpanded="True">
-                        <t:RadNavigationViewItem.Items>
-                            <t:RadNavigationViewItem Content="Destinations" />
-                            <t:RadNavigationViewItem Content="Credentials" />
-                            <t:RadNavigationViewItem Content="Movements" />
-                            <t:RadNavigationViewItem Content="Jobs" />
-                            <t:RadNavigationViewItem Content="Connector Space" />
+                    <t:RadNavigationViewItem Content="Connections" 
+                                             Icon="{l:AppIcon Icon={StaticResource Plug}}"
+                                             IsExpanded="True">
+
+                    <t:RadNavigationViewItem.Items>
+                        <t:RadNavigationViewItem Content="Destinations" Icon="{l:AppIcon {StaticResource Destination}}">
+                  
+                        </t:RadNavigationViewItem>
+                        <t:RadNavigationViewItem Content="Credentials"  Icon="{l:AppIcon {StaticResource Key}}"/>
+                        <t:RadNavigationViewItem Content="Movements"  Icon="{l:AppIcon {StaticResource Transfer1}}"/>
+                        <t:RadNavigationViewItem Content="Jobs" Icon="{l:AppIcon {StaticResource Folder17}}"/>
+                        <t:RadNavigationViewItem Content="Connector Space" Icon="{l:AppIcon {StaticResource Database5}}"/>
                         </t:RadNavigationViewItem.Items>
 
                     </t:RadNavigationViewItem>
