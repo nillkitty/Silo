@@ -77,7 +77,23 @@
 
     </t:RadMenuItem>
     <t:RadMenuItem Header="_View">
-
+        <t:RadMenuItem Header="_Theme" DataContext="{Binding App.Theme}">
+            <t:RadMenuItem Header="_Light"
+                           IsCheckable="True"
+                           IsChecked="{Binding IsLight, Mode=OneWay}"
+                           Command="{Binding}"
+                           CommandParameter="Light" />
+            <t:RadMenuItem Header="_Dark"
+                           IsCheckable="True"
+                           IsChecked="{Binding IsDark, Mode=OneWay}"
+                           Command="{Binding}"
+                           CommandParameter="Dark" />
+            <t:RadMenuItem Header="_System"
+                           IsCheckable="True"
+                           IsChecked="{Binding IsSystem, Mode=OneWay}"
+                           Command="{Binding}"
+                           CommandParameter="System" />
+        </t:RadMenuItem>
     </t:RadMenuItem>
     <t:RadMenuItem Header="_Run">
 

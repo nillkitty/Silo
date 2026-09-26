@@ -11,6 +11,7 @@ using Serilog.Events;
 using Silo.Commanding;
 using Silo.Connectors;
 using Silo.Model;
+using Silo.Theming;
 using Silo.Ui;
 using Silo.ViewModel;
 using Telefrag.DI;
@@ -78,6 +79,11 @@ public partial class App : Application, IContainerHost
     ///     Gets the ViewModel for the Tools in the Tools menu.
     /// </summary>
     public SiloToolsModel Tools { get; } = new();
+
+    /// <summary>
+    ///     Gets the app's current Light/Dark/System theme setting (View -> Theme).
+    /// </summary>
+    public AppTheme Theme => AppTheme.Instance;
 
     /// <summary>
     ///     Application level logger
@@ -198,6 +204,7 @@ public partial class App : Application, IContainerHost
     {
         _configLogging();
         _discoverRegs();
+        AppTheme.Apply();
 
         base.OnStartup(e);
     }
