@@ -7,17 +7,42 @@
              xmlns:c="clr-namespace:Silo.Commanding"
              xmlns:l="clr-namespace:Silo"
              xmlns:t="http://schemas.telerik.com/2008/xaml/presentation"
-             mc:Ignorable="d" 
+             mc:Ignorable="d"
              x:Name="MenuTop"
              DataContext="{Binding ., RelativeSource={RelativeSource AncestorType={x:Type l:MainWindow}, Mode=FindAncestor}}"
              d:DesignHeight="32" d:DesignWidth="800">
     <t:RadMenu.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
         <Style TargetType="{x:Type t:RadMenuItem}">
             <Setter Property="Header" Value="{Binding Command.Header, RelativeSource={RelativeSource Self}}" />
             <Setter Property="ToolTip" Value="{Binding Command.ToolTip, RelativeSource={RelativeSource Self}}" />
             <Setter Property="Icon" Value="{Binding Command.Icon, RelativeSource={RelativeSource Self}}" />
             <Setter Property="IsCheckable" Value="{Binding Command.IsCheckable, RelativeSource={RelativeSource Self}}" />
             <Setter Property="IsChecked" Value="{Binding Command.IsChecked, Mode=TwoWay, RelativeSource={RelativeSource Self}}" />
+        </Style>
+        <!--
+            Used for each ITool's Tools-menu entry (via RadMenuGroup.ItemContainerStyle
+            below). Binds straight off the ITool instance (each generated item's
+            DataContext) rather than off Command.* like the style above, since an
+            ITool's Header/Icon/IsEnabled/IsVisible live on the tool itself, not on a
+            separate command object - and the tool doubles as its own Command, since
+            ToolBase implements ICommand and Toggle() is what a click should invoke.
+        -->
+        <Style x:Key="ToolMenuItemStyle" TargetType="{x:Type t:RadMenuItem}">
+            <Setter Property="Header" Value="{Binding Header}" />
+            <Setter Property="Icon" Value="{Binding Icon}" />
+            <Setter Property="IsCheckable" Value="True" />
+            <!--
+                OneWay: IsChecked here mirrors ITool.IsChecked (whether the tool's
+                window is open), it isn't a user-settable flag. Toggling happens only
+                through Command/Toggle() below; a OneWay binding means Telerik's own
+                click-driven local flip of IsChecked can't fight with that or drift
+                from the tool's actual window state.
+            -->
+            <Setter Property="IsChecked" Value="{Binding IsChecked, Mode=OneWay}" />
+            <Setter Property="IsEnabled" Value="{Binding IsEnabled}" />
+            <Setter Property="Visibility" Value="{Binding IsVisible, Converter={StaticResource BoolToVisibility}}" />
+            <Setter Property="Command" Value="{Binding}" />
         </Style>
     </t:RadMenu.Resources>
     <t:RadMenuItem Header="_File" DataContext="{Binding App}">
@@ -56,6 +81,16 @@
     </t:RadMenuItem>
     <t:RadMenuItem Header="_Run">
 
+    </t:RadMenuItem>
+    <t:RadMenuItem Header="_Tools"
+                   DataContext="{Binding App.Tools}">
+        <t:RadMenuItem Header="Manage Tools..."
+                       Visibility="{Binding HasToolsAuthoring, Converter={StaticResource BoolToVisibility}}" />
+        <t:RadMenuSeparatorItem Visibility="{Binding HasToolsAuthoring, Converter={StaticResource BoolToVisibility}}" />
+        <t:RadMenuItem Header="Break Debugger"
+                       Command="{Binding Break}" />
+        <!-- One RadMenuItem per ITool, appended here and kept in sync with Tools -->
+        <l:RadMenuGroup ItemsSource="{Binding Tools}" ItemContainerStyle="{StaticResource ToolMenuItemStyle}" />
     </t:RadMenuItem>
     <t:RadMenuItem Header="_Help">
         <t:RadMenuItem Header="_About Silo..." 

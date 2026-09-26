@@ -1,4 +1,6 @@
-﻿using Silo.DbModel.Meta;
+﻿using Microsoft.AspNetCore.Connections;
+using Silo.DbModel.Global;
+using Silo.DbModel.Meta;
 using Telefrag.DI;
 
 namespace Silo.Connectors;
@@ -10,11 +12,14 @@ public abstract class ConnectorBase : IConnector
     /// </summary>
     public IReceiver<Container>? Receiver { get; protected set; }
 
-    public          Exception?          LastError { get; protected set; }
-    public          ConnectorSetupFlags Flags     { get; protected set; }
-    public abstract IConnection         CreateConnection();
-    public          List<object>        Metadata { get; } = [];
-    public abstract Type                GetStateType();
+    public Exception?          LastError { get; protected set; }
+    public ConnectorSetupFlags Flags     { get; protected set; }
+
+    protected abstract IConnection OnCreateConnection(ConnectionRequest crq);
+    IConnection IConnector.        CreateConnection(ConnectionRequest   crq) => OnCreateConnection(crq);
+
+    public          List<object> Metadata { get; } = [];
+    public abstract Type         GetStateType();
 
     /// <summary>
     ///     Initializes the provider

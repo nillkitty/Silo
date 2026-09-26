@@ -1,89 +1,113 @@
 ﻿using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.Media;
 using System.Reflection;
 using System.Windows;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Win32;
 using Serilog;
+using Serilog.Debugging;
 using Serilog.Events;
 using Silo.Commanding;
 using Silo.Connectors;
 using Silo.Model;
 using Silo.Ui;
-using Silo.Ui.Windows;
-using Telefrag.Collections;
+using Silo.ViewModel;
 using Telefrag.DI;
 using Telefrag.Exceptions;
 
 namespace Silo;
 
 /// <summary>
-/// ViewModel for the application
+///     ViewModel for the application
 /// </summary>
 public partial class App : Application, IContainerHost
 {
-    private readonly FragTable<OpenSilo, string> _silos = [];
-
     /// <summary>
-    /// Application level logger
-    /// </summary>
-    protected ILogger Logger { get; } = Log.ForContext<App>();
-
-    /// <summary>
-    /// In-memory cache of logs
-    /// </summary>
-    public ObservableCollection<Serilog.Events.LogEvent> Logs { get; } = [];
-
-    /// <summary>
-    /// Gets a collection of the open Silos
-    /// </summary>
-    public IEnumerable<OpenSilo> OpenSilos => _silos.Values;
-
-    /// <summary>
-    /// Application-level components container
-    /// </summary>
-    public Container Components { get; } = new(nameof(App));
-
-    /// <summary>
-    /// File -> New Silo
-    /// </summary>
-    public static AppCommand NewSiloCommand => new NewSiloCommand();
-
-    /// <summary>
-    /// File -> Open Silo
-    /// </summary>
-    public static AppCommand OpenSiloCommand => new OpenSiloCommand();
-
-    /// <summary>
-    /// File -> Exit
-    /// </summary>
-    public static new AppCommand ExitCommand => new AppExitCommand();
-
-    /// <summary>
-    /// Help -> About
+    ///     Help -> About
     /// </summary>
     public static AppCommand About => new AppAboutCommand();
 
     /// <summary>
-    /// Gets all logs formatted to a single buffer
+    ///     Gegs or changes the active Silo
+    /// </summary>
+    public OpenSilo? ActiveSilo
+    {
+        get;
+        set
+        {
+            field = value;
+            ActiveSiloChanged?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    /// <summary>
+    ///     File -> Exit
+    /// </summary>
+    public new static AppCommand ExitCommand => new AppExitCommand();
+
+
+    public static App? Instance => Current as App;
+
+    /// <summary>
+    ///     In-memory cache of logs
+    /// </summary>
+    public ObservableCollection<LogEvent> Logs { get; } = [];
+
+    /// <summary>
+    ///     File -> New Silo
+    /// </summary>
+    public static AppCommand NewSiloCommand => new NewSiloCommand();
+
+    /// <summary>
+    ///     File -> Open Silo
+    /// </summary>
+    public static AppCommand OpenSiloCommand => new OpenSiloCommand();
+
+    /// <summary>
+    ///     Gets a collection of the open Silos.  This mirrors the actual live registry of
+    ///     open silos (<see cref="OpenSilo.OpenSilos" />) rather than a separate, never-populated
+    ///     tracking collection, so callers - such as <see cref="Silo.Commanding.AppExitCommand" />,
+    ///     which shuts each one down on exit, and the connection diagram tool - see real data.
+    /// </summary>
+    public ObservableCollection<OpenSilo> OpenSilos => OpenSilo.OpenSilos;
+
+    public static bool ShowToolsMenu { get; set; } = true;
+
+    /// <summary>
+    ///     Gets the ViewModel for the Tools in the Tools menu.
+    /// </summary>
+    public SiloToolsModel Tools { get; } = new();
+
+    /// <summary>
+    ///     Application level logger
+    /// </summary>
+    protected ILogger Logger { get; } = Log.ForContext<App>();
+
+    private IDatabaseProvider _db => ActiveSilo?.Data;
+
+    /// <summary>
+    ///     Application-level components container
+    /// </summary>
+    public Container Components { get; } = new(nameof(App));
+
+    /// <summary>
+    ///     Gets all logs formatted to a single buffer
     /// </summary>
     public string GetLogs()
     {
         StringBuilder sb = new(Logs.Count * 10);
-        foreach (Serilog.Events.LogEvent v in Logs)
-        {
-            sb.AppendLine($"{v.Timestamp} [{v.Level}] {v.RenderMessage()}");
-        }
+        foreach (LogEvent v in Logs) sb.AppendLine($"{v.Timestamp} [{v.Level}] {v.RenderMessage()}");
 
         return sb.ToString();
     }
 
     /// <summary>
-    /// Creates a new Silo file at a path chosen by the user via modal file save dialog.
+    ///     Creates a new Silo file at a path chosen by the user via modal file save dialog.
     /// </summary>
     public OpenSilo? NewSilo()
     {
-        var s = new SaveFileDialog()
+        var s = new SaveFileDialog
                 {
                     Title  = "Create Silo",
                     Filter = "(*.silo)|*.silo"
@@ -101,36 +125,31 @@ public partial class App : Application, IContainerHost
         return null;
     }
 
-
-    public static App? Instance => Application.Current as App;
-
-    public OpenSilo? ActiveSilo
-    {
-        get;
-        set
-        {
-            field = value;
-            ActiveSiloChanged?.Invoke(this, EventArgs.Empty);
-        }
-    }
-
     public event EventHandler?           ActiveSiloChanged;
     public event EventHandler<OpenSilo>? SiloOpened;
     public event EventHandler<OpenSilo>? SiloOpening;
     public event EventHandler<OpenSilo>? SiloClosing;
     public event EventHandler?           SiloClosed;
 
-    internal void NotifySiloOpening(object sender, OpenSilo o) =>
+    internal void NotifySiloOpening(object sender, OpenSilo o)
+    {
         SiloOpening?.Invoke(sender, o);
+    }
 
-    internal void NotifySiloOpened(object sender, OpenSilo o) =>
+    internal void NotifySiloOpened(object sender, OpenSilo o)
+    {
         SiloOpened?.Invoke(sender, o);
+    }
 
-    internal void NotifySiloClosing(object sender, OpenSilo o) =>
+    internal void NotifySiloClosing(object sender, OpenSilo o)
+    {
         SiloClosing?.Invoke(sender, o);
+    }
 
-    internal void NotifySiloClosed(object sender, OpenSilo o) =>
+    internal void NotifySiloClosed(object sender, OpenSilo o)
+    {
         SiloClosed?.Invoke(sender, EventArgs.Empty);
+    }
 
 
     public static bool Status(string text)
@@ -162,8 +181,6 @@ public partial class App : Application, IContainerHost
         return false;
     }
 
-    private IDatabaseProvider _db => ActiveSilo?.Data;
-
     public bool InterAdd<TItem>(TItem item)
     {
         if (ActiveSilo is null)
@@ -190,7 +207,7 @@ public partial class App : Application, IContainerHost
         var l = new LoggerConfiguration().MinimumLevel.Debug().WriteTo.Console().WriteTo.Debug().CreateLogger();
 
         Log.Logger = l;
-        Serilog.Debugging.SelfLog.Enable(msg => System.Diagnostics.Trace.WriteLine($"[Serilog]: {msg}"));
+        SelfLog.Enable(msg => Trace.WriteLine($"[Serilog]: {msg}"));
         l.Debug("Logging configured");
     }
 
@@ -202,7 +219,7 @@ public partial class App : Application, IContainerHost
             Assembly.GetCallingAssembly(),
             Assembly.GetExecutingAssembly()
         ];
-        a.Distinct().ToList().ForEach(x => DiscoverRegistrations(x, false));
+        a.Distinct().ToList().ForEach(x => DiscoverRegistrations(x));
     }
 
     public void DiscoverRegistrations(Assembly? a, bool critical = false)
@@ -225,16 +242,30 @@ public partial class App : Application, IContainerHost
             if (t.IsInterface) continue;
             if (!t.IsPublic) continue;
 
-            var ca = t.GetCustomAttribute<RegisterAttribute>();
+            var ca = t.GetCustomAttribute<RegisterAttribute>(true);
+            var ta = t.GetCustomAttribute<TransientAttribute>(true);
+            var sa = t.GetCustomAttribute<SingletonAttribute>(true);
             if (ca is { } aa)
             {
                 var r = Components.RegisterSingleton(aa.ServiceType, t, aa.Key, null,
                                                      aa.IsSingleton ? ComponentLifetime.Singleton : ComponentLifetime.Transient);
                 if (r != null)
-                {
                     Log.Debug("Registered component '{tn}' from attribute (as {in})", _base(t).ShortDisplayName(),
                               aa.ServiceType.ShortDisplayName());
-                }
+            }
+            else if (ta != null)
+            {
+                var r = Components.RegisterSingleton(ta.ServiceType, t, ta.Name, null, ComponentLifetime.Transient);
+                if (r != null)
+                    Log.Debug("Registered transient '{tn}' from attribute (as {in})", _base(t).ShortDisplayName(),
+                              ta.ServiceType.ShortDisplayName());
+            }
+            else if (sa != null)
+            {
+                var r = Components.RegisterSingleton(sa.ServiceType, t, sa.Name, null, ComponentLifetime.Singleton);
+                if (r != null)
+                    Log.Debug("Registered singleton '{tn}' from attribute (as {in})", _base(t).ShortDisplayName(),
+                              sa.ServiceType.ShortDisplayName());
             }
         }
     }
@@ -247,10 +278,13 @@ public partial class App : Application, IContainerHost
         return type.GetGenericTypeDefinition();
     }
 
-    public bool Exists<TItem>(TItem item) => _db.ItemExists(item);
+    public bool Exists<TItem>(TItem item)
+    {
+        return _db.ItemExists(item);
+    }
 
     /// <summary>
-    /// Requires an app-level component
+    ///     Requires an app-level component
     /// </summary>
     public static TService Require<TService>() where TService : class
     {
@@ -260,15 +294,15 @@ public partial class App : Application, IContainerHost
     }
 
     /// <summary>
-    /// Resolves an app-level component
+    ///     Resolves an app-level component
     /// </summary>
     public static TService? Resolve<TService>() where TService : class
     {
-        return App.Instance?.Components?.Resolve<TService>();
+        return Instance?.Components?.Resolve<TService>();
     }
 
     /// <summary>
-    /// Invoked when an unhandled exception has occured off the primary thread
+    ///     Invoked when an unhandled exception has occured off the primary thread
     /// </summary>
     public void Unhandled(Exception e)
     {
@@ -278,7 +312,7 @@ public partial class App : Application, IContainerHost
     public static void RunSafe(Action action)
     {
         action.Required();
-        if (App.Current is { Dispatcher: var d })
+        if (Current is { Dispatcher: var d })
         {
             if (d.CheckAccess())
                 action();
@@ -290,4 +324,4 @@ public partial class App : Application, IContainerHost
             action();
         }
     }
-};
+}

@@ -26,6 +26,7 @@
     <PackageReference Include="Telerik.Documents.Spreadsheet.FormatProviders.Xls" Version="2025.3.806" />
     <PackageReference Include="Telerik.Pivot.Core" Version="0.1.6" />
     <PackageReference Include="Telerik.UI.for.Wpf.AllControls.Xaml" Version="2025.3.813" />
+    <PackageReference Include="Telerik.Windows.Controls.Diagrams.Extensions.for.Wpf.Xaml" Version="2025.3.813" />
   </ItemGroup>
 
   <ItemGroup>
@@ -36,6 +37,7 @@
 
   <ItemGroup>
     <Folder Include="Providers\Uri\" />
+    <Folder Include="Subconnectors\" />
     <Folder Include="ViewModel\Features\" />
   </ItemGroup>
 

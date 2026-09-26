@@ -17,6 +17,7 @@ public record NewConnectionCommand(OpenSilo Silo)
         if (ConnectionWindow.Modal() is IConnection c)
         {
             Silo.Data.AddItem(c);
+            Silo.Connections.Add(c);
             Log.Debug("Added new connection:  {connection}", c);
             return;
         }

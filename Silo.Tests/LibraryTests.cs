@@ -1,10 +1,20 @@
-﻿using System.Collections;
-using System.Collections.ObjectModel;
+﻿using System.Collections.ObjectModel;
+using System.IO;
 using Microsoft.Win32;
 using Telefrag.Collections;
 using Telefrag.DI;
 
 namespace Silo.Tests;
+
+public interface ITestFoo
+{
+}
+
+public class TestFooAlpha : ITestFoo;
+
+public class TestFooBravo : ITestFoo;
+
+public class TestFooCharlie : ITestFoo;
 
 public class LibraryTests
 {
@@ -13,7 +23,7 @@ public class LibraryTests
     [SetUp]
     public void Setup()
     {
-        Container = App.Instance?.Components ?? new("App");
+        Container = App.Instance?.Components ?? new Container("App");
         Container.RegisterSingleton(typeof(IObservable<>), typeof(ObservableCollection<>));
         Container.RegisterSingleton(typeof(IList<>),       typeof(FragList<>));
         Container.RegisterSingleton<ITestFoo, TestFooAlpha>();
@@ -31,12 +41,10 @@ public class LibraryTests
 
         Assert.Pass();
     }
+
+    [Test]
+    public void FileSystemTests()
+    {
+        if (Directory.GetDirectoryRoot(Environment.ProcessPath) is { } rr) Console.WriteLine(rr);
+    }
 }
-
-public interface ITestFoo;
-
-public record TestFooAlpha : ITestFoo;
-
-public record TestFooBravo : ITestFoo;
-
-public record TestFooCharlie : ITestFoo;

@@ -29,6 +29,14 @@ public class OpenSilo : ModelBase
 
     public IDatabaseProvider Data         { get; private set; }
     public ISiloUserContext  UserContext  { get; private set; }
+
+    /// <summary>
+    /// The connections currently active (loaded into memory) for this Silo.  Populated as
+    /// connections are created/opened during the session; used e.g. by the connection
+    /// diagram tool to show what's actually connected right now, as distinct from the
+    /// persisted <c>Connection</c> records saved in the Silo's global database.
+    /// </summary>
+    public ObservableCollection<IConnection> Connections { get; } = [];
     public bool              IsSolo       { get; private set; }
     public bool              IsOpensSolo  => UserContext.IsSoloSilo;
     public bool              IsAuthorable => UserContext.IsAuthorable;

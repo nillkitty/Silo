@@ -5,31 +5,36 @@
              xmlns:sys="clr-namespace:System;assembly=System.Runtime"
              StartupUri="/Ui/Windows/MainWindow.xaml">
     <Application.Resources>
-        <sys:String x:Key="AboutText">
-            Silo version {0} by {1}
-            {2}
-            {3}
-            Thanks to:
-            {4}
-            
-            In Memory:
-            {5}
-        </sys:String>
-        <sys:String x:Key="AboutAuthors">
-            Nill (nill@nill.dev)
-        </sys:String>
-        <sys:String x:Key="AboutUrl">
-            https://github.com/nillkitty/Silo
-        </sys:String>
-        <sys:String x:Key="AboutInfo">
-            -
-        </sys:String>
-        <sys:String x:Key="AboutThanks">
-            May, Liru, Epsilion, Lex, Aine, Mom, Brian
-        </sys:String>
-        <sys:String x:Key="AboutMemory">
-            Ryley Raines, whom we lost way too soon
-        </sys:String>
-        <local:ObjectExistsToBoolConverter x:Key="ObjectExistsToBool" />
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="/Resources/Paths.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+            <sys:String x:Key="AboutText">
+                Silo version {0} by {1}
+                {2}
+                {3}
+                Thanks to:
+                {4}
+    
+                In Memory:
+                {5}
+            </sys:String>
+            <sys:String x:Key="AboutAuthors">
+                Nill (nill@nill.dev)
+            </sys:String>
+            <sys:String x:Key="AboutUrl">
+                https://github.com/nillkitty/Silo
+            </sys:String>
+            <sys:String x:Key="AboutInfo">
+                -
+            </sys:String>
+            <sys:String x:Key="AboutThanks">
+                May, Liru, Epsilion, Lex, Aine, Mom, Brian
+            </sys:String>
+            <sys:String x:Key="AboutMemory">
+                Ryley Raines, whom we lost way too soon
+            </sys:String>
+            <local:ObjectExistsToBoolConverter x:Key="ObjectExistsToBool" />
+        </ResourceDictionary>
     </Application.Resources>
 </Application>

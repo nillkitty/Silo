@@ -10,16 +10,22 @@
         mc:Ignorable="d"
         Title="MainWindow" Height="450" Width="800">
     <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="300" />
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
         <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
-        <ui:MenuBar Grid.Row="0" />
-        <ToolBar Grid.Row="1" />
-        <DockPanel Grid.Row="2" LastChildFill="True">
-            <t:RadNavigationView FontWeight="Normal" FontSize="18" DockPanel.Dock="Left" 
-                                 DisplayMode="Expanded">
+        <ui:MenuBar Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="2" />
+        <ToolBar Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2" />
+        <t:RadNavigationView
+                    Grid.Row="2" Grid.Column="0"
+                    FontWeight="Normal" FontSize="18"
+                               DisplayMode="Compact">
                 <t:RadNavigationView.Items>
                     <t:RadNavigationViewItem Content="Silo" IsExpanded="True">
                         <t:RadNavigationViewItem.Items>
@@ -41,8 +47,7 @@
                     </t:RadNavigationViewItem>
                 </t:RadNavigationView.Items>
             </t:RadNavigationView>
-        </DockPanel>
-        <t:RadDocking Grid.Row="1">
+        <t:RadDocking Grid.Row="2"  Grid.Column="1">
             <t:RadSplitContainer InitialPosition="DockedRight">
                 <t:RadSplitContainer InitialPosition="DockedTop">
                     <t:RadPaneGroup>
@@ -58,7 +63,7 @@
                 </t:RadPaneGroup>
             </t:RadSplitContainer>
         </t:RadDocking>
-        <StatusBar Grid.Row="2">
+        <StatusBar Grid.Row="3" Grid.Column="0"  Grid.ColumnSpan="2">
             <StatusBarItem Name="StatusError"></StatusBarItem>
         </StatusBar>
     </Grid>

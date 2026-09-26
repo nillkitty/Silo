@@ -16,7 +16,7 @@ public interface IConnector
     /// Creates a connection
     /// </summary>
     /// <returns></returns>
-    IConnection CreateConnection();
+    IConnection CreateConnection(ConnectionRequest crq);
 
     /// <summary>
     /// Gets a collection of arbitrary metadata associated with the connection
@@ -33,4 +33,20 @@ public interface IConnector
     /// Gets whether the connector is connectionless based on its Flags.
     /// </summary>
     public bool IsConnectionless => Flags.HasFlag(ConnectorSetupFlags.Connectionless);
+
+    /// <summary>
+    /// Gets a human-readable name for this connector, e.g. to label a diagram edge between
+    /// a Silo and one of its connections.  Defaults to the connector's type name with a
+    /// trailing "Connector" trimmed (so <c>FileConnector</c> reads as "File"); override for
+    /// a friendlier name.
+    /// </summary>
+    public string DisplayName
+    {
+        get
+        {
+            var n = GetType().Name;
+            const string suffix = "Connector";
+            return n.EndsWith(suffix, StringComparison.Ordinal) ? n[..^suffix.Length] : n;
+        }
+    }
 }
