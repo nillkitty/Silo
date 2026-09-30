@@ -1,6 +1,6 @@
 ﻿using System.Windows;
 using System.Windows.Media;
-using Telerik.Windows.Controls;
+using AvalonDock.Layout;
 
 namespace Silo.Contracts;
 
@@ -79,8 +79,8 @@ public interface ITool
     UIElement? GetContent();
 
     /// <summary>
-    ///     Gets a RadPane contaiming the tool
+    ///     Gets an AvalonDock <see cref="LayoutAnchorable"/> containing the tool
     /// </summary>
     /// <returns></returns>
-    RadPane? GetPane();
+    LayoutAnchorable? GetPane();
 }

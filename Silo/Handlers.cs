@@ -1,8 +1,8 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Text;
 using System.Windows;
-using Telerik.Windows.Controls;
+using Silo.Extensions;
 
 namespace Silo;
 
@@ -12,17 +12,11 @@ internal static class Handlers
     {
         if (sender is UIElement c)
         {
-            Window    w = c.ParentOfType<Window>();
-            RadWindow r = c.ParentOfType<RadWindow>();
+            Window? w = c.ParentOfType<Window>();
             if (w != null)
             {
                 w.DialogResult = false;
                 w.Close();
-            }
-            else if (r != null)
-            {
-                r.DialogResult = false;
-                r.Close();
             }
         }
     }
@@ -31,17 +25,11 @@ internal static class Handlers
     {
         if (sender is UIElement c)
         {
-            Window    w = c.ParentOfType<Window>();
-            RadWindow r = c.ParentOfType<RadWindow>();
+            Window? w = c.ParentOfType<Window>();
             if (w != null)
             {
                 w.DialogResult = true;
                 w.Close();
-            }
-            else if (r != null)
-            {
-                r.DialogResult = true;
-                r.Close();
             }
         }
     }

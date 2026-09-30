@@ -2,7 +2,6 @@
 using System;
 using System.Windows;
 using System.Windows.Data;
-using Telerik.Windows.Controls.Docking;
 
 namespace Silo.Commanding;
 

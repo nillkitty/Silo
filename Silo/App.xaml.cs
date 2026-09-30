@@ -3,7 +3,6 @@ using System.Diagnostics;
 using System.Media;
 using System.Reflection;
 using System.Windows;
-using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Win32;
 using Serilog;
 using Serilog.Debugging;
@@ -11,6 +10,7 @@ using Serilog.Events;
 using Silo.Commanding;
 using Silo.Connectors;
 using Silo.Design;
+using Silo.Extensions;
 using Silo.Model;
 using Silo.Theming;
 using Silo.Ui;
@@ -42,6 +42,13 @@ public partial class App : Application, IContainerHost
             ActiveSiloChanged?.Invoke(this, EventArgs.Empty);
         }
     }
+
+    /// <summary>
+    ///     Gets the app's current User/Author/Developer/Debug design level (View -> User Level),
+    ///     which gates whether the pink design menus (see <see cref="Silo.Design.DesignMenu" />)
+    ///     are reachable via Ctrl+right-click.
+    /// </summary>
+    public AppDesignLevel DesignLevel => AppDesignLevel.Instance;
 
     /// <summary>
     ///     File -> Exit
@@ -77,21 +84,14 @@ public partial class App : Application, IContainerHost
     public static bool ShowToolsMenu { get; set; } = true;
 
     /// <summary>
-    ///     Gets the ViewModel for the Tools in the Tools menu.
-    /// </summary>
-    public SiloToolsModel Tools { get; } = new();
-
-    /// <summary>
     ///     Gets the app's current Light/Dark/System theme setting (View -> Theme).
     /// </summary>
     public AppTheme Theme => AppTheme.Instance;
 
     /// <summary>
-    ///     Gets the app's current User/Author/Developer/Debug design level (View -> User Level),
-    ///     which gates whether the pink design menus (see <see cref="Silo.Design.DesignMenu"/>)
-    ///     are reachable via Ctrl+right-click.
+    ///     Gets the ViewModel for the Tools in the Tools menu.
     /// </summary>
-    public AppDesignLevel DesignLevel => AppDesignLevel.Instance;
+    public SiloToolsModel Tools { get; } = new();
 
     /// <summary>
     ///     Application level logger

@@ -2,14 +2,16 @@ using System.ComponentModel;
 using System.IO;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
+using System.Windows;
 using System.Windows.Input;
-using Telerik.Windows.Controls;
+using Microsoft.Win32;
 
 namespace Silo.Theming;
 
 /// <summary>
-///     The app's color-scheme choice for the Windows11 Telerik theme: Light, Dark, or
-///     System (follow Windows).
+///     The app's color-scheme choice for the hand-rolled theme (see
+///     <c>Theming/Theme.Light.xaml</c>/<c>Theme.Dark.xaml</c>/<c>Theme.Styles.xaml</c>):
+///     Light, Dark, or System (follow Windows).
 /// </summary>
 public enum ThemeMode
 {
@@ -19,17 +21,28 @@ public enum ThemeMode
 }
 
 /// <summary>
-///     Owns the app's current <see cref="ThemeMode"/> and applies it via
-///     <see cref="Windows11Palette.LoadPreset"/>. There's exactly one of these
-///     (<see cref="Instance"/>), and it doubles as its own <see cref="ICommand"/> so the
-///     View menu's Light/Dark/System items can bind straight to it
-///     (<c>Command="{Binding}"</c>, <c>CommandParameter</c> = the mode name) - the same
-///     "the object is its own command" pattern used for the Tools menu
+///     Owns the app's current <see cref="ThemeMode"/> and applies it by hot-swapping one
+///     of two palette <see cref="ResourceDictionary"/>s (<c>Theme.Light.xaml</c> /
+///     <c>Theme.Dark.xaml</c>) into <see cref="Application.Resources"/>. There's exactly
+///     one of these (<see cref="Instance"/>), and it doubles as its own
+///     <see cref="ICommand"/> so the View menu's Light/Dark/System items can bind straight
+///     to it (<c>Command="{Binding}"</c>, <c>CommandParameter</c> = the mode name) - the
+///     same "the object is its own command" pattern used for the Tools menu
 ///     (<see cref="Silo.Tools.ToolBase"/>), and for the same reason: it keeps a single
 ///     live instance's checked state in sync with a click without depending on exactly
-///     how Telerik's checkable <c>RadMenuItem</c> click handling interacts with a
-///     separate command-wrapper object's own change notifications.
+///     how a checkable <c>MenuItem</c>'s own local click-driven <c>IsChecked</c> flip
+///     interacts with a separate command-wrapper object's own change notifications.
 /// </summary>
+/// <remarks>
+///     This previously delegated to Telerik's <c>Windows11Theme</c>/<c>Windows11Palette</c>,
+///     which tracked OS light/dark changes live on its own. The hand-rolled replacement
+///     reads the OS setting once, at the moment <see cref="ThemeMode.System"/> is applied
+///     (at startup, or when the user picks "System" from the View menu) rather than
+///     subscribing to live OS theme-change notifications - a deliberate simplification
+///     (see the Theme system design conversation this replaced Telerik in). Re-applying
+///     "System" (e.g. by toggling it in the View menu, or relaunching the app) picks up a
+///     changed OS setting.
+/// </remarks>
 public sealed class AppTheme : ICommand, INotifyPropertyChanged
 {
     public static AppTheme Instance { get; } = new();
@@ -37,7 +50,11 @@ public sealed class AppTheme : ICommand, INotifyPropertyChanged
     private static readonly string SettingsFile =
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Silo", "theme.json");
 
-    private ThemeMode _mode = ThemeMode.System;
+    private static readonly Uri LightPaletteUri = new("/Theming/Theme.Light.xaml", UriKind.Relative);
+    private static readonly Uri DarkPaletteUri  = new("/Theming/Theme.Dark.xaml", UriKind.Relative);
+
+    private ThemeMode           _mode = ThemeMode.System;
+    private ResourceDictionary? _appliedPalette;
 
     private AppTheme()
     {
@@ -50,40 +67,45 @@ public sealed class AppTheme : ICommand, INotifyPropertyChanged
     public bool IsSystem => _mode == ThemeMode.System;
 
     /// <summary>
-    ///     Selects the Windows11 theme as the app-wide theme, turns on its compact
-    ///     sizing, and applies the last-saved Light/Dark/System choice (defaulting to
-    ///     System). Windows11Palette's "System" preset already tracks the OS light/dark
-    ///     setting live on its own (it has its own private OS-change listeners), so no
-    ///     separate polling or event subscription is needed here. Call once, early in
-    ///     startup - before the main window is created.
+    ///     Applies the last-saved Light/Dark/System choice (defaulting to System). Call
+    ///     once, early in startup - before the main window is created - and after
+    ///     <c>Theme.Styles.xaml</c> has already been merged into
+    ///     <see cref="Application.Resources"/> (see <c>App.xaml</c>), since that's the
+    ///     dictionary whose styles actually read the palette brushes this swaps in.
     /// </summary>
     public static void Apply()
     {
-        StyleManager.ApplicationTheme = new Windows11Theme();
-        Windows11ThemeSizeHelper.Helper.IsInCompactMode = true;
         Instance.SetMode(_loadSavedMode());
     }
 
     /// <summary>
-    ///     Switches to the given mode: reloads the Windows11 palette preset (which
-    ///     updates every open window live, since the theme's styles pull their colors
-    ///     from that palette's resources) and persists the choice for next launch.
+    ///     Switches to the given mode: swaps in the matching palette dictionary (which
+    ///     updates every open window live, since every themed style in
+    ///     <c>Theme.Styles.xaml</c> pulls its colors from that palette's brush resources
+    ///     via <c>DynamicResource</c>) and persists the choice for next launch.
     /// </summary>
     public void SetMode(ThemeMode mode)
     {
         _mode = mode;
 
-        Windows11Palette.LoadPreset(mode switch
+        bool dark = mode switch
         {
-            ThemeMode.Light => Windows11Palette.ColorVariation.Light,
-            ThemeMode.Dark  => Windows11Palette.ColorVariation.Dark,
-            _               => Windows11Palette.ColorVariation.System
-        });
+            ThemeMode.Light => false,
+            ThemeMode.Dark  => true,
+            _               => _isSystemDark()
+        };
+
+        var palette = new ResourceDictionary { Source = dark ? DarkPaletteUri : LightPaletteUri };
+
+        var merged = Application.Current.Resources.MergedDictionaries;
+        if (_appliedPalette != null) merged.Remove(_appliedPalette);
+        merged.Add(palette);
+        _appliedPalette = palette;
 
         _save(mode);
 
         // Always re-notify, even when the mode didn't actually change: a checkable
-        // RadMenuItem flips its own IsChecked locally the instant it's clicked - before
+        // MenuItem flips its own IsChecked locally the instant it's clicked - before
         // Command.Execute() even runs - including when you click the item that's already
         // checked. IsChecked is bound OneWay here (see MenuBar.xaml) specifically so that
         // a fresh notification is what pulls the binding back to the real state and
@@ -92,6 +114,29 @@ public sealed class AppTheme : ICommand, INotifyPropertyChanged
         OnPropertyChanged(nameof(IsLight));
         OnPropertyChanged(nameof(IsDark));
         OnPropertyChanged(nameof(IsSystem));
+    }
+
+    /// <summary>
+    ///     Reads the Windows 10/11 "choose your color" setting
+    ///     (Settings -> Personalization -> Colors -> "Choose your mode") once, best-effort.
+    ///     Falls back to Light if the key is missing or unreadable (e.g. a locked-down
+    ///     machine, or a Windows version that predates this key).
+    /// </summary>
+    private static bool _isSystemDark()
+    {
+        try
+        {
+            using var key =
+                Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize");
+            if (key?.GetValue("AppsUseLightTheme") is int v)
+                return v == 0;
+        }
+        catch
+        {
+            /* fall back to Light below */
+        }
+
+        return false;
     }
 
     private static ThemeMode _loadSavedMode()

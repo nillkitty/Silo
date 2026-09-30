@@ -1,7 +1,6 @@
 ﻿using Silo.Contracts;
 using Silo.Extensions;
 using Silo.Parsing;
-using Telerik.Windows.Documents.Media;
 
 namespace Silo.DbModel.Meta;
 

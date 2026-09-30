@@ -9,6 +9,13 @@
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
                 <ResourceDictionary Source="/Resources/Paths.xaml" />
+                <!--
+                    Silo's hand-rolled app-wide control styles (replaces the Telerik
+                    Windows11Theme templates). Merged once, here, at compile/parse time -
+                    only the Light/Dark palette dictionary these styles read their colors
+                    from is swapped at runtime, by AppTheme.cs.
+                -->
+                <ResourceDictionary Source="/Theming/Theme.Styles.xaml" />
             </ResourceDictionary.MergedDictionaries>
             <sys:String x:Key="AboutText">
                 Silo version {0} by {1}

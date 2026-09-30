@@ -10,17 +10,17 @@ using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using AvalonDock.Layout;
 using Telefrag.DI;
-using Telerik.Windows.Controls;
 
 namespace Silo.Tools;
 
 [Transient(typeof(ITool))]
 public abstract class ToolBase(string name) : ITool, ICommand, INotifyPropertyChanged
 {
-    private UIElement?  _ctrl;
-    private RadPane?    _pane;
-    private Window?     _window;
+    private UIElement?       _ctrl;
+    private LayoutAnchorable? _pane;
+    private Window?          _window;
     private bool        _isEnabled = true;
     private bool        _isVisible = true;
     public  bool        ModalOnly   { get; set; }
@@ -98,16 +98,16 @@ public abstract class ToolBase(string name) : ITool, ICommand, INotifyPropertyCh
         return _window;
     }
 
-    private RadPane? PaneWrap(UIElement content)
+    private LayoutAnchorable? PaneWrap(UIElement content)
     {
-        return new RadPane
+        return new LayoutAnchorable
                {
-                   Header  = DisplayName,
+                   Title   = DisplayName,
                    Content = content.Required()
                };
     }
 
-    public RadPane? GetPane()
+    public LayoutAnchorable? GetPane()
     {
         if (ModalOnly) return null;
 
@@ -131,10 +131,17 @@ public abstract class ToolBase(string name) : ITool, ICommand, INotifyPropertyCh
             return null;
         }
 
+        // Was `ModalOnly ? WindowWrap(_ctrl) : WindowWrap(_pane ??= PaneWrap(_ctrl))`: under
+        // Telerik, RadPane was itself a UIElement, so a non-modal tool's floating window
+        // could host the RadPane (chrome and all) directly. AvalonDock's LayoutAnchorable
+        // is a layout-model object, not a UIElement/Visual, so it can't be used as a
+        // Window's Content - only GetPane() (for docking into MainWindow's DockingManager)
+        // needs a LayoutAnchorable now. The floating window always just hosts the raw
+        // content; ModalOnly no longer changes which window-wrapping path is taken, since
+        // there's only one now, but the field/property is left in place in case it starts
+        // gating something else later.
         _ctrl ??= OnBuildContent();
-        Window window = ModalOnly
-            ? WindowWrap(_ctrl)
-            : WindowWrap(_pane ??= PaneWrap(_ctrl));
+        Window window = WindowWrap(_ctrl);
 
         window.Show();
         window.Activate();

@@ -1,11 +1,11 @@
 ﻿using System.Windows;
 using System.Windows.Controls;
 using Microsoft.AspNetCore.Mvc.Diagnostics;
+using Microsoft.Win32;
 using Serilog;
 using Silo.Extensions;
 using Silo.Model;
 using Silo.Ui;
-using Telerik.Windows.Controls;
 
 namespace Silo.Commanding;
 
@@ -101,13 +101,13 @@ public record SaveSiloAsCommand(OpenSilo Silo)
     protected override async Task OnExecute(object? parameter)
     {
         var s = Silo.Required()!;
-        var sfd = new RadSaveFileDialog()
+        var sfd = new SaveFileDialog()
                   {
                       DefaultExt = ".silo",
                       Filter =
                           "Silo files (*.silo)|*.silo",
                       FilterIndex = 0,
-                      Header      = "Save Silo file as...",
+                      Title       = "Save Silo file as...",
                       FileName    = s.FilePath
                   };
         if (sfd.ShowDialog() is false || sfd.FileName is null)

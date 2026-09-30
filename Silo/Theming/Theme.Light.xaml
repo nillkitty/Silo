@@ -1,0 +1,27 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!--
+        Silo's hand-rolled Light palette (replaces the Telerik Windows11Theme light
+        preset). Theme.Styles.xaml references these same keys via DynamicResource, so
+        AppTheme.cs can hot-swap this whole dictionary for Theme.Dark.xaml at runtime and
+        every themed control re-colors live - see Theming/AppTheme.cs.
+    -->
+
+    <SolidColorBrush x:Key="Theme.Background" Color="#FFF3F3F3" />
+    <SolidColorBrush x:Key="Theme.BackgroundAlt" Color="#FFE8E8EA" />
+    <SolidColorBrush x:Key="Theme.Surface" Color="#FFFFFFFF" />
+    <SolidColorBrush x:Key="Theme.SurfaceHover" Color="#FFE9F1FB" />
+    <SolidColorBrush x:Key="Theme.SurfacePressed" Color="#FFD7E6F7" />
+    <SolidColorBrush x:Key="Theme.Border" Color="#FFCCCCCC" />
+    <SolidColorBrush x:Key="Theme.BorderStrong" Color="#FF9A9A9A" />
+    <SolidColorBrush x:Key="Theme.Text" Color="#FF1A1A1A" />
+    <SolidColorBrush x:Key="Theme.TextMuted" Color="#FF6E6E6E" />
+    <SolidColorBrush x:Key="Theme.Accent" Color="#FF2D7DD2" />
+    <SolidColorBrush x:Key="Theme.AccentHover" Color="#FF1E6BC0" />
+    <SolidColorBrush x:Key="Theme.AccentForeground" Color="#FFFFFFFF" />
+    <SolidColorBrush x:Key="Theme.Selection" Color="#FFCFE4FA" />
+    <SolidColorBrush x:Key="Theme.Disabled" Color="#FFAFAFAF" />
+    <SolidColorBrush x:Key="Theme.DisabledBackground" Color="#FFEDEDED" />
+
+</ResourceDictionary>

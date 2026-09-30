@@ -1,19 +1,24 @@
-﻿<t:RadMenu x:Class="Silo.Ui.MenuBar"
+<Menu x:Class="Silo.Ui.MenuBar"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
-             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:ui="clr-namespace:Silo.Ui"
              xmlns:c="clr-namespace:Silo.Commanding"
              xmlns:l="clr-namespace:Silo"
-             xmlns:t="http://schemas.telerik.com/2008/xaml/presentation"
              mc:Ignorable="d"
              x:Name="MenuTop"
              DataContext="{Binding ., RelativeSource={RelativeSource AncestorType={x:Type l:MainWindow}, Mode=FindAncestor}}"
              d:DesignHeight="32" d:DesignWidth="800">
-    <t:RadMenu.Resources>
+    <Menu.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
-        <Style TargetType="{x:Type t:RadMenuItem}">
+        <!--
+            BasedOn chains back to the app-wide flat MenuItem template in
+            Theming/Theme.Styles.xaml (an implicit style declared here, with no BasedOn,
+            would otherwise shadow it entirely within this menu's own scope - see that
+            file's header comment).
+        -->
+        <Style TargetType="{x:Type MenuItem}" BasedOn="{StaticResource {x:Type MenuItem}}">
             <Setter Property="Header" Value="{Binding Command.Header, RelativeSource={RelativeSource Self}}" />
             <Setter Property="ToolTip" Value="{Binding Command.ToolTip, RelativeSource={RelativeSource Self}}" />
             <Setter Property="Icon" Value="{Binding Command.Icon, RelativeSource={RelativeSource Self}}" />
@@ -21,122 +26,122 @@
             <Setter Property="IsChecked" Value="{Binding Command.IsChecked, Mode=TwoWay, RelativeSource={RelativeSource Self}}" />
         </Style>
         <!--
-            Used for each ITool's Tools-menu entry (via RadMenuGroup.ItemContainerStyle
+            Used for each ITool's Tools-menu entry (via MenuGroup.ItemContainerStyle
             below). Binds straight off the ITool instance (each generated item's
             DataContext) rather than off Command.* like the style above, since an
             ITool's Header/Icon/IsEnabled/IsVisible live on the tool itself, not on a
             separate command object - and the tool doubles as its own Command, since
             ToolBase implements ICommand and Toggle() is what a click should invoke.
         -->
-        <Style x:Key="ToolMenuItemStyle" TargetType="{x:Type t:RadMenuItem}">
+        <Style x:Key="ToolMenuItemStyle" TargetType="{x:Type MenuItem}" BasedOn="{StaticResource {x:Type MenuItem}}">
             <Setter Property="Header" Value="{Binding Header}" />
             <Setter Property="Icon" Value="{Binding Icon}" />
             <Setter Property="IsCheckable" Value="True" />
             <!--
                 OneWay: IsChecked here mirrors ITool.IsChecked (whether the tool's
                 window is open), it isn't a user-settable flag. Toggling happens only
-                through Command/Toggle() below; a OneWay binding means Telerik's own
-                click-driven local flip of IsChecked can't fight with that or drift
-                from the tool's actual window state.
+                through Command/Toggle() below; a OneWay binding means a click-driven
+                local flip of IsChecked can't fight with that or drift from the tool's
+                actual window state.
             -->
             <Setter Property="IsChecked" Value="{Binding IsChecked, Mode=OneWay}" />
             <Setter Property="IsEnabled" Value="{Binding IsEnabled}" />
             <Setter Property="Visibility" Value="{Binding IsVisible, Converter={StaticResource BoolToVisibility}}" />
             <Setter Property="Command" Value="{Binding}" />
         </Style>
-    </t:RadMenu.Resources>
-    <t:RadMenuItem Header="_File" DataContext="{Binding App}">
-        <t:RadMenuItem Header="_New Silo" Command="{Binding NewSiloCommand}"   />
-        <t:RadMenuItem Header="_Open Silo" Command="{Binding OpenSiloCommand}" />
-        <t:RadMenuSeparatorItem />
-        <t:RadMenuItem Header="E_xit"  Command="{Binding ExitCommand}" />
-    </t:RadMenuItem>
-    <t:RadMenuItem Header="_Silo"
+    </Menu.Resources>
+    <MenuItem Header="_File" DataContext="{Binding App}">
+        <MenuItem Header="_New Silo" Command="{Binding NewSiloCommand}"   />
+        <MenuItem Header="_Open Silo" Command="{Binding OpenSiloCommand}" />
+        <Separator />
+        <MenuItem Header="E_xit"  Command="{Binding ExitCommand}" />
+    </MenuItem>
+    <MenuItem Header="_Silo"
                    IsEnabled="{Binding ., Converter={StaticResource ObjectExistsToBool}}"
                    DataContext="{Binding App.ActiveSilo}">
-        <t:RadMenuItem Header="C_onnection" 
-                       CommandTarget="{Binding .}" 
+        <MenuItem Header="C_onnection"
+                       CommandTarget="{Binding .}"
                        Command="{Binding Commands.NewConnection}" />
-        <t:RadMenuItem Header="_Credential" Command="{Binding Commands.NewCredential}" />
-        <t:RadMenuItem Header="_Save Silo" CommandTarget="{Binding .}" Command="{Binding Commands.SaveSilo}" />
-        <t:RadMenuItem Header="Save Silo _As..." CommandTarget="{Binding .}"  Command="{Binding Commands.SaveSiloAs}" />
-        <t:RadMenuSeparatorItem />
-        <t:RadMenuItem Header="_Export/Backup" >
-            <t:RadMenuItem Header="_Logs..." CommandTarget="{Binding .}"  Command="{Binding Commands.ExportLogs}" />
-            <t:RadMenuItem Header="_State..." CommandTarget="{Binding .}"  Command="{Binding Commands.ExportState}" />
-            <t:RadMenuSeparatorItem />
-            <t:RadMenuItem Header="_All..." CommandTarget="{Binding .}"  Command="{Binding Commands.ExportAll}" />
+        <MenuItem Header="_Credential" Command="{Binding Commands.NewCredential}" />
+        <MenuItem Header="_Save Silo" CommandTarget="{Binding .}" Command="{Binding Commands.SaveSilo}" />
+        <MenuItem Header="Save Silo _As..." CommandTarget="{Binding .}"  Command="{Binding Commands.SaveSiloAs}" />
+        <Separator />
+        <MenuItem Header="_Export/Backup" >
+            <MenuItem Header="_Logs..." CommandTarget="{Binding .}"  Command="{Binding Commands.ExportLogs}" />
+            <MenuItem Header="_State..." CommandTarget="{Binding .}"  Command="{Binding Commands.ExportState}" />
+            <Separator />
+            <MenuItem Header="_All..." CommandTarget="{Binding .}"  Command="{Binding Commands.ExportAll}" />
 
-        </t:RadMenuItem>
-        <t:RadMenuItem Header="_Import" >
-            <t:RadMenuItem Header="_Data..." CommandTarget="{Binding .}"  Command="{Binding Commands.ImportData}" />
-        </t:RadMenuItem>
+        </MenuItem>
+        <MenuItem Header="_Import" >
+            <MenuItem Header="_Data..." CommandTarget="{Binding .}"  Command="{Binding Commands.ImportData}" />
+        </MenuItem>
 
-    </t:RadMenuItem>
-    <t:RadMenuItem Header="_Edit">
+    </MenuItem>
+    <MenuItem Header="_Edit">
 
-    </t:RadMenuItem>
-    <t:RadMenuItem Header="_View">
-        <t:RadMenuItem Header="_Theme" DataContext="{Binding App.Theme}">
-            <t:RadMenuItem Header="_Light"
+    </MenuItem>
+    <MenuItem Header="_View">
+        <MenuItem Header="_Theme" DataContext="{Binding App.Theme}">
+            <MenuItem Header="_Light"
                            IsCheckable="True"
                            IsChecked="{Binding IsLight, Mode=OneWay}"
                            Command="{Binding}"
                            CommandParameter="Light" />
-            <t:RadMenuItem Header="_Dark"
+            <MenuItem Header="_Dark"
                            IsCheckable="True"
                            IsChecked="{Binding IsDark, Mode=OneWay}"
                            Command="{Binding}"
                            CommandParameter="Dark" />
-            <t:RadMenuItem Header="_System"
+            <MenuItem Header="_System"
                            IsCheckable="True"
                            IsChecked="{Binding IsSystem, Mode=OneWay}"
                            Command="{Binding}"
                            CommandParameter="System" />
-        </t:RadMenuItem>
+        </MenuItem>
         <!--
             HyperCard-style User/Author/Developer/Debug mode (see Design/DesignLevel.cs).
             Author or above is required to reach the pink Ctrl+right-click design menus
             (see Design/DesignMenu.cs) - this is how you get there in the first place.
         -->
-        <t:RadMenuItem Header="_User Level" DataContext="{Binding App.DesignLevel}">
-            <t:RadMenuItem Header="_User"
+        <MenuItem Header="_User Level" DataContext="{Binding App.DesignLevel}">
+            <MenuItem Header="_User"
                            IsCheckable="True"
                            IsChecked="{Binding IsUser, Mode=OneWay}"
                            Command="{Binding}"
                            CommandParameter="User" />
-            <t:RadMenuItem Header="_Author"
+            <MenuItem Header="_Author"
                            IsCheckable="True"
                            IsChecked="{Binding IsAuthor, Mode=OneWay}"
                            Command="{Binding}"
                            CommandParameter="Author" />
-            <t:RadMenuItem Header="_Developer"
+            <MenuItem Header="_Developer"
                            IsCheckable="True"
                            IsChecked="{Binding IsDeveloper, Mode=OneWay}"
                            Command="{Binding}"
                            CommandParameter="Developer" />
-            <t:RadMenuItem Header="De_bug"
+            <MenuItem Header="De_bug"
                            IsCheckable="True"
                            IsChecked="{Binding IsDebug, Mode=OneWay}"
                            Command="{Binding}"
                            CommandParameter="Debug" />
-        </t:RadMenuItem>
-    </t:RadMenuItem>
-    <t:RadMenuItem Header="_Run">
+        </MenuItem>
+    </MenuItem>
+    <MenuItem Header="_Run">
 
-    </t:RadMenuItem>
-    <t:RadMenuItem Header="_Tools"
+    </MenuItem>
+    <MenuItem Header="_Tools"
                    DataContext="{Binding App.Tools}">
-        <t:RadMenuItem Header="Manage Tools..."
+        <MenuItem Header="Manage Tools..."
                        Visibility="{Binding HasToolsAuthoring, Converter={StaticResource BoolToVisibility}}" />
-        <t:RadMenuSeparatorItem Visibility="{Binding HasToolsAuthoring, Converter={StaticResource BoolToVisibility}}" />
-        <t:RadMenuItem Header="Break Debugger"
+        <Separator Visibility="{Binding HasToolsAuthoring, Converter={StaticResource BoolToVisibility}}" />
+        <MenuItem Header="Break Debugger"
                        Command="{Binding Break}" />
-        <!-- One RadMenuItem per ITool, appended here and kept in sync with Tools -->
-        <l:RadMenuGroup ItemsSource="{Binding Tools}" ItemContainerStyle="{StaticResource ToolMenuItemStyle}" />
-    </t:RadMenuItem>
-    <t:RadMenuItem Header="_Help">
-        <t:RadMenuItem Header="_About Silo..." 
+        <!-- One MenuItem per ITool, appended here and kept in sync with Tools -->
+        <l:MenuGroup ItemsSource="{Binding Tools}" ItemContainerStyle="{StaticResource ToolMenuItemStyle}" />
+    </MenuItem>
+    <MenuItem Header="_Help">
+        <MenuItem Header="_About Silo..."
                        Command="{Binding App.About}"/>
-    </t:RadMenuItem>
-</t:RadMenu>
+    </MenuItem>
+</Menu>

@@ -1,20 +1,12 @@
-﻿using Microsoft.EntityFrameworkCore.Metadata.Conventions;
-using Silo.DbModel.Meta;
-using Silo.Extensions;
+﻿using Silo.DbModel.Meta;
 using Silo.Meta;
 using Telefrag.Collections;
-using Telefrag.Common;
 
 namespace Silo.Parsing;
 
 public class UnitParser
 {
     public UnitSchema Schema { get; }
-
-    public UnitParser(UnitSchema unitSchema)
-    {
-        Schema = unitSchema.Required();
-    }
 
     public List<ParsedText> Tokenize(string input)
     {
@@ -61,11 +53,34 @@ public class UnitParser
                    _                                         => throw new InvalidOperationException($"Unexpected unit type '{u.Type}'")
                };
     }
+
+    public UnitParser(UnitSchema unitSchema)
+    {
+        Schema = unitSchema.Required();
+    }
 }
 
 public record UnitSchema
 {
     private readonly FragTable<Unit, string> _units = [];
+    public           DateTime                EffectiveUtc { get; init; }
+
+    public Schema     Source { get; init; }
+    public List<Unit> Units  { get; init; }
+
+    private void _add(string name, Unit u)
+    {
+        var e = _units[name];
+        if (e != null && e != u)
+            throw new InvalidOperationException($"The name '{name}' is already in use for unit or conversion '{e}'");
+
+        _units[name] = u;
+    }
+
+    public Unit? Find(string input)
+    {
+        return _units[input];
+    }
 
     public UnitSchema(Schema source, DateTime effectiveUtc, List<Unit> units)
     {
@@ -78,24 +93,6 @@ public record UnitSchema
             if (u.Name is string n) _add(n,         u);
             if (u.NamePlural is string pl) _add(pl, u);
         }
-    }
-
-    private void _add(string name, Unit u)
-    {
-        var e = _units[name];
-        if (e != null && e != u)
-            throw new InvalidOperationException($"The name '{name}' is already in use for unit or conversion '{e}'");
-
-        _units[name] = u;
-    }
-
-    public Schema     Source       { get; init; }
-    public DateTime   EffectiveUtc { get; init; }
-    public List<Unit> Units        { get; init; }
-
-    public Unit? Find(string input)
-    {
-        return _units[input];
     }
 }
 
@@ -118,12 +115,15 @@ public struct Fragment(int offset, int length, string input)
         return x;
     }
 
-    public ReadOnlySpan<char> Read() => Input.Substring(Offset, Length);
+    public ReadOnlySpan<char> Read()
+    {
+        return Input.Substring(Offset, Length);
+    }
 
     public bool Is(string s)
     {
         s.Required();
-        return Telefrag.Common.TelefragCommonExtensions.Is(s, Read().ToString());
+        return s.Is(Read().ToString());
     }
 }
 

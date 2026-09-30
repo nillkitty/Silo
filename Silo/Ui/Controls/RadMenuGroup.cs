@@ -1,29 +1,41 @@
-﻿using System.Collections;
+using System.Collections;
 using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Markup;
-using Telerik.Windows.Controls;
 
 namespace Silo;
 
+/// <summary>
+///     Injects a dynamic run of menu items (from <see cref="ItemsSource"/>) plus any
+///     statically-declared children into the parent <see cref="ItemsControl"/> (a
+///     <see cref="Menu"/> or <see cref="MenuItem"/>) this placeholder is declared inside,
+///     immediately following its own position - see <c>MenuBar.xaml</c>'s Tools menu.
+/// </summary>
+/// <remarks>
+///     Renamed from <c>RadMenuGroup</c> (it generated <c>Telerik.Windows.Controls.RadMenuItem</c>
+///     instances; now generates plain <see cref="MenuItem"/>) as part of removing the
+///     Telerik dependency. The file itself keeps its old name (<c>RadMenuGroup.cs</c>) since
+///     renaming it requires a local rename this session's remote-device bridge can't do
+///     without a shell - feel free to rename the file to <c>MenuGroup.cs</c> to match.
+/// </remarks>
 [ContentProperty(nameof(Items))]
-public class RadMenuGroup : FrameworkElement, IAddChild
+public class MenuGroup : FrameworkElement, IAddChild
 {
     public static readonly DependencyProperty IsActiveProperty =
-        DependencyProperty.Register(nameof(IsActive), typeof(bool), typeof(RadMenuGroup), new PropertyMetadata(true, OnIsActiveChanged));
+        DependencyProperty.Register(nameof(IsActive), typeof(bool), typeof(MenuGroup), new PropertyMetadata(true, OnIsActiveChanged));
 
     public static readonly DependencyProperty ItemsSourceProperty =
-        DependencyProperty.Register(nameof(ItemsSource), typeof(IEnumerable), typeof(RadMenuGroup),
+        DependencyProperty.Register(nameof(ItemsSource), typeof(IEnumerable), typeof(MenuGroup),
                                     new PropertyMetadata(null, OnItemsSourceChanged));
 
     public static readonly DependencyProperty ItemContainerStyleProperty =
-        DependencyProperty.Register(nameof(ItemContainerStyle), typeof(Style), typeof(RadMenuGroup),
+        DependencyProperty.Register(nameof(ItemContainerStyle), typeof(Style), typeof(MenuGroup),
                                     new PropertyMetadata(null, OnStructureChanged));
 
     public static readonly DependencyProperty ItemTemplateProperty =
-        DependencyProperty.Register(nameof(ItemTemplate), typeof(DataTemplate), typeof(RadMenuGroup),
+        DependencyProperty.Register(nameof(ItemTemplate), typeof(DataTemplate), typeof(MenuGroup),
                                     new PropertyMetadata(null, OnStructureChanged));
 
     private readonly List<UIElement>           _injectedItems = new();
@@ -139,7 +151,7 @@ public class RadMenuGroup : FrameworkElement, IAddChild
                 }
                 else
                 {
-                    var mi = new RadMenuItem { DataContext = dataItem };
+                    var mi = new MenuItem { DataContext = dataItem };
 
                     // A locally-set Header always wins over any Style Setter, so only
                     // fall back to the raw data item as the header when no style (and
@@ -173,9 +185,9 @@ public class RadMenuGroup : FrameworkElement, IAddChild
         }
     }
 
-    public RadMenuGroup()
+    public MenuGroup()
     {
-        // RadMenuGroup itself is zero-sized and collapsed so it does not render a blank space
+        // MenuGroup itself is zero-sized and collapsed so it does not render a blank space
         Visibility = Visibility.Collapsed;
         Width      = 0;
         Height     = 0;
@@ -197,19 +209,19 @@ public class RadMenuGroup : FrameworkElement, IAddChild
 
     private static void OnIsActiveChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
-        var group                                                  = (RadMenuGroup)d;
+        var group                                                  = (MenuGroup)d;
         var targetVisibility                                       = group.IsActive ? Visibility.Visible : Visibility.Collapsed;
         foreach (var item in group._injectedItems) item.Visibility = targetVisibility;
     }
 
     private static void OnStructureChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
-        ((RadMenuGroup)d).RebuildItems();
+        ((MenuGroup)d).RebuildItems();
     }
 
     private static void OnItemsSourceChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
-        var group = (RadMenuGroup)d;
+        var group = (MenuGroup)d;
         group.DetachCollectionChanged();
 
         if (e.NewValue is INotifyCollectionChanged ncc)

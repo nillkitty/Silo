@@ -1,5 +1,4 @@
-﻿using Microsoft.OData;
-using Telerik.Windows.Controls;
+using Microsoft.Win32;
 
 namespace Silo.Ui;
 
@@ -9,9 +8,9 @@ public static class Dialogs
 
     public static List<string>? OpenFiles(string? title, string? filter)
     {
-        var ofd = new RadOpenFileDialog()
+        var ofd = new OpenFileDialog()
                   {
-                      Header =
+                      Title =
                           title ?? "Open file(s)...",
                       Filter      = filter ?? AllFilesFilter,
                       Multiselect = true
@@ -26,9 +25,9 @@ public static class Dialogs
 
     public static string? OpenFile(string? title, string? filter)
     {
-        var ofd = new RadOpenFileDialog()
+        var ofd = new OpenFileDialog()
                   {
-                      Header =
+                      Title =
                           title ?? "Open file(s)...",
                       Filter      = filter ?? AllFilesFilter,
                       Multiselect = false
@@ -41,21 +40,24 @@ public static class Dialogs
         return null;
     }
 
+    // `filter` and `restore` are kept as parameters (unused - OpenFolderDialog has no
+    // file-name-filter or restore-last-directory concept) so existing callers don't need
+    // to change; Telerik's RadOpenFolderDialog supported both but Microsoft.Win32's
+    // built-in OpenFolderDialog (net8.0-windows+, no extra package needed) doesn't.
     public static string? ChooseFolder(string? title, string? filter,
                                        string? initial = null,
                                        bool    restore = true)
     {
-        var ofd = new RadOpenFolderDialog()
+        var ofd = new OpenFolderDialog()
                   {
-                      Header =
+                      Title =
                           title ?? "Select directory",
                       Multiselect      = false,
-                      InitialDirectory = initial,
-                      RestoreDirectory = restore
+                      InitialDirectory = initial
                   };
         if (ofd.ShowDialog() is true)
         {
-            return ofd.FileName;
+            return ofd.FolderName;
         }
 
         return null;
@@ -65,17 +67,16 @@ public static class Dialogs
                                               string? initial = null,
                                               bool    restore = true)
     {
-        var ofd = new RadOpenFolderDialog()
+        var ofd = new OpenFolderDialog()
                   {
-                      Header =
+                      Title =
                           title ?? "Select directory",
                       Multiselect      = true,
-                      InitialDirectory = initial,
-                      RestoreDirectory = restore
+                      InitialDirectory = initial
                   };
         if (ofd.ShowDialog() is true)
         {
-            return ofd.FileNames?.ToList() ?? [];
+            return ofd.FolderNames?.ToList() ?? [];
         }
 
         return null;
@@ -84,9 +85,9 @@ public static class Dialogs
     public static string? SaveFile(string? title, string? filter,
                                    string? name = null)
     {
-        var ofd = new RadSaveFileDialog()
+        var ofd = new SaveFileDialog()
                   {
-                      Header   = title  ?? "Save file...",
+                      Title    = title  ?? "Save file...",
                       Filter   = filter ?? AllFilesFilter,
                       FileName = name
                   };
