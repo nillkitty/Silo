@@ -27,6 +27,8 @@
     <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
     <!-- YamlFormat (Providers/Format/YamlFormat.cs) -->
     <PackageReference Include="YamlDotNet" Version="18.1.0" />
+    <!-- MarkdownFormat / MarkdownDataProvider (Providers/Format/MarkdownFormat.cs, MarkdownDataProvider.cs) -->
+    <PackageReference Include="Markdig" Version="1.4.0" />
   </ItemGroup>
 
   <ItemGroup>
