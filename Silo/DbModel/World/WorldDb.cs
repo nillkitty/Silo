@@ -1,4 +1,4 @@
-﻿namespace Silo.DbModel.World;
+namespace Silo.DbModel.Worlds;
 
 public class WorldDb
 {
@@ -209,12 +209,12 @@ public enum SyncType
     Full = 2,
 
     /// <summary>
-    /// Whether to enable Provisioning 
+    /// Whether to enable Provisioning
     /// </summary>
     Provision = 4,
 
     /// <summary>
-    /// Whether to enable Joins 
+    /// Whether to enable Joins
     /// </summary>
     Join = 8,
 
@@ -285,7 +285,7 @@ public enum WorldTypeFlags
 
     /// <summary>
     /// Flags this world type as a mapping type, which is transient and only
-    /// maps one type to another (usually many-to-many);  
+    /// maps one type to another (usually many-to-many);
     /// </summary>
     Mapping = 8,
 }

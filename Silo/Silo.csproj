@@ -20,17 +20,13 @@
     <PackageReference Include="Serilog.Sinks.File" Version="7.0.0" />
     <PackageReference Include="Serilog.Sinks.Trace" Version="4.0.0" />
     <PackageReference Include="Telefrag.Common" Version="2026.9.11.372" />
-    <!--
-        Replaces the whole Telerik.UI.for.Wpf.AllControls.Xaml / Diagrams.Extensions /
-        Documents.* / Pivot.Core stack. The Documents/Pivot packages were never actually
-        used by any code in this project (dead references); everything else (menus,
-        docking, dialogs, theming, the property-grid/grid-view auto UI, the nav tree, and
-        the connection diagram) has been rewritten onto plain WPF plus AvalonDock, the one
-        remaining third-party dependency - a free, MIT-licensed, community-maintained
-        docking manager (the actively-developed continuation of the original AvalonDock,
-        published by its longtime maintainer since Xceed's fork went partly commercial).
-    -->
     <PackageReference Include="Dirkster.AvalonDock" Version="4.72.1" />
+    <!-- SQLite persistence layer (DbModel/Sqlite/*.cs) -->
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.12" />
+    <!-- JsonFormat (Providers/Format/JsonFormat.cs) -->
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
+    <!-- YamlFormat (Providers/Format/YamlFormat.cs) -->
+    <PackageReference Include="YamlDotNet" Version="18.1.0" />
   </ItemGroup>
 
   <ItemGroup>

@@ -1,5 +1,5 @@
 ﻿using System.IO;
-using Silo.DbModel.Global;
+using Silo.ViewModel;
 using Telefrag.DI;
 using Window = Silo.DbModel.Global.Window;
 
@@ -35,6 +35,8 @@ public class FileConnection : FileModel, IConnection
     /// </summary>
     public ConnectionRequest? ConnectionRequest { get; set; }
 
+    public SiloNode? Node { get; }
+
     /// <summary>
     ///     Tri-state connection status
     /// </summary>
@@ -45,12 +47,13 @@ public class FileConnection : FileModel, IConnection
     /// </summary>
     public IConnector Connector { get; private init; }
 
-    public bool         IsInTree         { get; }
-    public List<object> Metadata         { get; } = [];
-    public SiloNode?    Node             { get; }
-    public string?      PersistentConfig { get; }
-    public object?      State            { get; }
-    public string?      TempConfig       { get; }
+    public bool         IsInTree { get; }
+    public List<object> Metadata { get; } = [];
+
+    public string?        PersistentConfig { get; }
+    public object?        State            { get; }
+    public string?        TempConfig       { get; }
+    SiloNode? IConnection.Node             => Node;
 
     public Container Components { get; } = new(Guid.NewGuid().ToString());
 
@@ -113,6 +116,11 @@ public class FileConnection : FileModel, IConnection
     }
 
     public Window? BuildWindow()
+    {
+        throw new NotImplementedException();
+    }
+
+    public Task InitAsync(ConnectContext context)
     {
         throw new NotImplementedException();
     }

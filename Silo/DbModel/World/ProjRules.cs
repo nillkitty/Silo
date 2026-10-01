@@ -1,6 +1,6 @@
-﻿using Telefrag.Common;
+using Telefrag.Common;
 
-namespace Silo.DbModel.World;
+namespace Silo.DbModel.Worlds;
 
 /// <summary>
 /// Defines if and how this WorldType auto-projects a connector into the metaverse.
@@ -43,7 +43,7 @@ public enum FilterOperation
     False = Negate | True,
 
     /// <summary>
-    /// Performs a string match 
+    /// Performs a string match
     /// </summary>
     FieldValueStringMatch = 2,
 

@@ -1,8 +1,8 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Text;
 
-namespace Silo.DbModel.World;
+namespace Silo.DbModel.Worlds;
 
 /// <summary>
 /// Defines how auto-joining is configured between a WorldType and a metaverse type.

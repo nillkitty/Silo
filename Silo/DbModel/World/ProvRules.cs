@@ -1,4 +1,4 @@
-﻿namespace Silo.DbModel.World;
+namespace Silo.DbModel.Worlds;
 
 public class ProvRules
 {
