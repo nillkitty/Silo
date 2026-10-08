@@ -1,6 +1,7 @@
-﻿using System.Windows;
+using System.Windows;
 using System.Windows.Controls;
 using Silo.Design;
+using Silo.Nav;
 
 namespace Silo;
 
@@ -19,11 +20,24 @@ public partial class MainWindow : Window
     /// </summary>
     private static readonly GridLength _navCollapsedWidth = new(32);
 
+    /// <summary>
+    ///     The nav tree's top-level nodes (Silo, Connections, Settings, Performance, Inbox,
+    ///     Profile - see <see cref="AppNavTree.BuildRoots"/>). NavTree and NavRail are both
+    ///     bound to this same list; <see cref="NavTree_SelectedItemChanged"/> walks a selected
+    ///     node's <see cref="AppNavItem.Parent"/> chain back to whichever of these it descends
+    ///     from to drive NavRail's highlight.
+    /// </summary>
+    private readonly IReadOnlyList<AppNavNode> _navRoots;
+
     public App App => App.Instance!;
 
     public MainWindow()
     {
         InitializeComponent();
+
+        _navRoots = AppNavTree.BuildRoots();
+        NavTree.ItemsSource = _navRoots;
+        NavRail.ItemsSource = _navRoots;
 
         // Ctrl+right-click the nav tree (in Author mode or above) for a pink design
         // menu with a live "Icon Size" slider - see Design/DesignMenu.cs.
@@ -55,46 +69,46 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    ///     Tracks which top-level nav group (<see cref="SiloRootItem"/> or
-    ///     <see cref="ConnectionsRootItem"/>) contains the current selection, so NavRail -
-    ///     the collapsed pane's icon gutter - can highlight it (see
-    ///     <see cref="_updateNavRailHighlight"/>). Walks up via
-    ///     <see cref="ItemsControl.ItemsControlFromItemContainer"/> rather than the visual
-    ///     tree, since for a XAML-declared (non-data-bound) TreeView like this one, each
-    ///     TreeViewItem's logical parent in the items hierarchy IS either another
-    ///     TreeViewItem or the TreeView itself.
+    ///     The two jobs MainWindow's old per-item TreeViewItem/RailButton pairs used to do by
+    ///     hand, now done generically from whichever <see cref="AppNavNode"/> got selected:
+    ///     (1) walk its <see cref="AppNavItem.Parent"/> chain up to one of <see cref="_navRoots"/>
+    ///     so NavRail (the collapsed pane's icon gutter) can highlight the right one, and
+    ///     (2) if the node has a real <see cref="AppNavItem.View"/>, build its content and host
+    ///     it in <see cref="SelectedItemPane"/>. A node with no view (a group header like
+    ///     "Schema", or a not-yet-wired setting) leaves whatever content was already showing
+    ///     rather than clearing it to something misleading.
     /// </summary>
     private void NavTree_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
     {
-        var current = e.NewValue as TreeViewItem;
-        while (current != null && ItemsControl.ItemsControlFromItemContainer(current) is TreeViewItem parent)
-            current = parent;
+        if (e.NewValue is not AppNavNode node)
+            return;
 
-        _activeTopLevel = current;
-        _updateNavRailHighlight();
-    }
+        var root = node.Item;
+        while (root.Parent is { } parent)
+            root = parent;
 
-    private TreeViewItem? _activeTopLevel;
+        foreach (var candidate in _navRoots)
+            candidate.IsActiveRoot = ReferenceEquals(candidate.Item, root);
 
-    private void _updateNavRailHighlight()
-    {
-        SiloRailButton.IsChecked        = ReferenceEquals(_activeTopLevel, SiloRootItem);
-        ConnectionsRailButton.IsChecked = ReferenceEquals(_activeTopLevel, ConnectionsRootItem);
+        if (node.Item.View is { } view)
+        {
+            SelectedItemPane.Content = view.ContentBuilder();
+            SelectedItemPane.Title   = view.Name;
+        }
     }
 
     /// <summary>
-    ///     Selecting a group from NavRail while collapsed picks up exactly where clicking
-    ///     it in the full tree would have - <see cref="NavTree_SelectedItemChanged"/> keeps
-    ///     the highlight in sync, since setting <see cref="TreeViewItem.IsSelected"/> raises
-    ///     the same TreeView.SelectedItemChanged event a mouse click would.
+    ///     Selecting a root from NavRail while collapsed picks up exactly where clicking it in
+    ///     the full tree would have - <see cref="NavTree_SelectedItemChanged"/> keeps the
+    ///     highlight and content pane in sync, since setting <see cref="AppNavNode.IsSelected"/>
+    ///     (two-way bound to TreeViewItem.IsSelected via NavTree's ItemContainerStyle) raises
+    ///     the same TreeView.SelectedItemChanged event a mouse click in the tree would. Only
+    ///     ever invoked for a root node, and roots are always realized (NavTree doesn't
+    ///     virtualize its first level), so the binding is live by the time this runs.
     /// </summary>
-    private void SiloRailButton_Click(object sender, RoutedEventArgs e)
+    private void NavRailButton_Click(object sender, RoutedEventArgs e)
     {
-        SiloRootItem.IsSelected = true;
-    }
-
-    private void ConnectionsRailButton_Click(object sender, RoutedEventArgs e)
-    {
-        ConnectionsRootItem.IsSelected = true;
+        if (((FrameworkElement)sender).DataContext is AppNavNode node)
+            node.IsSelected = true;
     }
 }

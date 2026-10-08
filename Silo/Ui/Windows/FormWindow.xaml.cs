@@ -1,5 +1,4 @@
-﻿using System.Windows;
-using Silo.Extensions;
+﻿using Silo.Extensions;
 using Silo.Model;
 
 namespace Silo.Ui.Windows;

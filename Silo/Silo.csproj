@@ -9,6 +9,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="LibGit2Sharp" Version="0.32.0" />
     <PackageReference Include="Serilog" Version="4.4.0" />
     <PackageReference Include="Serilog.Enrichers.Environment" Version="3.0.1" />
     <PackageReference Include="Serilog.Extensions.Logging" Version="10.0.0" />
@@ -29,6 +30,8 @@
     <PackageReference Include="YamlDotNet" Version="18.1.0" />
     <!-- MarkdownFormat / MarkdownDataProvider (Providers/Format/MarkdownFormat.cs, MarkdownDataProvider.cs) -->
     <PackageReference Include="Markdig" Version="1.4.0" />
+    <!-- Embedded draw.io (Drawio/*.cs): hosts the draw.io editor in a WebView2 pane -->
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4129.50" />
   </ItemGroup>
 
   <ItemGroup>
@@ -38,6 +41,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Folder Include="Contracts\Providers\Data\Shape\" />
     <Folder Include="Providers\Uri\" />
     <Folder Include="Subconnectors\" />
     <Folder Include="ViewModel\Features\" />

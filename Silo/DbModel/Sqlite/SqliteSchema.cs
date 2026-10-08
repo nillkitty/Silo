@@ -232,6 +232,7 @@ public static class EntitySchema
         Register(typeof(GFile),         "File",                SchemaKind.Fixed, MainAlias);
         Register(typeof(Authorization), nameof(Authorization), SchemaKind.Fixed, MainAlias);
         Register(typeof(GAssembly),     "Assembly",            SchemaKind.Fixed, MainAlias);
+        Register(typeof(Diagram),       nameof(Diagram),       SchemaKind.Fixed, MainAlias);
 
         // --- Universal database (u.db) -> 'u' -------------------------------------------------
         Register(typeof(UniversalType),     nameof(UniversalType),     SchemaKind.Fixed, UniversalAlias);

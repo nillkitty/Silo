@@ -1,25 +1,22 @@
-﻿using Microsoft.AspNetCore.Connections;
-using Silo.DbModel.Global;
-using Silo.DbModel.Meta;
+﻿using Silo.Contracts.Connectors;
 using Telefrag.DI;
 
 namespace Silo.Connectors;
 
 public abstract class ConnectorBase : IConnector
 {
+    public ConnectorSetupFlags Flags { get; protected set; }
+
     /// <summary>
     ///     Gets or sets the subscribed receiver
     /// </summary>
     public IReceiver<Container>? Receiver { get; protected set; }
 
-    public Exception?          LastError { get; protected set; }
-    public ConnectorSetupFlags Flags     { get; protected set; }
+    public Exception? LastError { get; protected set; }
+
+    public List<object> Metadata { get; } = [];
 
     protected abstract IConnection OnCreateConnection(ConnectionRequest crq);
-    IConnection IConnector.        CreateConnection(ConnectionRequest   crq) => OnCreateConnection(crq);
-
-    public          List<object> Metadata { get; } = [];
-    public abstract Type         GetStateType();
 
     /// <summary>
     ///     Initializes the provider
@@ -28,11 +25,18 @@ public abstract class ConnectorBase : IConnector
     {
         Receiver = receiver.Required();
     }
+
+    IConnection IConnector.CreateConnection(ConnectionRequest crq)
+    {
+        return OnCreateConnection(crq);
+    }
+
+    public abstract Type GetStateType();
 }
 
 public interface IConnectionState
 {
     bool IsConnected { get; }
-    bool IsFailed    { get; }
     bool IsDisposed  { get; }
+    bool IsFailed    { get; }
 }

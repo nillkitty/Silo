@@ -1,5 +1,4 @@
 ﻿using Serilog;
-using Silo.Connectors;
 using Silo.Model;
 using Silo.Ui.Windows;
 

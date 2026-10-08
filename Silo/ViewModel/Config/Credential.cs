@@ -2,6 +2,8 @@
 using System.Collections.Generic;
 using System.Text;
 using System.Windows.Documents;
+
+using Silo.Contracts.Providers.Data.Validation;
 using Silo.DbModel.Global;
 
 namespace Silo.Model;

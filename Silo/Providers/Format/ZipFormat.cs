@@ -16,7 +16,7 @@ public class ZipFormat : IFileFormat, IArchiveFormat
         // read-only stream falls back to Read mode, which makes every IArchivedFile.Overwrite()/
         // Append() on the resulting tree return null, per those methods' documented contract.
         var mode    = stream.CanRead && stream.CanWrite ? ZipArchiveMode.Update : ZipArchiveMode.Read;
-        var archive = new ZipArchive(stream, mode, leaveOpen: true);
+        var archive = new ZipArchive(stream, mode, true);
 
         var root = new ZipArchivedDirectory(null, ArchivedDirectoryFlags.Archive, archive);
 
@@ -73,17 +73,6 @@ public sealed class ZipArchivedDirectory : IArchivedDirectory, IDisposable
     public ArchivedDirectoryFlags Flags { get; }
     public string?                Name  { get; }
 
-    internal ZipArchivedDirectory(string? name, ArchivedDirectoryFlags flags, ZipArchive? ownedArchive = null)
-    {
-        Name          = name;
-        Flags         = flags;
-        _ownedArchive = ownedArchive;
-    }
-
-    public IEnumerable<IArchivedDirectory> GetDirectories() => _directories.Values;
-
-    public IEnumerable<IArchivedFile> GetFiles() => _files.Values;
-
     internal ZipArchivedDirectory GetOrAddDirectory(string name)
     {
         if (!_directories.TryGetValue(name, out var dir))
@@ -95,7 +84,27 @@ public sealed class ZipArchivedDirectory : IArchivedDirectory, IDisposable
         return dir;
     }
 
-    internal void AddFile(string name, ZipArchiveEntry entry) => _files[name] = new ZipArchivedFile(entry);
+    internal void AddFile(string name, ZipArchiveEntry entry)
+    {
+        _files[name] = new ZipArchivedFile(entry);
+    }
+
+    public IEnumerable<IArchivedDirectory> GetDirectories()
+    {
+        return _directories.Values;
+    }
+
+    public IEnumerable<IArchivedFile> GetFiles()
+    {
+        return _files.Values;
+    }
+
+    internal ZipArchivedDirectory(string? name, ArchivedDirectoryFlags flags, ZipArchive? ownedArchive = null)
+    {
+        Name          = name;
+        Flags         = flags;
+        _ownedArchive = ownedArchive;
+    }
 
     /// <summary>
     ///     Closes the underlying <see cref="ZipArchive" />, if this is a directory that owns one
@@ -120,11 +129,6 @@ public sealed class ZipArchivedFile : IArchivedFile
 {
     private readonly ZipArchiveEntry _entry;
 
-    internal ZipArchivedFile(ZipArchiveEntry entry)
-    {
-        _entry = entry.Required();
-    }
-
     public long BytesExpanded => _entry.Length;
 
     public long BytesOnDisk => _entry.CompressedLength;
@@ -133,8 +137,8 @@ public sealed class ZipArchivedFile : IArchivedFile
     {
         get
         {
-            var flags = ArchivedFileFlags.None;
-            if (_entry.Length == 0) flags |= ArchivedFileFlags.Zero;
+            var flags                                          = ArchivedFileFlags.None;
+            if (_entry.Length           == 0) flags            |= ArchivedFileFlags.Zero;
             if (_entry.CompressedLength < _entry.Length) flags |= ArchivedFileFlags.Compressed;
             return flags;
         }
@@ -142,8 +146,14 @@ public sealed class ZipArchivedFile : IArchivedFile
 
     public Stream? Read()
     {
-        try { return _entry.Open(); }
-        catch (Exception) { return null; }
+        try
+        {
+            return _entry.Open();
+        }
+        catch (Exception)
+        {
+            return null;
+        }
     }
 
     public Stream? Overwrite()
@@ -157,7 +167,10 @@ public sealed class ZipArchivedFile : IArchivedFile
             stream.SetLength(0);
             return stream;
         }
-        catch (Exception) { return null; }
+        catch (Exception)
+        {
+            return null;
+        }
     }
 
     public Stream? Append()
@@ -168,6 +181,14 @@ public sealed class ZipArchivedFile : IArchivedFile
             stream.Seek(0, SeekOrigin.End);
             return stream;
         }
-        catch (Exception) { return null; }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    internal ZipArchivedFile(ZipArchiveEntry entry)
+    {
+        _entry = entry.Required();
     }
 }

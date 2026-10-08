@@ -1,0 +1,15 @@
+namespace Silo.Shell;
+
+public interface IUriProvider
+{
+    UriSchemeRegistration ForSystem { get; }
+    UriSchemeRegistration ForUser   { get; }
+
+    ExistingProviderHandling OtherProvidersHandling { get; }
+    UriSchemeScope           HandlesScheme(string scheme);
+}
+
+public interface IUriProvider<out TNative> : IUriProvider
+{
+    TNative? ParseUri(Uri uri, bool throwErrors);
+}

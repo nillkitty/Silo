@@ -1,5 +1,4 @@
-﻿using Silo.DbModel.Global;
-using Silo.Model;
+﻿using Silo.Model;
 using Silo.ViewModel;
 using Telefrag.DI;
 
@@ -8,9 +7,29 @@ namespace Silo.Connectors;
 public class ConnectionBase : ModelBase, IConnection
 {
     /// <summary>
+    ///     Gets the container providing component lookup for this connection (or above)
+    /// </summary>
+    public Container Components { get; } = new(Guid.NewGuid().ToString());
+
+    public bool? ConnectionState =>
+        Connector.IsConnectionless ? null : (State as IConnectionState)?.IsConnected;
+
+    public IConnector Connector { get; }
+
+    /// <summary>
     ///     Gets or sets the destination for this connection (if it is not already connected).
     /// </summary>
     public IDestination? Destination { get; set; }
+
+    public bool IsInTree => Node?.IsVisible ?? false;
+
+    public List<object> Metadata { get; }
+    public SiloNode?    Node     { get; protected set; }
+
+    /// <summary>
+    ///     Gets or sets the current state of the connection
+    /// </summary>
+    public object? State { get; protected set; }
 
     /// <summary>
     ///     Gets or sets the value stored for this connection in the persistent configuration
@@ -23,29 +42,9 @@ public class ConnectionBase : ModelBase, IConnection
     /// </summary>
     protected virtual string? TempConfig { get; set; }
 
-    public bool? ConnectionState =>
-        Connector.IsConnectionless ? null : (State as IConnectionState)?.IsConnected;
-
-    public IConnector Connector { get; }
-
-    public bool IsInTree => Node?.IsVisible ?? false;
-
-    public List<object> Metadata { get; }
-    public SiloNode?    Node     { get; protected set; }
-
-    /// <summary>
-    ///     Gets or sets the current state of the connection
-    /// </summary>
-    public object? State { get; protected set; }
-
     string? IConnection.PersistentConfig => PersistentConfig;
 
     string? IConnection.TempConfig => TempConfig;
-
-    /// <summary>
-    ///     Gets the container providing component lookup for this connection (or above)
-    /// </summary>
-    public Container Components { get; } = new(Guid.NewGuid().ToString());
 
     /// <summary>
     ///     Gets the destination hostname of the connnection
@@ -105,12 +104,6 @@ public class ConnectionBase : ModelBase, IConnection
         return Task.CompletedTask;
     }
 
-    internal ConnectionBase(IConnector owner)
-    {
-        Connector = owner.Required();
-        Metadata  = [];
-    }
-
     public Window? BuildWindow()
     {
         throw new NotImplementedException();
@@ -146,5 +139,11 @@ public class ConnectionBase : ModelBase, IConnection
     public void InitProvider(IReceiver<Container> receiver)
     {
         throw new NotImplementedException();
+    }
+
+    internal ConnectionBase(IConnector owner)
+    {
+        Connector = owner.Required();
+        Metadata  = [];
     }
 }

@@ -1,6 +1,10 @@
 using System.IO;
 using System.Xml.Linq;
 
+using Silo.Contracts.Providers.Document;
+using Silo.Contracts.Providers.Reflection;
+using Silo.Providers.Document;
+
 namespace Silo.Providers.Format;
 
 public class XmlFormat : IFileFormat, IDocumentProvider<XDocument>

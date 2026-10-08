@@ -2,13 +2,13 @@
 using System.Diagnostics;
 using System.Media;
 using System.Reflection;
-using System.Windows;
+using System.Runtime.ExceptionServices;
 using Microsoft.Win32;
 using Serilog;
 using Serilog.Debugging;
 using Serilog.Events;
+using Silo.Assets;
 using Silo.Commanding;
-using Silo.Connectors;
 using Silo.Design;
 using Silo.Extensions;
 using Silo.Model;
@@ -216,6 +216,7 @@ public partial class App : Application, IContainerHost
         AppDesignSettings.Apply();
         AppDesignLevel.Apply();
         DesignMenu.Register();
+        ResourceIndex.Instance.Build();
 
         base.OnStartup(e);
     }
@@ -324,7 +325,9 @@ public partial class App : Application, IContainerHost
     /// </summary>
     public void Unhandled(Exception e)
     {
-        throw new Exception("Unhandled exception in handler", e);
+        Log.Error(e, "Unhandled exception: {e}", e);
+        ExceptionDispatchInfo.Capture(e).Throw();
+        throw new Exception("Unhandled exception in handler:  {e}", e);
     }
 
     public static void RunSafe(Action action)

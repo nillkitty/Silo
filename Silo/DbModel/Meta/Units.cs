@@ -1,4 +1,4 @@
-﻿using Silo.Contracts;
+﻿using Silo.Contracts.Providers.Data.Validation;
 using Silo.Extensions;
 using Silo.Parsing;
 

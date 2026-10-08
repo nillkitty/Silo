@@ -1,181 +1,26 @@
-﻿using System.Collections;
-using System.ComponentModel;
 using System.IO;
-using System.Resources;
-using System.Runtime.CompilerServices;
 using System.Text.RegularExpressions;
-using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
-using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
-using AvalonDock.Layout;
+
+using Serilog;
+
+using Silo.Assets;
+using Silo.Contracts.Core;
+using Silo.Contracts.Resources;
+
 using Telefrag.DI;
 
 namespace Silo.Tools;
 
-[Transient(typeof(ITool))]
-public abstract class ToolBase(string name) : ITool, ICommand, INotifyPropertyChanged
-{
-    private UIElement?       _ctrl;
-    private LayoutAnchorable? _pane;
-    private Window?          _window;
-    private bool        _isEnabled = true;
-    private bool        _isVisible = true;
-    public  bool        ModalOnly   { get; set; }
-    public  string      DisplayName { get; set; }
-    public  string      GroupName   { get; set; }
-    public  ImageSource Icon        { get; set; }
-    public  string      Name        { get; } = name.Required();
-    public  int         Priority    { get; set; }
-
-    /// <summary>
-    ///     Display text for the tool's Tools-menu entry. Declared concretely (not just
-    ///     via the <see cref="ITool"/> default member) because WPF's reflection-based
-    ///     data binding only sees members declared on the concrete runtime type.
-    /// </summary>
-    public string Header => DisplayName ?? Name;
-
-    /// <inheritdoc cref="ITool.IsEnabled"/>
-    public bool IsEnabled
-    {
-        get => _isEnabled;
-        set
-        {
-            if (_isEnabled == value) return;
-            _isEnabled = value;
-            OnPropertyChanged();
-            CommandManager.InvalidateRequerySuggested();
-        }
-    }
-
-    /// <inheritdoc cref="ITool.IsVisible"/>
-    public bool IsVisible
-    {
-        get => _isVisible;
-        set
-        {
-            if (_isVisible == value) return;
-            _isVisible = value;
-            OnPropertyChanged();
-        }
-    }
-
-    /// <summary>
-    ///     Reflects whether this tool's window is currently open.  There is exactly one
-    ///     window per tool instance (tools are typically registered as singletons), so
-    ///     this simply mirrors that window's visibility rather than tracking separate
-    ///     state that could drift out of sync with it.
-    /// </summary>
-    public bool IsChecked => _window?.IsVisible ?? false;
-
-    protected abstract UIElement OnBuildContent();
-
-    private Window WindowWrap(UIElement ctrl)
-    {
-        ctrl.Required();
-        if (_window is null)
-        {
-            _window = new Window
-                      {
-                          Title   = DisplayName ?? Name,
-                          Content = ctrl
-                      };
-
-            // Tools are singletons and are meant to be shown/hidden repeatedly rather
-            // than rebuilt, so closing the window via the titlebar (or Alt+F4, etc.)
-            // hides it instead of destroying it - the same Window/content instance is
-            // reused the next time the tool is toggled back open.
-            _window.Closing += (_, e) =>
-                                {
-                                    e.Cancel = true;
-                                    _window.Hide();
-                                    OnPropertyChanged(nameof(IsChecked));
-                                };
-        }
-
-        return _window;
-    }
-
-    private LayoutAnchorable? PaneWrap(UIElement content)
-    {
-        return new LayoutAnchorable
-               {
-                   Title   = DisplayName,
-                   Content = content.Required()
-               };
-    }
-
-    public LayoutAnchorable? GetPane()
-    {
-        if (ModalOnly) return null;
-
-        _pane ??= PaneWrap(OnBuildContent());
-        return _pane;
-    }
-
-    /// <inheritdoc />
-    public Window? Toggle()
-    {
-        var d = App.Instance!.Dispatcher;
-        if (!d.CheckAccess())
-            return d.Invoke(Toggle);
-
-        // Executing the command while the window is open closes it, rather than
-        // re-showing (or, worse, rebuilding) an already-open window.
-        if (_window is { IsVisible: true })
-        {
-            _window.Hide();
-            OnPropertyChanged(nameof(IsChecked));
-            return null;
-        }
-
-        // Was `ModalOnly ? WindowWrap(_ctrl) : WindowWrap(_pane ??= PaneWrap(_ctrl))`: under
-        // Telerik, RadPane was itself a UIElement, so a non-modal tool's floating window
-        // could host the RadPane (chrome and all) directly. AvalonDock's LayoutAnchorable
-        // is a layout-model object, not a UIElement/Visual, so it can't be used as a
-        // Window's Content - only GetPane() (for docking into MainWindow's DockingManager)
-        // needs a LayoutAnchorable now. The floating window always just hosts the raw
-        // content; ModalOnly no longer changes which window-wrapping path is taken, since
-        // there's only one now, but the field/property is left in place in case it starts
-        // gating something else later.
-        _ctrl ??= OnBuildContent();
-        Window window = WindowWrap(_ctrl);
-
-        window.Show();
-        window.Activate();
-        OnPropertyChanged(nameof(IsChecked));
-        return window;
-    }
-
-    public UIElement? GetContent()
-    {
-        _ctrl = OnBuildContent();
-        return _ctrl;
-    }
-
-    // --- ICommand ---
-    // Lets a ToolBase instance be bound directly as a Tools-menu item's Command:
-    // IsEnabled drives CanExecute (with CommandManager notified on change above so the
-    // menu item's enabled state stays live), and clicking the item calls Toggle() -
-    // the same single entry point used for opening/closing the tool's window elsewhere.
-    bool ICommand.CanExecute(object? parameter) => IsEnabled;
-
-    void ICommand.Execute(object? parameter) => Toggle();
-
-    event EventHandler? ICommand.CanExecuteChanged
-    {
-        add => CommandManager.RequerySuggested += value;
-        remove => CommandManager.RequerySuggested -= value;
-    }
-
-    public event PropertyChangedEventHandler? PropertyChanged;
-
-    protected void OnPropertyChanged([CallerMemberName] string? propertyName = null) =>
-        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
-}
-
+/// <summary>
+///     Browses every icon in the app -- the <c>StreamGeometry</c> icons in the application's
+///     resource dictionary and the PNG/SVG files compiled or embedded in its own assemblies --
+///     and copies the selected one's resource key or path. What exists, and where, comes from the
+///     startup-time <see cref="ResourceIndex" />; this class only knows how to draw an icon.
+/// </summary>
 [Transient(typeof(ITool))]
 public class IconViewer : ToolBase
 {
@@ -190,7 +35,7 @@ public class IconViewer : ToolBase
         rootGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
         rootGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
-        var items = DiscoverIcons();
+        var items = DiscoverIcons(ResourceIndex.Instance);
 
         var listBox = new ListBox
                       {
@@ -226,7 +71,7 @@ public class IconViewer : ToolBase
         Grid.SetRow(listBox, 0);
         rootGrid.Children.Add(listBox);
 
-        var bottomPanel = new Grid { Margin                            = new Thickness(8, 0, 8, 8) };
+        var bottomPanel = new Grid { Margin = new Thickness(8, 0, 8, 8) };
         bottomPanel.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         bottomPanel.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         bottomPanel.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -284,127 +129,102 @@ public class IconViewer : ToolBase
         return rootGrid;
     }
 
-
-    private static List<IconItem> DiscoverIcons()
+    /// <summary>
+    ///     Turns the index's icon-like resources into things to draw: dictionary
+    ///     <c>StreamGeometry</c> entries first, then every PNG and SVG.
+    /// </summary>
+    private static List<IconItem> DiscoverIcons(IResourceIndex index)
     {
         var list = new List<IconItem>();
-        var assemblies = AppDomain.CurrentDomain.GetAssemblies()
-                                  .Where(a => !a.IsDynamic && !a.FullName!.StartsWith("System") && !a.FullName.StartsWith("Microsoft"))
-                                  .ToArray();
 
-        if (Application.Current != null) ExtractFromDictionary(Application.Current.Resources, list);
+        foreach (var entry in index.OfKind(ResourceKind.ResourceDictionaryEntry))
+            if (entry.GetValue() is StreamGeometry geometry)
+                list.Add(new IconItem
+                         {
+                             Name          = entry.Name,
+                             SourceType    = "StreamGeometry",
+                             VisualElement = CreatePathViewbox(geometry),
+                             CopyValue     = entry.Reference
+                         });
 
-        foreach (var asm in assemblies)
+        foreach (var entry in index.WithExtension(".png", ".svg"))
         {
-            string    resName = asm.GetName().Name + ".g.resources";
-            using var stream  = asm.GetManifestResourceStream(resName);
-            if (stream != null)
+            bool compiled = entry.Kind == ResourceKind.CompiledResource;
+
+            if (entry.Extension == ".png")
             {
-                using var reader = new ResourceReader(stream);
-                foreach (DictionaryEntry entry in reader)
-                {
-                    string pathKey = entry.Key?.ToString() ?? string.Empty;
+                var bitmap = LoadBitmap(entry);
+                if (bitmap is null) continue;
 
-                    if (pathKey.EndsWith(".png", StringComparison.OrdinalIgnoreCase))
-                    {
-                        var uri = new Uri($"pack://application:,,,/{asm.GetName().Name};component/{pathKey}", UriKind.Absolute);
-                        var img = new Image
-                                  {
-                                      Source  = new BitmapImage(uri),
-                                      Stretch = Stretch.Uniform,
-                                      Width   = 24,
-                                      Height  = 24
-                                  };
-                        list.Add(new IconItem
-                                 {
-                                     Name          = Path.GetFileName(pathKey),
-                                     SourceType    = "PNG (Pack URI)",
-                                     VisualElement = img,
-                                     CopyValue     = uri.ToString()
-                                 });
-                    }
-                    else if (pathKey.EndsWith(".svg", StringComparison.OrdinalIgnoreCase) && entry.Value is Stream svgStream)
-                    {
-                        using var sr   = new StreamReader(svgStream);
-                        var       geom = ExtractGeometryFromSvg(sr.ReadToEnd());
-                        if (geom != null)
-                            list.Add(new IconItem
-                                     {
-                                         Name          = Path.GetFileName(pathKey),
-                                         SourceType    = "SVG Stream",
-                                         VisualElement = CreatePathViewbox(geom),
-                                         CopyValue     = Path.GetFileName(pathKey)
-                                     });
-                    }
-                }
+                list.Add(new IconItem
+                         {
+                             Name       = entry.Name,
+                             SourceType = compiled ? "PNG (Pack URI)" : "Embedded PNG",
+                             VisualElement = new Image
+                                             {
+                                                 Source    = bitmap,
+                                                 Stretch   = Stretch.Uniform,
+                                                 MaxWidth  = 40,
+                                                 MaxHeight = 40
+                                             },
+                             CopyValue = entry.Reference
+                         });
             }
+            else
+            {
+                var geometry = LoadSvgGeometry(entry);
+                if (geometry is null) continue;
 
-            foreach (var manifestName in asm.GetManifestResourceNames())
-                if (manifestName.EndsWith(".png", StringComparison.OrdinalIgnoreCase))
-                {
-                    using var s = asm.GetManifestResourceStream(manifestName);
-                    if (s != null)
-                    {
-                        var bmp = new BitmapImage();
-                        bmp.BeginInit();
-                        bmp.CacheOption  = BitmapCacheOption.OnLoad;
-                        bmp.StreamSource = s;
-                        bmp.EndInit();
-                        bmp.Freeze();
-
-                        var img = new Image { Source = bmp, Stretch = Stretch.Uniform, Width = 24, Height = 24 };
-                        list.Add(new IconItem
-                                 {
-                                     Name          = manifestName,
-                                     SourceType    = "Embedded PNG",
-                                     VisualElement = img,
-                                     CopyValue     = manifestName
-                                 });
-                    }
-                }
-                else if (manifestName.EndsWith(".svg", StringComparison.OrdinalIgnoreCase))
-                {
-                    using var s = asm.GetManifestResourceStream(manifestName);
-                    if (s != null)
-                    {
-                        using var reader = new StreamReader(s);
-                        var       geom   = ExtractGeometryFromSvg(reader.ReadToEnd());
-                        if (geom != null)
-                            list.Add(new IconItem
-                                     {
-                                         Name          = manifestName,
-                                         SourceType    = "Embedded SVG",
-                                         VisualElement = CreatePathViewbox(geom),
-                                         CopyValue     = manifestName
-                                     });
-                    }
-                }
+                list.Add(new IconItem
+                         {
+                             Name          = entry.Name,
+                             SourceType    = compiled ? "SVG Stream" : "Embedded SVG",
+                             VisualElement = CreatePathViewbox(geometry),
+                             CopyValue     = entry.Reference
+                         });
+            }
         }
 
         return list;
     }
 
-    private static void ExtractFromDictionary(ResourceDictionary dict, List<IconItem> target)
+    private static BitmapImage? LoadBitmap(ResourceEntry entry)
     {
-        foreach (var key in dict.Keys)
-            if (dict[key] is StreamGeometry geom)
-            {
-                string keyStr = key.ToString() ?? "Unknown";
-                if (!target.Any(x => x.Name == keyStr))
-                    target.Add(new IconItem
-                               {
-                                   Name          = keyStr,
-                                   SourceType    = "StreamGeometry",
-                                   VisualElement = CreatePathViewbox(geom),
-                                   CopyValue     = $"{{StaticResource {keyStr}}}"
-                               });
-            }
+        try
+        {
+            using var stream = entry.Open();
+            if (stream is null) return null;
 
-        // Avoid direct property initialization nesting; walk merged dictionaries in loop
-        var mergedDictionaries = dict.MergedDictionaries;
-        if (mergedDictionaries != null)
-            for (int i = 0; i < mergedDictionaries.Count; i++)
-                ExtractFromDictionary(mergedDictionaries[i], target);
+            var bmp = new BitmapImage();
+            bmp.BeginInit();
+            bmp.CacheOption  = BitmapCacheOption.OnLoad;
+            bmp.StreamSource = stream;
+            bmp.EndInit();
+            bmp.Freeze();
+            return bmp;
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "Could not load image resource '{resource}'", entry);
+            return null;
+        }
+    }
+
+    private static Geometry? LoadSvgGeometry(ResourceEntry entry)
+    {
+        try
+        {
+            using var stream = entry.Open();
+            if (stream is null) return null;
+
+            using var reader = new StreamReader(stream);
+            return ExtractGeometryFromSvg(reader.ReadToEnd());
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "Could not read SVG resource '{resource}'", entry);
+            return null;
+        }
     }
 
     private static Viewbox CreatePathViewbox(Geometry geometry)
@@ -439,7 +259,6 @@ public class IconViewer : ToolBase
             return null;
         }
     }
-
 
     private sealed class IconItem
     {

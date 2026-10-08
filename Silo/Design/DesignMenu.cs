@@ -76,6 +76,18 @@ public sealed class DesignMenuItem
 
         return new DesignMenuItem { Header = header, MinLevel = minLevel, Content = row };
     }
+
+    /// <summary>
+    ///     A ready-made checkbox <see cref="DesignMenuItem"/>: toggling calls back live via
+    ///     <paramref name="setValue"/> and the menu stays open, so several switches can be flipped in a row.
+    /// </summary>
+    public static DesignMenuItem Toggle(string header, DesignLevel minLevel, Func<bool> getValue, Action<bool> setValue)
+    {
+        var box = new CheckBox { Content = header, IsChecked = getValue(), VerticalAlignment = VerticalAlignment.Center };
+        box.Checked   += (_, _) => setValue(true);
+        box.Unchecked += (_, _) => setValue(false);
+        return new DesignMenuItem { MinLevel = minLevel, Content = box };
+    }
 }
 
 /// <summary>
@@ -190,6 +202,27 @@ public static class DesignMenu
         e.Handled            = true;
     }
 
+    /// <summary>
+    ///     Pops the design menu for <paramref name="source"/> at the mouse position, exactly as a Ctrl+right-click on it would -
+    ///     for hosts (like an embedded web view) that receive the click themselves and so never raise the WPF event.
+    ///     Returns whether a menu was shown.
+    /// </summary>
+    public static bool ShowAt(DependencyObject source)
+    {
+        if (!AppDesignLevel.Instance.IsAtLeast(DesignLevel.Author)) return false;
+
+        var groups = CollectGroups(source);
+        if (groups.Count == 0) return false;
+
+        var menu = BuildContextMenu(groups);
+        if (menu.Items.Count == 0) return false;
+
+        menu.PlacementTarget = source as UIElement;
+        menu.Placement       = PlacementMode.MousePoint;
+        menu.IsOpen          = true;
+        return true;
+    }
+
     /// <summary>Walks up from <paramref name="start"/> collecting each ancestor's level-qualifying items, closest element first.</summary>
     private static List<List<DesignMenuItem>> CollectGroups(DependencyObject? start)
     {
@@ -268,6 +301,7 @@ public static class DesignMenu
             // Slider's Thumb captures and marks its own mouse-down handled before that routed
             // event ever reaches this MenuItem's own (unhandled-only) click detection.
             mi.Focusable = false;
+            mi.StaysOpenOnClick = true;
         }
         else
         {

@@ -238,7 +238,15 @@
                             <Border Background="{DynamicResource Theme.Surface}"
                                     BorderBrush="{DynamicResource Theme.Border}"
                                     BorderThickness="1">
-                                <ScrollViewer CanContentScroll="True">
+                                <!--
+                                    No visible scrollbar: a menu that fits (nearly all of them) shouldn't grow
+                                    one, and one that is taller than the screen still scrolls with the mouse
+                                    wheel. Pixel (not item) scrolling keeps the extent honest for items of
+                                    differing heights.
+                                -->
+                                <ScrollViewer CanContentScroll="False"
+                                              VerticalScrollBarVisibility="Hidden"
+                                              HorizontalScrollBarVisibility="Disabled">
                                     <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Cycle" />
                                 </ScrollViewer>
                             </Border>

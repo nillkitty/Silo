@@ -1,9 +1,15 @@
 using Microsoft.Win32;
+using Silo.Shell;
 
 namespace Silo.Connectors.System;
 
 public class RegistryUriProvider : IUriProvider<RegistryPath>
 {
+    // reg:/hkcu:/hklm:/hkcr:/hku: are only meaningful inside Silo -- nothing to register with the shell.
+    public UriSchemeRegistration    ForSystem              => UriSchemeRegistration.DontRegister;
+    public UriSchemeRegistration    ForUser                => UriSchemeRegistration.DontRegister;
+    public ExistingProviderHandling OtherProvidersHandling => ExistingProviderHandling.Default;
+
     private static bool TryParseHive(string token, out RegistryHive hive)
     {
         RegistryHive? parsed = token?.ToLowerInvariant() switch
@@ -26,7 +32,7 @@ public class RegistryUriProvider : IUriProvider<RegistryPath>
         var sch  = uri.Required().Scheme;
         var host = uri.DnsSafeHost;
         var rest = uri.PathAndQuery;
-        if (!HandlesScheme(sch))
+        if (HandlesScheme(sch) == UriSchemeScope.Unknown)
             return throwErrors
                        ? throw new NotSupportedException($"The URI scheme '{sch}' is not supported on the Registry connector.")
                        : null;
@@ -86,13 +92,13 @@ public class RegistryUriProvider : IUriProvider<RegistryPath>
         return new RegistryPath(hive, path, valueName);
     }
 
-    public bool HandlesScheme(string scheme)
+    public UriSchemeScope HandlesScheme(string scheme)
     {
         return scheme?.ToLower() switch
                {
-                   "hkcu" or "hklm" or "hkcr" or "hku" => true,
-                   "reg"                               => true,
-                   _                                   => false
+                   "hkcu" or "hklm" or "hkcr" or "hku" => UriSchemeScope.Private,
+                   "reg"                               => UriSchemeScope.Private,
+                   _                                   => UriSchemeScope.Unknown
                };
     }
 }

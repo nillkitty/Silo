@@ -67,10 +67,14 @@
             built in, so a small hand-rolled equivalent sits above it here: a header bar
             with a toggle button that shrinks NavColumn down to a narrow rail and hides the
             tree (see MainWindow.xaml.cs's NavCollapseToggle_Click), mirroring
-            RadNavigationView's collapsed/expanded pane behavior. Everything else (the
-            nested item structure, the AppIcon icons, Ctrl+right-click reaching the pink
-            design menu via Design/DesignMenu.cs) carries over unchanged - DesignMenu
-            attaches to any DependencyObject, TreeView included.
+            RadNavigationView's collapsed/expanded pane behavior.
+
+            NavTree's structure (and NavRail's) is no longer written out here as XAML - it's
+            built in code from Nav/AppNavTree.cs's AppNavItem/AppNavNode model (see
+            MainWindow.xaml.cs's constructor) and bound through the HierarchicalDataTemplate
+            below. Ctrl+right-click the tree (in Author mode or above) still reaches the pink
+            design menu via Design/DesignMenu.cs - that attaches to any DependencyObject,
+            unaffected by how the TreeView gets its items.
         -->
         <Grid Grid.Row="2" Grid.Column="0">
             <Grid.RowDefinitions>
@@ -136,129 +140,69 @@
                 </DockPanel>
             </Border>
 
+            <!--
+                ItemsSource is set in code (MainWindow.xaml.cs's constructor, from
+                Nav/AppNavTree.BuildRoots()) rather than bound here, matching the rest of this
+                window's code-behind-driven style. The HierarchicalDataTemplate applies itself
+                recursively to AppNavNode.Children at every level, so one template covers the
+                whole tree (Silo > Schema > Metaverse Schema > Types, and so on) rather than a
+                template per level.
+            -->
             <TreeView x:Name="NavTree"
                       Grid.Row="1"
                       FontWeight="Normal" FontSize="18"
                       SelectedItemChanged="NavTree_SelectedItemChanged">
-            <TreeViewItem x:Name="SiloRootItem" IsExpanded="True">
-                <TreeViewItem.Header>
-                    <StackPanel Orientation="Horizontal">
-                        <l:AppIcon Icon="{StaticResource DataModel}" Margin="0,0,6,0" />
-                        <TextBlock Text="Silo" VerticalAlignment="Center" />
-                    </StackPanel>
-                </TreeViewItem.Header>
-
-                <TreeViewItem>
-                    <TreeViewItem.Header>
+                <TreeView.ItemTemplate>
+                    <HierarchicalDataTemplate ItemsSource="{Binding Children}">
                         <StackPanel Orientation="Horizontal">
-                            <l:AppIcon Icon="{StaticResource FlowDiagram}" Margin="0,0,6,0" />
-                            <TextBlock Text="Schema" VerticalAlignment="Center" />
+                            <l:AppIcon Icon="{Binding Item.Icon}" Margin="0,0,6,0" />
+                            <TextBlock Text="{Binding Item.Text}" VerticalAlignment="Center" />
                         </StackPanel>
-                    </TreeViewItem.Header>
-                </TreeViewItem>
-                <TreeViewItem>
-                    <TreeViewItem.Header>
-                        <StackPanel Orientation="Horizontal">
-                            <l:AppIcon Icon="{StaticResource Database6}" Margin="0,0,6,0" />
-                            <TextBlock Text="Data" VerticalAlignment="Center" />
-                        </StackPanel>
-                    </TreeViewItem.Header>
-                </TreeViewItem>
-                <TreeViewItem>
-                    <TreeViewItem.Header>
-                        <StackPanel Orientation="Horizontal">
-                            <l:AppIcon Icon="{StaticResource MindMap}" Margin="0,0,6,0" />
-                            <TextBlock Text="Visualization" VerticalAlignment="Center" />
-                        </StackPanel>
-                    </TreeViewItem.Header>
-                </TreeViewItem>
-                <TreeViewItem>
-                    <TreeViewItem.Header>
-                        <StackPanel Orientation="Horizontal">
-                            <l:AppIcon Icon="{StaticResource Analytics}" Margin="0,0,6,0" />
-                            <TextBlock Text="Analysis" VerticalAlignment="Center" />
-                        </StackPanel>
-                    </TreeViewItem.Header>
-                </TreeViewItem>
-            </TreeViewItem>
-
-            <TreeViewItem x:Name="ConnectionsRootItem" IsExpanded="True">
-                <TreeViewItem.Header>
-                    <StackPanel Orientation="Horizontal">
-                        <l:AppIcon Icon="{StaticResource Plug}" Margin="0,0,6,0" />
-                        <TextBlock Text="Connections" VerticalAlignment="Center" />
-                    </StackPanel>
-                </TreeViewItem.Header>
-
-                <TreeViewItem>
-                    <TreeViewItem.Header>
-                        <StackPanel Orientation="Horizontal">
-                            <l:AppIcon Icon="{StaticResource Destination}" Margin="0,0,6,0" />
-                            <TextBlock Text="Destinations" VerticalAlignment="Center" />
-                        </StackPanel>
-                    </TreeViewItem.Header>
-                </TreeViewItem>
-                <TreeViewItem>
-                    <TreeViewItem.Header>
-                        <StackPanel Orientation="Horizontal">
-                            <l:AppIcon Icon="{StaticResource Key}" Margin="0,0,6,0" />
-                            <TextBlock Text="Credentials" VerticalAlignment="Center" />
-                        </StackPanel>
-                    </TreeViewItem.Header>
-                </TreeViewItem>
-                <TreeViewItem>
-                    <TreeViewItem.Header>
-                        <StackPanel Orientation="Horizontal">
-                            <l:AppIcon Icon="{StaticResource Transfer1}" Margin="0,0,6,0" />
-                            <TextBlock Text="Movements" VerticalAlignment="Center" />
-                        </StackPanel>
-                    </TreeViewItem.Header>
-                </TreeViewItem>
-                <TreeViewItem>
-                    <TreeViewItem.Header>
-                        <StackPanel Orientation="Horizontal">
-                            <l:AppIcon Icon="{StaticResource Folder17}" Margin="0,0,6,0" />
-                            <TextBlock Text="Jobs" VerticalAlignment="Center" />
-                        </StackPanel>
-                    </TreeViewItem.Header>
-                </TreeViewItem>
-                <TreeViewItem>
-                    <TreeViewItem.Header>
-                        <StackPanel Orientation="Horizontal">
-                            <l:AppIcon Icon="{StaticResource Database5}" Margin="0,0,6,0" />
-                            <TextBlock Text="Connector Space" VerticalAlignment="Center" />
-                        </StackPanel>
-                    </TreeViewItem.Header>
-                </TreeViewItem>
-            </TreeViewItem>
+                    </HierarchicalDataTemplate>
+                </TreeView.ItemTemplate>
+                <TreeView.ItemContainerStyle>
+                    <!--
+                        Lets code (MainWindow.xaml.cs's NavRailButton_Click) drive selection and
+                        expansion by setting AppNavNode.IsSelected/IsExpanded, without reaching
+                        into the TreeView's realized containers - the standard way to make a
+                        data-bound TreeView's selection settable from outside a mouse click.
+                    -->
+                    <Style TargetType="{x:Type TreeViewItem}">
+                        <Setter Property="IsSelected" Value="{Binding IsSelected, Mode=TwoWay}" />
+                        <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
+                    </Style>
+                </TreeView.ItemContainerStyle>
             </TreeView>
 
             <!--
-                Collapsed-pane gutter: one icon per top-level nav group, with the active
-                ancestor highlighted (see NavRailButtonStyle above and
-                NavTree_SelectedItemChanged below). Occupies the same cell as NavTree -
-                NavCollapseToggle_Click keeps their Visibility opposite one another, so
-                exactly one of the two is ever showing.
+                Collapsed-pane gutter: one icon per top-level nav group (see
+                Nav/AppNavTree.BuildRoots()'s returned roots), with the active one highlighted
+                (see NavRailButtonStyle above and AppNavNode.IsActiveRoot). Occupies the same
+                Grid cell as NavTree - NavCollapseToggle_Click keeps their Visibility opposite
+                one another, so exactly one of the two is ever showing. ItemsSource is set in
+                code alongside NavTree's, from the same root list.
             -->
-            <StackPanel x:Name="NavRail"
-                        Grid.Row="1"
-                        Orientation="Vertical"
-                        HorizontalAlignment="Center"
-                        Margin="0,6,0,0"
-                        Visibility="Collapsed">
-                <ToggleButton x:Name="SiloRailButton"
-                              Style="{StaticResource NavRailButtonStyle}"
-                              Click="SiloRailButton_Click"
-                              ToolTip="Silo">
-                    <l:AppIcon Icon="{StaticResource DataModel}" Size="18" />
-                </ToggleButton>
-                <ToggleButton x:Name="ConnectionsRailButton"
-                              Style="{StaticResource NavRailButtonStyle}"
-                              Click="ConnectionsRailButton_Click"
-                              ToolTip="Connections">
-                    <l:AppIcon Icon="{StaticResource Plug}" Size="18" />
-                </ToggleButton>
-            </StackPanel>
+            <ItemsControl x:Name="NavRail"
+                          Grid.Row="1"
+                          HorizontalAlignment="Center"
+                          Margin="0,6,0,0"
+                          Visibility="Collapsed">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <StackPanel Orientation="Vertical" />
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <ToggleButton Style="{StaticResource NavRailButtonStyle}"
+                                      Click="NavRailButton_Click"
+                                      IsChecked="{Binding IsActiveRoot, Mode=OneWay}"
+                                      ToolTip="{Binding Item.Text}">
+                            <l:AppIcon Icon="{Binding Item.Icon}" Size="18" />
+                        </ToggleButton>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
         </Grid>
 
         <!--
@@ -270,6 +214,12 @@
             before. Every ITool that opens into the dock area (see Tools/IconViewer.cs's
             ToolBase.GetPane()) now returns a LayoutAnchorable the same way it used to
             return a RadPane.
+
+            "Selected Item" (now named SelectedItemPane) doubles as the nav content host:
+            when a selected nav item has an AppView, MainWindow.xaml.cs's
+            NavTree_SelectedItemChanged sets this pane's Content to that view's built
+            UIElement and its Title to the view's Name - the "selected [nav] item" title was
+            already a good fit for exactly that.
         -->
         <xcad:DockingManager Grid.Row="2" Grid.Column="1">
             <xcad:DockingManager.Layout>
@@ -281,7 +231,7 @@
                             </xcadLayout:LayoutAnchorable>
                         </xcadLayout:LayoutAnchorablePane>
                         <xcadLayout:LayoutAnchorablePane>
-                            <xcadLayout:LayoutAnchorable Title="Selected Item">
+                            <xcadLayout:LayoutAnchorable x:Name="SelectedItemPane" Title="Selected Item">
 
                             </xcadLayout:LayoutAnchorable>
                         </xcadLayout:LayoutAnchorablePane>

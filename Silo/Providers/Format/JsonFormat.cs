@@ -2,6 +2,10 @@ using System.IO;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
+using Silo.Contracts.Providers.Document;
+using Silo.Contracts.Providers.Reflection;
+using Silo.Providers.Document;
+
 namespace Silo.Providers.Format;
 
 public class JsonFormat : IFileFormat, IDocumentProvider<JToken>

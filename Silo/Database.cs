@@ -1,5 +1,7 @@
 ﻿using System.IO;
 using System.Windows;
+
+using Silo.Contracts.Providers.Data.Validation;
 using Silo.Model;
 
 namespace Silo;

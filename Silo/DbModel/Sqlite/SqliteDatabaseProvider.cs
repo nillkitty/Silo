@@ -3,6 +3,7 @@ using System.Security.Principal;
 using Microsoft.Data.Sqlite;
 using Newtonsoft.Json;
 using Serilog;
+using Silo.Contracts.Providers.Data.Validation;
 using Silo.DbModel.Global;
 using Silo.DbModel.Worlds;
 
@@ -36,7 +37,7 @@ namespace Silo.DbModel.Sqlite;
 /// stub -- importing external connector data is a separate, connector-specific concern.
 /// </para>
 /// </remarks>
-public sealed class SqliteDatabaseProvider : IDatabaseProvider, IDisposable
+public sealed partial class SqliteDatabaseProvider : IDatabaseProvider, IDisposable
 {
     private readonly SqliteConnection            _conn;
     private readonly string                      _tempDir;

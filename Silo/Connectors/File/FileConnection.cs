@@ -1,7 +1,8 @@
 ﻿using System.IO;
+
+using Silo.Contracts.Connectors;
 using Silo.ViewModel;
 using Telefrag.DI;
-using Window = Silo.DbModel.Global.Window;
 
 namespace Silo.Connectors.File;
 

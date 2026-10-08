@@ -1,4 +1,5 @@
 using System.IO;
+using Silo.Providers.Document;
 using YamlDotNet.Core;
 
 namespace Silo.Providers.Format;
@@ -37,7 +38,7 @@ public class YamlFormat : IFileFormat, IDocumentProvider<YamlDocNode>
         // Comment events at all -- by default YamlDotNet discards them during scanning, before
         // the parser (or this method) would ever get a chance to see them.
         var reader  = new StreamReader(stream);
-        var scanner = new Scanner(reader, skipComments: false);
+        var scanner = new Scanner(reader, false);
         var parser  = new Parser(scanner);
 
         return new YamlDocumentParser(parser).ReadDocuments();
