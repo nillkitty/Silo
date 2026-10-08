@@ -1,67 +1,112 @@
-﻿using Silo.Model;
-using Silo.ViewModel;
+﻿using System.ComponentModel;
+using Silo.Model;
 
 namespace Silo.DbModel.Global;
 
-public class GlobalDb
+/// <summary>
+///     Base for every row that belongs to a <see cref="Global.User" />. Virtual so a type with a more
+///     specific notion of "who" (see <see cref="Authorization" />) can route it to its own property.
+/// </summary>
+public abstract class UserEntity
 {
+    public virtual User User { get; set; } = null!;
 }
 
-public record UserEntity(User User);
-
-public record TimedUserEntity : UserEntity
+/// <summary>
+///     A <see cref="UserEntity" /> that records when it was created and last modified. Both timestamps
+///     default to "now", so an instance built in code or loaded from XAML is stamped on creation.
+/// </summary>
+public abstract class TimedUserEntity : UserEntity
 {
-    public DateTime Created { get; init; }
+    public DateTime Created { get; set; } = DateTime.UtcNow;
 
-    public DateTime Creation { get; init; }
-    public DateTime Modified { get; init; }
-
-    public TimedUserEntity(User user, DateTime? Created = null, DateTime? Modified = null) : base(user)
-    {
-        User          = user;
-        this.Created  = Created  ?? DateTime.UtcNow;
-        this.Modified = Modified ?? DateTime.UtcNow;
-    }
+    public DateTime Modified { get; set; } = DateTime.UtcNow;
 }
 
 /// <summary>
 ///     Tracks window position and sizes; row per Window type
 /// </summary>
-public record Window(int Id, string Type, Uri Uri, int X, int Y, int Width, int Height, User User) : TimedUserEntity(User);
+public class Window : TimedUserEntity
+{
+    public int    Id     { get; set; }
+    public string Type   { get; set; } = string.Empty;
+    public Uri    Uri    { get; set; } = null!;
+    public int    X      { get; set; }
+    public int    Y      { get; set; }
+    public int    Width  { get; set; }
+    public int    Height { get; set; }
+}
 
 /// <summary>
 ///     Tracks changes, one row per event
 /// </summary>
-public record Audit(int Id, DateTime TimeUtc, User User, string Message) : TimedUserEntity(User, TimeUtc, TimeUtc);
+public class Audit : TimedUserEntity
+{
+    public int      Id      { get; set; }
+    public DateTime TimeUtc { get; set; } = DateTime.UtcNow;
+    public string   Message { get; set; } = string.Empty;
+}
 
 /// <summary>
 ///     Configured connected system, one row per destination
 /// </summary>
-public record Connection(int Id, User User, string DisplayName, Uri SourceUri) : TimedUserEntity(User);
+public class Connection : TimedUserEntity
+{
+    public int    Id          { get; set; }
+    public string DisplayName { get; set; } = string.Empty;
+    public Uri    SourceUri   { get; set; } = null!;
+}
 
 /// <summary>
 ///     Stored location
 /// </summary>
-public record Location(int Id, User User, Uri Uri, string DisplayName) : TimedUserEntity(User);
+public class Location : TimedUserEntity
+{
+    public int    Id          { get; set; }
+    public Uri    Uri         { get; set; } = null!;
+    public string DisplayName { get; set; } = string.Empty;
+}
 
 /// <summary>
 ///     The identity of each user that's authorized/opened the Silo (successfully).
 /// </summary>
-/// <param name="Domain">User domain name</param>
-/// <param name="Name">User name</param>
-/// <param name="SID">OS Security identifier</param>
-public record User(int Id, string Domain, string Name, string SID, bool Group);
+public class User
+{
+    public int Id { get; set; }
+
+    /// <summary>User domain name</summary>
+    public string Domain { get; set; } = string.Empty;
+
+    /// <summary>User name</summary>
+    public string Name { get; set; } = string.Empty;
+
+    /// <summary>OS Security identifier</summary>
+    public string SID { get; set; } = string.Empty;
+
+    public bool Group { get; set; }
+}
 
 /// <summary>
 ///     User preference, one row per pref key
 /// </summary>
-public record Pref(int Id, User User, string Key, string Data) : TimedUserEntity(User);
+public class Pref : TimedUserEntity
+{
+    public int    Id   { get; set; }
+    public string Key  { get; set; } = string.Empty;
+    public string Data { get; set; } = string.Empty;
+}
 
 /// <summary>
 ///     Stored secret blob;  one row per record
 /// </summary>
-public record Secret(int Id, User User, string Key, byte[] Data) : TimedUserEntity(User)
+public class Secret : TimedUserEntity
 {
+    public int    Id  { get; set; }
+    public string Key { get; set; } = string.Empty;
+
+    [TypeConverter(typeof(ByteArrayConverter))]
+    public byte[] Data { get; set; } = [];
+
     public OpenSilo UpdateCredential(string user, string pass, string? domain)
     {
         throw new NotImplementedException();
@@ -71,20 +116,30 @@ public record Secret(int Id, User User, string Key, byte[] Data) : TimedUserEnti
 /// <summary>
 ///     Navigation tree nodes as configured by the user, one row per node
 /// </summary>
-public record Node(int Id, User User, string Name, Uri Uri, Uri IconUri, int Expanded) : TimedUserEntity(User)
+public class Node : TimedUserEntity
 {
-    public bool IsVisible { get; set; }
+    public int    Id       { get; set; }
+    public string Name     { get; set; } = string.Empty;
+    public Uri    Uri      { get; set; } = null!;
+    public Uri    IconUri  { get; set; } = null!;
+    public int    Expanded { get; set; }
 
-    public SiloNode CreateViewModel()
-    {
-        return new SiloNode(this);
-    }
+    public bool IsVisible { get; set; }
 }
 
 /// <summary>
 ///     Other files in this silo, one row per file.
 /// </summary>
-public record File(int Id, User User, string Filename, SiloFileType Type, int ExpectedSize, byte[] Crc32) : TimedUserEntity(User);
+public class File : TimedUserEntity
+{
+    public int          Id           { get; set; }
+    public string       Filename     { get; set; } = string.Empty;
+    public SiloFileType Type         { get; set; }
+    public int          ExpectedSize { get; set; }
+
+    [TypeConverter(typeof(ByteArrayConverter))]
+    public byte[] Crc32 { get; set; } = [];
+}
 
 public enum SiloFileType
 {
@@ -128,12 +183,34 @@ public enum SiloFileType
 /// <summary>
 ///     Stores a delegated authorization to a user in the user table.
 /// </summary>
-public record Authorization(int Id, User AuthorizedUser, User AuthorizingUser, SiloUserLevel Level) : TimedUserEntity(AuthorizingUser);
+/// <remarks>
+///     The row's <see cref="UserEntity.User" /> is the authorizing user, exactly as before; setting
+///     <see cref="AuthorizingUser" /> is all a template needs to do.
+/// </remarks>
+public class Authorization : TimedUserEntity
+{
+    public int           Id              { get; set; }
+    public User          AuthorizedUser  { get; set; } = null!;
+    public User          AuthorizingUser { get; set; } = null!;
+    public SiloUserLevel Level           { get; set; }
+
+    public override User User
+    {
+        get => AuthorizingUser;
+        set => AuthorizingUser = value;
+    }
+}
 
 /// <summary>
 ///     Stores a reference to an assembly which is to be loaded at load-time.
 /// </summary>
-public record Assembly(int Id, User User, string AssemblyName, Uri SourceUri, bool Critical) : TimedUserEntity(User);
+public class Assembly : TimedUserEntity
+{
+    public int    Id           { get; set; }
+    public string AssemblyName { get; set; } = string.Empty;
+    public Uri    SourceUri    { get; set; } = null!;
+    public bool   Critical     { get; set; }
+}
 
 [Flags]
 public enum SiloUserLevel

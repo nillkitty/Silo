@@ -1,0 +1,10 @@
+﻿<SiloTemplate xmlns="clr-namespace:Silo.Contracts.Core"
+              xmlns:z="clr-namespace:Silo.DbModel.Global"
+              Name="Starter" Description="Includes a number of common pre-existing types, 
+              interfaces, examples; just delete anything you don't want.">
+
+    <z:Connection>
+
+    </z:Connection>      
+    
+</SiloTemplate>

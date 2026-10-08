@@ -69,7 +69,7 @@ public sealed class EntityInfo
 }
 
 /// <summary>
-///     The curated registry mapping <c>DbModel</c> record/class types onto SQLite tables.
+///     The curated registry mapping <c>DbModel</c> classes onto SQLite tables.
 /// </summary>
 /// <remarks>
 ///     <para>
@@ -142,7 +142,6 @@ public static class EntitySchema
         {
             if (prop.GetIndexParameters().Length > 0) continue;
             if (!prop.CanRead || !prop.CanWrite) continue; // skip computed-only properties
-            if (prop.Name == "EqualityContract") continue;
 
             var kind = IsRegisteredEntity(prop.PropertyType) ? ColumnKind.EntityRef :
                        IsScalar(prop.PropertyType)           ? ColumnKind.Scalar : ColumnKind.Json;

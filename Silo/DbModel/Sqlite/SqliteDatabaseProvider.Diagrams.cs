@@ -63,7 +63,8 @@ public sealed partial class SqliteDatabaseProvider : IDiagramStore
                     using var idCmd = _conn.CreateCommand();
                     idCmd.Transaction = tx;
                     idCmd.CommandText = "SELECT COALESCE(MAX(Id), 0) + 1 FROM [main].[Diagram]";
-                    diagram = diagram with { Id = Convert.ToInt32(idCmd.ExecuteScalar(), CultureInfo.InvariantCulture) };
+                    diagram    = diagram.Clone();
+                    diagram.Id = Convert.ToInt32(idCmd.ExecuteScalar(), CultureInfo.InvariantCulture);
                 }
 
                 UpsertRecursive(diagram, tx, new HashSet<object>(ReferenceEqualityComparer.Instance));
@@ -100,14 +101,17 @@ public sealed partial class SqliteDatabaseProvider : IDiagramStore
 
     private static Diagram ReadDiagram(SqliteDataReader r)
     {
-        return new Diagram(r.GetInt32(0),
-                           r.GetString(1),
-                           r.GetString(2),
-                           r.GetString(3),
-                           r.IsDBNull(4) ? null : r.GetString(4),
-                           r.GetString(5),
-                           ParseTime(r.GetString(6)),
-                           ParseTime(r.GetString(7)));
+        return new Diagram
+               {
+                   Id          = r.GetInt32(0),
+                   Name        = r.GetString(1),
+                   Kind        = r.GetString(2),
+                   Profile     = r.GetString(3),
+                   OptionsJson = r.IsDBNull(4) ? null : r.GetString(4),
+                   Xml         = r.GetString(5),
+                   Created     = ParseTime(r.GetString(6)),
+                   Modified    = ParseTime(r.GetString(7))
+               };
     }
 
     private static DateTime ParseTime(string s)

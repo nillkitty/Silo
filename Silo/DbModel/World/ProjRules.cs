@@ -1,5 +1,3 @@
-using Telefrag.Common;
-
 namespace Silo.DbModel.Worlds;
 
 /// <summary>
@@ -18,12 +16,14 @@ public class ProjRules
     public bool Enabled { get; set; }
 }
 
-public record WorldFilter(
-    int             Id,
-    FilterOperation Operation,
-    WorldFilter?    Ref,
-    WorldField?     Field,
-    string?         Value);
+public class WorldFilter
+{
+    public int             Id        { get; set; }
+    public FilterOperation Operation { get; set; }
+    public WorldFilter?    Ref       { get; set; }
+    public WorldField?     Field     { get; set; }
+    public string?         Value     { get; set; }
+}
 
 public enum FilterOperation
 {

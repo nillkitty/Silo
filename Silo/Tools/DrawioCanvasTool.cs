@@ -199,13 +199,12 @@ public class DrawioCanvasTool : ToolBase
 
             if (xml == _current.Xml && opt == _current.OptionsJson && _view.Profile.Name == _current.Profile) return;
 
-            _current = store.SaveDiagram(_current with
-                                         {
-                                             Xml         = xml,
-                                             OptionsJson = opt,
-                                             Profile     = _view.Profile.Name,
-                                             Modified    = DateTime.UtcNow
-                                         });
+            var edited = _current.Clone();
+            edited.Xml         = xml;
+            edited.OptionsJson = opt;
+            edited.Profile     = _view.Profile.Name;
+            edited.Modified    = DateTime.UtcNow;
+            _current           = store.SaveDiagram(edited);
             _status.Text = $"Saved {_current.Modified.ToLocalTime():t}";
         }
         catch (Exception ex)
@@ -231,8 +230,7 @@ public class DrawioCanvasTool : ToolBase
         string? name = Prompt("New diagram", "Name:", $"Diagram {store.ListDiagrams().Count + 1}");
         if (name is null) return;
 
-        var now = DateTime.UtcNow;
-        var d = store.SaveDiagram(new Diagram(0, name, "canvas", DrawioProfiles.Canvas, null, DrawioDocument.EmptyXml, now, now));
+        var d = store.SaveDiagram(new Diagram { Name = name, Kind = "canvas", Profile = DrawioProfiles.Canvas, Xml = DrawioDocument.EmptyXml });
         await RefreshListAsync(d.Id);
     }
 
@@ -245,7 +243,10 @@ public class DrawioCanvasTool : ToolBase
         if (name is null) return;
 
         await FlushAsync();
-        var updated = store.SaveDiagram(_current with { Name = name, Modified = DateTime.UtcNow });
+        var renamed = _current.Clone();
+        renamed.Name     = name;
+        renamed.Modified = DateTime.UtcNow;
+        var updated = store.SaveDiagram(renamed);
         await RefreshListAsync(updated.Id);
     }
 
@@ -285,8 +286,13 @@ public class DrawioCanvasTool : ToolBase
         if (Store is { } store)
         {
             await FlushAsync();
-            var now = DateTime.UtcNow;
-            var d   = store.SaveDiagram(new Diagram(0, Path.GetFileNameWithoutExtension(dlg.FileName), "canvas", DrawioProfiles.Canvas, null, xml, now, now));
+            var d = store.SaveDiagram(new Diagram
+                                      {
+                                          Name    = Path.GetFileNameWithoutExtension(dlg.FileName),
+                                          Kind    = "canvas",
+                                          Profile = DrawioProfiles.Canvas,
+                                          Xml     = xml
+                                      });
             await RefreshListAsync(d.Id);
         }
         else

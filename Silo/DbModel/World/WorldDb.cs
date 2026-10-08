@@ -1,78 +1,103 @@
 namespace Silo.DbModel.Worlds;
 
-public class WorldDb
-{
-}
-
 /// <summary>
 /// Defines a World
 /// </summary>
-/// <param name="Id">Primary key</param>
-/// <param name="Provider">The type name of the World provider</param>
-/// <param name="Uri">The URI of the World root</param>
-/// <param name="Key">Unique key within the Silo for this world (cannot be changed -- used in its file name)</param>
-/// <param name="DisplayName">Renamable, human-readable display name</param>
-/// <param name="Flags">World-level flags</param>
-public record World(
-    int        Id,
-    string     Provider,
-    Uri        Uri,
-    string     Key,
-    string     DisplayName,
-    WorldFlags Flags);
+public class World
+{
+    /// <summary>Primary key</summary>
+    public int Id { get; set; }
+
+    /// <summary>The type name of the World provider</summary>
+    public string Provider { get; set; } = string.Empty;
+
+    /// <summary>The URI of the World root</summary>
+    public Uri Uri { get; set; } = null!;
+
+    /// <summary>Unique key within the Silo for this world (cannot be changed -- used in its file name)</summary>
+    public string Key { get; set; } = string.Empty;
+
+    /// <summary>Renamable, human-readable display name</summary>
+    public string DisplayName { get; set; } = string.Empty;
+
+    /// <summary>World-level flags</summary>
+    public WorldFlags Flags { get; set; }
+}
 
 /// <summary>
 /// Declares a type of object that a World owns
 /// </summary>
-/// <param name="Id">Primary key</param>
-/// <param name="World">The world that owns the object type</param>
-/// <param name="Provider">The type name of the provider which handles this type</param>
-/// <param name="Name">The name of the type in the Silo</param>
-/// <param name="DisplayName">Human-readable display name</param>
-/// <param name="NativeName">The native type name</param>
-/// <param name="SchemaUri">An optional URI to the schema object which defines this</param>
-/// <param name="Flags">Type-level flags</param>
-public record WorldType(
-    int            Id,
-    World          World,
-    string         Provider,
-    string         Name,
-    string         DisplayName,
-    string         TableName,
-    string         NativeName,
-    Uri            SchemaUri,
-    WorldTypeFlags Flags);
+public class WorldType
+{
+    /// <summary>Primary key</summary>
+    public int Id { get; set; }
+
+    /// <summary>The world that owns the object type</summary>
+    public World World { get; set; } = null!;
+
+    /// <summary>The type name of the provider which handles this type</summary>
+    public string Provider { get; set; } = string.Empty;
+
+    /// <summary>The name of the type in the Silo</summary>
+    public string Name { get; set; } = string.Empty;
+
+    /// <summary>Human-readable display name</summary>
+    public string DisplayName { get; set; } = string.Empty;
+
+    public string TableName { get; set; } = string.Empty;
+
+    /// <summary>The native type name</summary>
+    public string NativeName { get; set; } = string.Empty;
+
+    /// <summary>An optional URI to the schema object which defines this</summary>
+    public Uri SchemaUri { get; set; } = null!;
+
+    /// <summary>Type-level flags</summary>
+    public WorldTypeFlags Flags { get; set; }
+}
 
 /// <summary>
 /// Declares a field for a World Type
 /// </summary>
-/// <param name="Id">Primary key</param>
-/// <param name="World">The world that owns the field</param>
-/// <param name="WorldType">The type which owns the field</param>
-/// <param name="Index">The ordinal index of the field on the type</param>
-/// <param name="NativeName">Human-readable display name</param>
-/// <param name="NativeType">The native type name</param>
-/// <param name="DataType">The type name of the .NET type used</param>
-/// <param name="SchemaUri">Optionally URI to a schema element which defines this</param>
-/// <param name="Flags">Field-level flags</param>
-public record WorldField(
-    int             Id,
-    World           World,
-    WorldType       WorldType,
-    int             Index,
-    string          NativeName,
-    string          NativeType,
-    string          DataType,
-    Uri             SchemaUri,
-    WorldFieldFlags Flags);
+public class WorldField
+{
+    /// <summary>Primary key</summary>
+    public int Id { get; set; }
 
-public record FieldMapping(
-    int               Id,
-    WorldField        Field,
-    string            MvTypeName,
-    string            MvFieldName,
-    string            Conversion,
-    FieldMappingFlags Flags);
+    /// <summary>The world that owns the field</summary>
+    public World World { get; set; } = null!;
+
+    /// <summary>The type which owns the field</summary>
+    public WorldType WorldType { get; set; } = null!;
+
+    /// <summary>The ordinal index of the field on the type</summary>
+    public int Index { get; set; }
+
+    /// <summary>Human-readable display name</summary>
+    public string NativeName { get; set; } = string.Empty;
+
+    /// <summary>The native type name</summary>
+    public string NativeType { get; set; } = string.Empty;
+
+    /// <summary>The type name of the .NET type used</summary>
+    public string DataType { get; set; } = string.Empty;
+
+    /// <summary>Optionally URI to a schema element which defines this</summary>
+    public Uri SchemaUri { get; set; } = null!;
+
+    /// <summary>Field-level flags</summary>
+    public WorldFieldFlags Flags { get; set; }
+}
+
+public class FieldMapping
+{
+    public int                Id          { get; set; }
+    public WorldField         Field       { get; set; } = null!;
+    public string             MvTypeName  { get; set; } = string.Empty;
+    public string             MvFieldName { get; set; } = string.Empty;
+    public string             Conversion  { get; set; } = string.Empty;
+    public FieldMappingFlags  Flags       { get; set; }
+}
 
 /// <summary>
 /// Values indicating how a field mapping is to behave upon synchronization
@@ -118,40 +143,56 @@ public enum FieldMappingFlags
 /// <summary>
 /// Defines a mapping between a <see cref="WorldType"/> and a meta-type (Metaverse type).
 /// </summary>
-/// <param name="Id">Primary Key</param>
-/// <param name="World">The world owning the type being mapped</param>
-/// <param name="WorldType">The world type being mapped</param>
-/// <param name="MvTypeName">The meta-type name targeted</param>
-/// <param name="Priority">Relative priority used during synchronization</param>
-/// <param name="Joining">Optional rules for auto-joining objects to connectors</param>
-/// <param name="Projection">Optional rules for auto-creating connectors for each object</param>
-/// <param name="Provisioning">Optional rules for custom provisioning</param>
-public record WorldMapping(
-    int        Id,
-    World      World,
-    WorldType  WorldType,
-    string     MvTypeName,
-    int        Priority,
-    JoinRules? Joining,
-    ProjRules? Projection,
-    ProvRules? Provisioning);
+public class WorldMapping
+{
+    /// <summary>Primary Key</summary>
+    public int Id { get; set; }
+
+    /// <summary>The world owning the type being mapped</summary>
+    public World World { get; set; } = null!;
+
+    /// <summary>The world type being mapped</summary>
+    public WorldType WorldType { get; set; } = null!;
+
+    /// <summary>The meta-type name targeted</summary>
+    public string MvTypeName { get; set; } = string.Empty;
+
+    /// <summary>Relative priority used during synchronization</summary>
+    public int Priority { get; set; }
+
+    /// <summary>Optional rules for auto-joining objects to connectors</summary>
+    public JoinRules? Joining { get; set; }
+
+    /// <summary>Optional rules for auto-creating connectors for each object</summary>
+    public ProjRules? Projection { get; set; }
+
+    /// <summary>Optional rules for custom provisioning</summary>
+    public ProvRules? Provisioning { get; set; }
+}
 
 /// <summary>
 /// Defines a synchronization job profile upon which one or all WorldTypes from a World are synchronized
 /// </summary>
-/// <param name="SyncInterval">Specifies the interval upon which this should take place</param>
-/// <param name="World">Specifies the World which will be synced</param>
-/// <param name="WorldType">Specifies a specific WorldType to sync, if null all mapped types are synced.</param>
-/// <param name="ImportType">Specifies how instances are imported</param>
-/// <param name="SyncType">Specifies how instances are synchronized</param>
-/// <param name="Priority">Relative priority used during synchronization</param>
-public record WorldSync(
-    TimeSpan   SyncInterval,
-    World      World,
-    WorldType? WorldType,
-    ImportType ImportType,
-    SyncType   SyncType,
-    int        Priority);
+public class WorldSync
+{
+    /// <summary>Specifies the interval upon which this should take place</summary>
+    public TimeSpan SyncInterval { get; set; }
+
+    /// <summary>Specifies the World which will be synced</summary>
+    public World World { get; set; } = null!;
+
+    /// <summary>Specifies a specific WorldType to sync, if null all mapped types are synced.</summary>
+    public WorldType? WorldType { get; set; }
+
+    /// <summary>Specifies how instances are imported</summary>
+    public ImportType ImportType { get; set; }
+
+    /// <summary>Specifies how instances are synchronized</summary>
+    public SyncType SyncType { get; set; }
+
+    /// <summary>Relative priority used during synchronization</summary>
+    public int Priority { get; set; }
+}
 
 /// <summary>
 /// Values indicating how an import job is to be handled
@@ -230,6 +271,7 @@ public enum SyncType
     Default  = Sync | Provision | Join | Project | FlowToMv
 }
 
+[Flags]
 public enum WorldFlags
 {
     /// <summary>
@@ -287,7 +329,7 @@ public enum WorldTypeFlags
     /// Flags this world type as a mapping type, which is transient and only
     /// maps one type to another (usually many-to-many);
     /// </summary>
-    Mapping = 8,
+    Mapping = 0x10,
 }
 
 [Flags]

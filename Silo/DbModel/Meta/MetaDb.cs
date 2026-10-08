@@ -1,30 +1,28 @@
-﻿using System.Linq.Expressions;
-using Microsoft.AspNetCore.Html;
-using Telefrag.Common;
+﻿using Newtonsoft.Json;
 
 namespace Silo.DbModel.Meta;
-
-public class MetaDb
-{
-}
 
 /// <summary>
 /// Defines a meta-tye.
 /// </summary>
-public record MvType(
-    int         Id,
-    string      Name,
-    string      DisplayName,
-    MvTypeFlags Flags);
+public class MvType
+{
+    public int         Id          { get; set; }
+    public string      Name        { get; set; } = string.Empty;
+    public string      DisplayName { get; set; } = string.Empty;
+    public MvTypeFlags Flags       { get; set; }
+}
 
 /// <summary>
 /// Defines a relationship (inheritance or inclusion) between two meta-types.
 /// </summary>
-public record MvTypeHierarchy(
-    int          Id,
-    MvType       Subject,
-    MvType       Target,
-    TypeRelation Relation);
+public class MvTypeHierarchy
+{
+    public int          Id       { get; set; }
+    public MvType       Subject  { get; set; } = null!;
+    public MvType       Target   { get; set; } = null!;
+    public TypeRelation Relation { get; set; }
+}
 
 public enum TypeRelation
 {
@@ -42,27 +40,37 @@ public enum TypeRelation
 /// <summary>
 /// Defines a metaverse type (meta-type) attribute
 /// </summary>
-/// <param name="Id">Primary key</param>
-/// <param name="Name">Unique short name for the field</param>
-/// <param name="DisplayName">Human-readable renamable name</param>
-/// <param name="Type">Type name of the .NET data type</param>
-/// <param name="Syntax">Name of the syntax used</param>
-/// <param name="DefaultValue">Optional default value</param>
-/// <param name="CombinatorType">Type name of the combinator used to combine values</param>
-/// <param name="Flags">Attribute-level flags</param>
-public record MvAttribute(
-    int              Id,
-    string           Name,
-    string           DisplayName,
-    string           Type,
-    int?             Syntax,
-    string?          DefaultValue,
-    string           CombinatorType,
-    MvAttributeFlags Flags);
+public class MvAttribute
+{
+    /// <summary>Primary key</summary>
+    public int Id { get; set; }
+
+    /// <summary>Unique short name for the field</summary>
+    public string Name { get; set; } = string.Empty;
+
+    /// <summary>Human-readable renamable name</summary>
+    public string DisplayName { get; set; } = string.Empty;
+
+    /// <summary>Type name of the .NET data type</summary>
+    public string Type { get; set; } = string.Empty;
+
+    /// <summary>Name of the syntax used</summary>
+    public int? Syntax { get; set; }
+
+    /// <summary>Optional default value</summary>
+    public string? DefaultValue { get; set; }
+
+    /// <summary>Type name of the combinator used to combine values</summary>
+    public string CombinatorType { get; set; } = string.Empty;
+
+    /// <summary>Attribute-level flags</summary>
+    public MvAttributeFlags Flags { get; set; }
+}
 
 /// <summary>
 /// Values used to indicate how a metaverse type should function
 /// </summary>
+[Flags]
 public enum MvTypeFlags
 {
     /// <summary>
@@ -80,6 +88,7 @@ public enum MvTypeFlags
 /// <summary>
 /// Flags indicating how a metaverse attribute should be treated
 /// </summary>
+[Flags]
 public enum MvAttributeFlags
 {
     /// <summary>
@@ -113,16 +122,21 @@ public enum MvAttributeFlags
     Key = 0x10
 }
 
-public record MvObj(
-    long     Id,
-    MvType   Type,
-    string   Key,
-    DateTime Created,
-    DateTime Modified,
-    Uri      LocalUri,
-    [property: Newtonsoft.Json.JsonExtensionData]
-    Dictionary<string, object> FieldValues)
+public class MvObj
 {
+    public long     Id       { get; set; }
+    public MvType   Type     { get; set; } = null!;
+    public string   Key      { get; set; } = string.Empty;
+    public DateTime Created  { get; set; } = DateTime.UtcNow;
+    public DateTime Modified { get; set; } = DateTime.UtcNow;
+    public Uri      LocalUri { get; set; } = null!;
+
+    /// <summary>
+    ///     The object's attribute values by name (stored as one JSON column). Pre-created, so a XAML
+    ///     template can add entries directly: <c>&lt;sys:String x:Key="mail"&gt;a@b.c&lt;/sys:String&gt;</c>.
+    /// </summary>
+    [JsonExtensionData]
+    public Dictionary<string, object> FieldValues { get; set; } = new();
 }
 
 /*
@@ -141,15 +155,17 @@ Base / Export Hologram:
                 after an Export run, prior to a subsequent import confirming it.
  */
 
-public record Connector(
-    long      Id,
-    MvObj     MvObj,
-    string    World,
-    string    WorldType,
-    string    Key,
-    string    AbsolutePath,
-    LinkedVia LinkedVia,
-    DateTime? LinkedAt);
+public class Connector
+{
+    public long      Id           { get; set; }
+    public MvObj     MvObj        { get; set; } = null!;
+    public string    World        { get; set; } = string.Empty;
+    public string    WorldType    { get; set; } = string.Empty;
+    public string    Key          { get; set; } = string.Empty;
+    public string    AbsolutePath { get; set; } = string.Empty;
+    public LinkedVia LinkedVia    { get; set; }
+    public DateTime? LinkedAt     { get; set; }
+}
 
 public enum LinkedVia
 {
@@ -179,18 +195,14 @@ public enum LinkedVia
     Projection
 }
 
-public record ConnectorPending(
-    long           Id,
-    Connector      Connector,
-    PendingDelete? Delete,
-    PendingUpdate? Update,
-    PendingCreate? Create,
-    int            Failures,
-    string         LastFailure,
-    DateTime?      LastFailed);
-
-public enum MvObjFlags
+public class ConnectorPending
 {
-    None      = 0,
-    Tombstone = 1
+    public long           Id          { get; set; }
+    public Connector      Connector   { get; set; } = null!;
+    public PendingDelete? Delete      { get; set; }
+    public PendingUpdate? Update      { get; set; }
+    public PendingCreate? Create      { get; set; }
+    public int            Failures    { get; set; }
+    public string         LastFailure { get; set; } = string.Empty;
+    public DateTime?      LastFailed  { get; set; }
 }

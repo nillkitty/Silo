@@ -14,19 +14,20 @@ namespace Silo.DbModel.Meta;
  *
  */
 
-public record Unit(
-    int           Id,
-    UnitType      Type,
-    Unit?         Target,
-    string        Name,
-    string        NamePlural,
-    string        Formula,
-    UnitRelation? Relation,
-    string        Formatter,
-    double?       Scale,
-    string?       Tags,
-    bool          Reciprocal) : IValidatable
+public class Unit : IValidatable
 {
+    public int           Id         { get; set; }
+    public UnitType      Type       { get; set; }
+    public Unit?         Target     { get; set; }
+    public string        Name       { get; set; } = string.Empty;
+    public string        NamePlural { get; set; } = string.Empty;
+    public string        Formula    { get; set; } = string.Empty;
+    public UnitRelation? Relation   { get; set; }
+    public string        Formatter  { get; set; } = string.Empty;
+    public double?       Scale      { get; set; }
+    public string?       Tags       { get; set; }
+    public bool          Reciprocal { get; set; }
+
     public void Validate()
     {
         this.Assert(Name.There(), "Unit.Name is required and was null");
@@ -67,6 +68,14 @@ public enum UnitType
     Suffix,
 }
 
-public record UnitRelation(int Id, Unit? Unit, string Name, double? Scale, bool Reciprocal, UnitRelation? Next);
+public class UnitRelation
+{
+    public int           Id         { get; set; }
+    public Unit?         Unit       { get; set; }
+    public string        Name       { get; set; } = string.Empty;
+    public double?       Scale      { get; set; }
+    public bool          Reciprocal { get; set; }
+    public UnitRelation? Next       { get; set; }
+}
 
 //public record UnitTag(int Id, Unit Unit, string Tag);

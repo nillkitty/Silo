@@ -1,6 +1,4 @@
 ﻿using Serilog;
-using Silo.Commanding;
-using Silo.Model;
 
 namespace Silo.Commanding;
 
@@ -14,9 +12,19 @@ public record OpenSiloCommand() : SiloCommand("_Open Silo...", Enabler.Always)
 
 public record NewSiloCommand() : SiloCommand("_New Silo...", Enabler.Always)
 {
-    protected override Task OnExecute(object? parameter)
+    protected override async Task OnExecute(object? parameter)
     {
-        throw new NotImplementedException();
+        var svc = App.Require<INewSiloBuilder>();
+        var ui  = App.Require<INewSiloDialog>();
+
+        var r = ui.ShowDialog();
+        if (r.Cancel)
+        {
+            App.Status("User canceled out of New Silo dialog");
+            return;
+        }
+
+        svc.Build(r.FilePath, r.Template);
     }
 }
 
@@ -25,15 +33,9 @@ public record AppExitCommand() : SiloCommand("E_xit", Enabler.Always)
     protected override async Task OnExecute(object? parameter)
     {
         if (App.Instance is { } i)
-        {
             foreach (var s in i.OpenSilos)
-            {
                 if (await s.Shutdown())
-                {
                     Log.Debug("Successfully closed silo:  {name} ({path})", s.Name, s.FilePath);
-                }
-            }
-        }
 
         _exit(0);
     }
