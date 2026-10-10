@@ -41,7 +41,7 @@ namespace Silo.Drawio;
 ///         <see cref="DiagramData.Push" />.
 ///     </para>
 /// </remarks>
-public sealed class DrawioView : UserControl, IDisposable
+public sealed partial class DrawioView : UserControl, IDisposable
 {
     private static readonly string UserDataFolder =
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Silo", "webview2");
@@ -268,6 +268,7 @@ public sealed class DrawioView : UserControl, IDisposable
 
         _appliedJson = Options.ToJson();
         ApplyHostSettings();
+        await RegisterPluginAsync();
         Navigate();
     }
 
@@ -282,6 +283,7 @@ public sealed class DrawioView : UserControl, IDisposable
         DiagramData.Changed -= OnLiveDataChanged;
         if (_source is not null) _source.Changed -= OnLiveDataChanged;
         foreach (var tcs in _exports.Values) tcs.TrySetResult(null);
+        CompleteAllPending();
 
         _web.Dispose();
     }
@@ -377,6 +379,7 @@ public sealed class DrawioView : UserControl, IDisposable
         _webInitialized = true;
         _appliedJson    = Options.ToJson();
         ApplyHostSettings();
+        await RegisterPluginAsync();
         Navigate();
     }
 
@@ -385,7 +388,7 @@ public sealed class DrawioView : UserControl, IDisposable
         _editorReady = false;
         _loadedOnce  = false;
         ShowStatus("Loading the editor…", true);
-        _web.CoreWebView2.Navigate(DrawioRuntime.HostUrl(Options.ToQueryString()));
+        _web.CoreWebView2.Navigate(DrawioRuntime.HostUrl(CustomizeQuery(Options.ToQueryString())));
     }
 
     // ---- WebView2 restrictions ---------------------------------------------------------------
@@ -480,62 +483,184 @@ public sealed class DrawioView : UserControl, IDisposable
 
         using (doc)
         {
-            var    root = doc.RootElement;
-            string? ev  = root.ValueKind == JsonValueKind.Object && root.TryGetProperty("event", out var evp) ? evp.GetString() : null;
+            var root = doc.RootElement;
+            if (root.ValueKind != JsonValueKind.Object) return;
 
-            switch (ev)
+            string name = root.TryGetProperty("event", out var evp) && evp.ValueKind == JsonValueKind.String ? evp.GetString() ?? "" : "";
+
+            // Detached copy: handlers may keep the message after the document is gone.
+            var message = new DrawioMessage(name, root.Clone());
+
+            try
             {
-                case "configure":
-                    Post(new JsonObject { ["action"] = "configure", ["config"] = Options.ToConfig() });
-                    break;
-
-                case "init":
-                    _editorReady = true;
-                    PostLoad(Compose(_currentXml), false);
-                    break;
-
-                case "load":
-                    _loadedOnce = true;
-                    HideOverlay();
-                    EditorReady?.Invoke(this, EventArgs.Empty);
-                    break;
-
-                case "zoom":
-                    if (root.TryGetProperty("scale", out var scale) && scale.ValueKind == JsonValueKind.Number)
-                        _lastScale = scale.GetDouble();
-                    break;
-
-                case "autosave":
-                case "save":
-                    if (root.TryGetProperty("xml", out var xml) && xml.GetString() is { } payload)
-                    {
-                        _currentXml = payload;
-                        if (DateTime.UtcNow >= _ignoreChangesUntilUtc)
-                        {
-                            _lastUserChangeUtc = DateTime.UtcNow;
-                            DocumentChanged?.Invoke(this, EventArgs.Empty);
-                        }
-                    }
-
-                    break;
-
-                case "export":
-                    CompleteExport(root);
-                    break;
-
-                case "siloDesignMenu":
-                    Dispatcher.BeginInvoke(new Action(() => DesignMenu.ShowAt(this)));
-                    break;
-
-                case "openLink":
-                    if (root.TryGetProperty("href", out var href)) HandleLink(href.GetString());
-                    break;
-
-                case "merge":
-                    if (root.TryGetProperty("error", out var err) && err.ValueKind == JsonValueKind.String)
-                        _log.Warning("draw.io rejected a merge: {error}", err.GetString());
-                    break;
+                DispatchEvent(message);
             }
+            catch (Exception ex)
+            {
+                _log.Error(ex, "Handling the draw.io event {event} failed", name);
+            }
+        }
+    }
+
+    /// <summary>
+    ///     Routes every message from the editor. Order: complete anything awaiting this event, run Silo's own
+    ///     handling (state tracking, saving, links), raise <see cref="EventReceived" />, then call the matching
+    ///     <c>On…</c> stub in <c>DrawioView.Handlers.cs</c> -- the place to add behaviour.
+    /// </summary>
+    private void DispatchEvent(DrawioMessage m)
+    {
+        CompletePending(m);
+
+        switch (m.Name)
+        {
+            case DrawioEvent.Ready:
+                OnReady(m);
+                break;
+
+            case DrawioEvent.Configure:
+                Post(new JsonObject { ["action"] = DrawioAction.Configure, ["config"] = BuildConfig() });
+                OnConfigure(m);
+                break;
+
+            case DrawioEvent.Init:
+                _editorReady = true;
+                PostLoad(Compose(_currentXml), false);
+                OnInit(m);
+                break;
+
+            case DrawioEvent.Load:
+                _loadedOnce = true;
+                HideOverlay();
+                EditorReady?.Invoke(this, EventArgs.Empty);
+                OnLoad(m);
+                break;
+
+            case DrawioEvent.Zoom:
+                if (m.Scale is { } scale) _lastScale = scale;
+                OnZoom(m);
+                break;
+
+            case DrawioEvent.Autosave:
+                HandleDocumentEvent(m);
+                OnAutosave(m);
+                break;
+
+            case DrawioEvent.Save:
+                HandleDocumentEvent(m);
+                OnSave(m);
+                break;
+
+            case DrawioEvent.Exit:
+                OnExit(m);
+                break;
+
+            case DrawioEvent.Export:
+                CompleteExport(m.Root);
+                OnExport(m);
+                break;
+
+            case DrawioEvent.OpenLink:
+                if (m.Href is { } href) HandleLink(href);
+                OnOpenLink(m);
+                break;
+
+            case DrawioEvent.Merge:
+                if (m.Error is { } mergeError) _log.Warning("draw.io rejected a merge: {error}", mergeError);
+                OnMerge(m);
+                break;
+
+            case DrawioEvent.Resize:
+                OnResize(m);
+                break;
+
+            case DrawioEvent.Fit:
+                OnFit(m);
+                break;
+
+            case DrawioEvent.Viewbox:
+                OnViewbox(m);
+                break;
+
+            case DrawioEvent.Layout:
+                OnLayout(m);
+                break;
+
+            case DrawioEvent.Patch:
+                OnPatch(m);
+                break;
+
+            case DrawioEvent.GetDiff:
+                OnGetDiff(m);
+                break;
+
+            case DrawioEvent.ResetDiff:
+                OnResetDiff(m);
+                break;
+
+            case DrawioEvent.Prompt:
+                OnPrompt(m);
+                break;
+
+            case DrawioEvent.PromptCancel:
+                OnPromptCancel(m);
+                break;
+
+            case DrawioEvent.Template:
+                OnTemplate(m);
+                break;
+
+            case DrawioEvent.Draft:
+                OnDraft(m);
+                break;
+
+            case DrawioEvent.TextContent:
+                OnTextContent(m);
+                break;
+
+            case DrawioEvent.RemoteInvoke:
+                OnRemoteInvoke(m);
+                break;
+
+            case DrawioEvent.RemoteInvokeResponse:
+                OnRemoteInvokeResponse(m);
+                break;
+
+            case DrawioEvent.ScrollWheel:
+                OnScrollWheel(m);
+                break;
+
+            case DrawioEvent.Shortcut:
+                OnShortcut(m);
+                break;
+
+            case DrawioEvent.Error:
+                _log.Warning("draw.io reported an error: {message}", m.ToString());
+                OnError(m);
+                break;
+
+            case DrawioEvent.SiloDesignMenu:
+                Dispatcher.BeginInvoke(new Action(() => DesignMenu.ShowAt(this)));
+                break;
+
+            default:
+                if (m.Name.StartsWith("silo.", StringComparison.Ordinal)) HandlePluginEvent(m);
+                else OnUnknownEvent(m);
+                break;
+        }
+
+        EventReceived?.Invoke(this, m);
+    }
+
+    /// <summary>Common handling of <c>autosave</c> and <c>save</c>: remember the XML, tell the owner the person changed it.</summary>
+    private void HandleDocumentEvent(DrawioMessage m)
+    {
+        if (m.Xml is not { } payload) return;
+
+        _currentXml = payload;
+        if (DateTime.UtcNow >= _ignoreChangesUntilUtc)
+        {
+            _lastUserChangeUtc = DateTime.UtcNow;
+            DocumentChanged?.Invoke(this, EventArgs.Empty);
         }
     }
 
@@ -579,23 +704,24 @@ public sealed class DrawioView : UserControl, IDisposable
 
         if (merge && _loadedOnce)
         {
-            Post(new JsonObject { ["action"] = "merge", ["xml"] = xml });
+            Post(new JsonObject { ["action"] = DrawioAction.Merge, ["xml"] = xml });
             return;
         }
 
-        var o   = Options;
-        var msg = new JsonObject
-                  {
-                      ["action"]     = "load",
-                      ["xml"]        = xml,
-                      ["autosave"]   = o.AutoSave ? 1 : 0,
-                      ["zoomEvents"] = true
-                  };
+        var o = Options;
+        var load = new DrawioLoadOptions
+                   {
+                       Xml        = xml,
+                       AutoSave   = o.AutoSave,
+                       ZoomEvents = true,
+                       Title      = Title
+                   };
 
-        if (o.FitOnLoad && !_loadedOnce) msg["fit"] = 1;
-        else if (_loadedOnce && _lastScale is { } s) msg["scale"] = s;
+        if (o.FitOnLoad && !_loadedOnce) load.Fit = true;
+        else if (_loadedOnce && _lastScale is { } s) load.Scale = s;
 
-        Post(msg);
+        CustomizeLoad(load);
+        Post(load.ToJson());
     }
 
     private void HandleLink(string? href)
@@ -702,7 +828,10 @@ public sealed class DrawioView : UserControl, IDisposable
         // Only the host-side (WebView2) options changed: no need to reload the editor.
         var before = _appliedJson is null ? new DrawioOptions() : DrawioOptions.FromJson(_appliedJson);
         bool editorChanged = before.ToQueryString() != Options.ToQueryString() ||
-                             before.ToConfig().ToJsonString() != Options.ToConfig().ToJsonString();
+                             before.ToConfig().ToJsonString() != Options.ToConfig().ToJsonString() ||
+                             before.EnableSiloPlugin != Options.EnableSiloPlugin ||
+                             before.PluginScriptPath != Options.PluginScriptPath ||
+                             before.ToPluginOptions().ToJsonString() != Options.ToPluginOptions().ToJsonString();
 
         if (editorChanged)
         {

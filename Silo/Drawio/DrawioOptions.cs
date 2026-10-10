@@ -104,6 +104,8 @@ public sealed class DrawioOptions
     public const string CatDisplay   = "Display";
     public const string CatLive      = "Live data";
     public const string CatHost      = "Host (WebView2)";
+    public const string CatDefaults  = "Defaults (set by Silo)";
+    public const string CatPlugin    = "Silo plugin";
 
     internal static readonly JsonSerializerOptions JsonOptions = new()
                                                                 {
@@ -263,7 +265,9 @@ public sealed class DrawioOptions
     [DrawioOption(CatData, "Lockdown", "lockdown=1: block all data transmission except browser-to-storage.")]
     public bool Lockdown { get; set; } = true;
 
-    [DrawioOption(CatData, "Disable plugins", "plugins=0.")]
+    [DrawioOption(CatData, "Disable draw.io's own plugin loading",
+                  "Hides Extras > Plugins and never passes p=. Silo's own plugin (see the Silo plugin category) is separate: " +
+                  "plugins=0 is only sent when this is on AND the Silo plugin is off, because plugins=0 stops draw.io running any plugin.")]
     public bool DisablePlugins { get; set; } = true;
 
     [DrawioOption(CatData, "Disable drafts", "drafts=0: no draft saving to IndexedDB.")]
@@ -362,6 +366,110 @@ public sealed class DrawioOptions
     [DrawioOption(CatHost, "Allow dev tools", "F12 / Inspect.", MinLevel = DesignLevel.Developer)]
     public bool AllowDevTools { get; set; }
 
+    // ---- Defaults (set by Silo) --------------------------------------------------------------
+    // draw.io keeps per-user settings in the browser profile; these make Silo, not the profile, decide.
+
+    [DrawioOption(CatDefaults, "Host overrides client settings", "config override=true: ignore draw.io's remembered per-user settings so these options always win.")]
+    public bool HostOverridesClientSettings { get; set; } = true;
+
+    [DrawioOption(CatDefaults, "Settings name", "config settingsName: the key draw.io stores its own settings under, so Silo's never mix with another draw.io.",
+                  MinLevel = DesignLevel.Developer)]
+    public string SettingsName { get; set; } = "silo";
+
+    [DrawioOption(CatDefaults, "Compress diagram XML", "config compressXml. Off keeps the XML readable and patchable on the .NET side.", MinLevel = DesignLevel.Developer)]
+    public bool CompressXml { get; set; }
+
+    [DrawioOption(CatDefaults, "Default shape style", "config defaultVertexStyle, as a style string, e.g. rounded=1;fillColor=#dae8fc;strokeColor=#6c8ebf;")]
+    public string DefaultVertexStyle { get; set; } = "";
+
+    [DrawioOption(CatDefaults, "Default connector style", "config defaultEdgeStyle, as a style string, e.g. edgeStyle=orthogonalEdgeStyle;rounded=1;")]
+    public string DefaultEdgeStyle { get; set; } = "";
+
+    [DrawioOption(CatDefaults, "Default libraries", "config defaultLibraries: libraries open in the sidebar to start with, e.g. general; flowchart.")]
+    public List<string> DefaultLibraries { get; set; } = [];
+
+    [DrawioOption(CatDefaults, "Custom libraries", "config defaultCustomLibraries: library file ids or URLs loaded into the sidebar (U-prefixed URL, e.g. Uhttps://drawio.silo.local/silo-shapes.xml).")]
+    public List<string> CustomLibraries { get; set; } = [];
+
+    [DrawioOption(CatDefaults, "Custom libraries after built-in ones", "config appendCustomLibraries.")]
+    public bool AppendCustomLibraries { get; set; }
+
+    [DrawioOption(CatDefaults, "Template file", "config templateFile: a template index to use for the Templates dialog. Empty = draw.io's own.")]
+    public string TemplateFile { get; set; } = "";
+
+    [DrawioOption(CatDefaults, "Custom fonts", "config customFonts: a family name, or Name=https://font-url, one per entry.")]
+    public List<string> CustomFonts { get; set; } = [];
+
+    [DrawioOption(CatDefaults, "Custom CSS", "config css: CSS injected into the editor's own UI.")]
+    public string CustomCss { get; set; } = "";
+
+    [DrawioOption(CatDefaults, "Preset colours", "config customPresetColors: hex colours (without #) added to the colour dialog.")]
+    public List<string> PresetColors { get; set; } = [];
+
+    [DrawioOption(CatDefaults, "Page width (px)", "config pageFormat width. 0 = draw.io's default.", Min = 0, Max = 100000)]
+    public int PageWidth { get; set; }
+
+    [DrawioOption(CatDefaults, "Page height (px)", "config pageFormat height. 0 = draw.io's default.", Min = 0, Max = 100000)]
+    public int PageHeight { get; set; }
+
+    [DrawioOption(CatDefaults, "Grid size", "config defaultGridSize. 0 = draw.io's default.", Min = 0, Max = 1000)]
+    public int GridSize { get; set; }
+
+    [DrawioOption(CatDefaults, "Grid on by default", "config defaultGridEnabled.")]
+    public DrawioToggle GridDefault { get; set; }
+
+    [DrawioOption(CatDefaults, "Page visible by default", "config defaultPageVisible.")]
+    public DrawioToggle PageVisibleDefault { get; set; }
+
+    [DrawioOption(CatDefaults, "Zoom step (%)", "config zoomFactor as a percentage, e.g. 120 = 1.2. 0 = draw.io's default.", Min = 0, Max = 500)]
+    public int ZoomFactorPercent { get; set; }
+
+    [DrawioOption(CatDefaults, "Key chords handled by Silo", "config passThroughKeys: chords draw.io hands to Silo as 'shortcut' events instead of acting on.")]
+    public List<string> PassThroughKeys { get; set; } = [];
+
+    [DrawioOption(CatDefaults, "Global placeholder variables (JSON)", "config globalVars, e.g. {\"env\":\"prod\"}: usable in labels and tooltips as %env%.")]
+    public string GlobalVarsJson { get; set; } = "";
+
+    [DrawioOption(CatDefaults, "Keyboard shortcuts (JSON)", "config keyboardShortcuts: custom key bindings for editor actions.")]
+    public string KeyboardShortcutsJson { get; set; } = "";
+
+    [DrawioOption(CatDefaults, "UI string overrides (JSON)", "config resources: replaces/adds editor UI strings, e.g. {\"save\":\"Save to Silo\"}.")]
+    public string ResourcesJson { get; set; } = "";
+
+    [DrawioOption(CatDefaults, "Extra config (JSON)", "Any other config key. Merged last, so it can override anything above.", MinLevel = DesignLevel.Developer)]
+    public string ExtraConfigJson { get; set; } = "";
+
+    [DrawioOption(CatDefaults, "Extra URL parameters", "Any other URL parameter, as a=1&b=2. Appended last.", MinLevel = DesignLevel.Developer)]
+    public string ExtraQuery { get; set; } = "";
+
+    // ---- Silo plugin -------------------------------------------------------------------------
+
+    [DrawioOption(CatPlugin, "Enable the Silo plugin",
+                  "Loads Silo's own plugin (Drawio/Plugin/silo-plugin.js) into the editor: the Silo menu, context-menu entries, selection/click events and Silo palettes.")]
+    public bool EnableSiloPlugin { get; set; } = true;
+
+    [DrawioOption(CatPlugin, "Silo menu", "Adds a 'Silo' menu to the menu bar (items come from DrawioView.PluginMenu).")]
+    public bool PluginSiloMenu { get; set; } = true;
+
+    [DrawioOption(CatPlugin, "Context-menu entries", "Adds Silo entries to the right-click menu of cells that carry silo-* data.")]
+    public bool PluginContextMenu { get; set; } = true;
+
+    [DrawioOption(CatPlugin, "Selection events", "Reports selection changes to Silo (silo.selection).")]
+    public bool PluginSelectionEvents { get; set; } = true;
+
+    [DrawioOption(CatPlugin, "Click events", "Reports cell clicks and double-clicks to Silo (silo.click / silo.dblclick).")]
+    public bool PluginClickEvents { get; set; } = true;
+
+    [DrawioOption(CatPlugin, "Silo palettes", "Lets Silo add its own sections to the shape sidebar (DrawioView.PluginPalettes).")]
+    public bool PluginPalettes { get; set; } = true;
+
+    [DrawioOption(CatPlugin, "Plugin debug log", "Writes the plugin's activity to the editor's console and Silo's log.", MinLevel = DesignLevel.Developer)]
+    public bool PluginDebug { get; set; }
+
+    [DrawioOption(CatPlugin, "Plugin script file", "Developer: load the plugin from this file instead of the copy built into Silo, so edits apply on the next editor reload.",
+                  MinLevel = DesignLevel.Developer)]
+    public string PluginScriptPath { get; set; } = "";
+
     // ---- Translation -------------------------------------------------------------------------
 
     /// <summary>The URL query string (no leading '?') for the draw.io editor page.</summary>
@@ -422,7 +530,8 @@ public sealed class DrawioOptions
                 Add(k, "0");
         if (Stealth) Add("stealth", "1");
         if (Lockdown) Add("lockdown", "1");
-        if (DisablePlugins) Add("plugins", "0");
+        // plugins=0 would stop draw.io running any plugin, Silo's included.
+        if (DisablePlugins && !EnableSiloPlugin) Add("plugins", "0");
         if (DisableDrafts) Add("drafts", "0");
         if (DisableCollaboration) Add("sync", "none");
         if (DisablePwa) Add("pwa", "0");
@@ -436,6 +545,15 @@ public sealed class DrawioOptions
         if (ShowTooltipIcons) Add("tooltip-icons", "1");
         if (DisableTooltips) Add("tooltips", "0");
 
+        foreach (string pair in (ExtraQuery ?? "").Split('&', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            int eq = pair.IndexOf('=');
+            string key = Uri.UnescapeDataString(eq < 0 ? pair : pair[..eq]);
+            string val = eq < 0 ? "" : Uri.UnescapeDataString(pair[(eq + 1)..]);
+            q.RemoveAll(p => p.Key == key);
+            Add(key, val);
+        }
+
         return string.Join("&", q.Select(p => Uri.EscapeDataString(p.Key) + "=" + Uri.EscapeDataString(p.Value)));
     }
 
@@ -443,10 +561,17 @@ public sealed class DrawioOptions
     public JsonObject ToConfig()
     {
         // Plain (uncompressed) XML is what lets Silo read and patch diagrams on the .NET side.
-        var c = new JsonObject { ["compressXml"] = false };
+        var c = new JsonObject { ["compressXml"] = CompressXml, ["version"] = ConfigVersion };
 
-        if (HideMenus.Count > 0) c["hideMenus"]         = ToArray(HideMenus);
-        if (HideMenuItems.Count > 0) c["hideMenuItems"] = ToArray(HideMenuItems);
+        if (HostOverridesClientSettings) c["override"] = true;
+        if (!string.IsNullOrWhiteSpace(SettingsName)) c["settingsName"] = SettingsName.Trim();
+
+        if (HideMenus.Count > 0) c["hideMenus"] = ToArray(HideMenus);
+
+        // Extras > Plugins is the way draw.io's own (third-party) plugins get loaded.
+        var hiddenItems = HideMenuItems.ToList();
+        if (DisablePlugins && !hiddenItems.Contains("plugins")) hiddenItems.Add("plugins");
+        if (hiddenItems.Count > 0) c["hideMenuItems"] = ToArray(hiddenItems);
         if (HideInlineToolbar) c["enableInlineToolbar"] = false;
         if (HideAllMoreShapes) c["enabledLibraries"]    = new JsonArray();
         else if (EnabledLibraries.Count > 0) c["enabledLibraries"] = ToArray(EnabledLibraries);
@@ -472,7 +597,65 @@ public sealed class DrawioOptions
         if (AutosaveDelayMs > 0) c["autosaveDelay"]    = AutosaveDelayMs;
         if (FitOnLoad) c["fitDiagramOnLoad"]           = true;
 
+        // ---- defaults the host decides ----
+        if (!string.IsNullOrWhiteSpace(DefaultVertexStyle)) c["defaultVertexStyle"] = DrawioJson.StyleToObject(DefaultVertexStyle);
+        if (!string.IsNullOrWhiteSpace(DefaultEdgeStyle)) c["defaultEdgeStyle"]     = DrawioJson.StyleToObject(DefaultEdgeStyle);
+        if (DefaultLibraries.Count > 0) c["defaultLibraries"]                       = string.Join(";", DefaultLibraries);
+        if (CustomLibraries.Count > 0) c["defaultCustomLibraries"]                  = ToArray(CustomLibraries);
+        if (AppendCustomLibraries) c["appendCustomLibraries"]                       = true;
+        if (!string.IsNullOrWhiteSpace(TemplateFile)) c["templateFile"]             = TemplateFile.Trim();
+        if (!string.IsNullOrWhiteSpace(CustomCss)) c["css"]                         = CustomCss;
+        if (PresetColors.Count > 0) c["customPresetColors"]                         = ToArray(PresetColors.Select(x => x.TrimStart('#')));
+        if (PageWidth > 0 && PageHeight > 0) c["pageFormat"]                        = new JsonObject { ["width"] = PageWidth, ["height"] = PageHeight };
+        if (GridSize > 0) c["defaultGridSize"]                                      = GridSize;
+        if (GridDefault != DrawioToggle.Default) c["defaultGridEnabled"]            = GridDefault == DrawioToggle.On;
+        if (PageVisibleDefault != DrawioToggle.Default) c["defaultPageVisible"]     = PageVisibleDefault == DrawioToggle.On;
+        if (ZoomFactorPercent > 0) c["zoomFactor"]                                  = ZoomFactorPercent / 100.0;
+        if (PassThroughKeys.Count > 0) c["passThroughKeys"]                         = ToArray(PassThroughKeys);
+
+        if (CustomFonts.Count > 0)
+        {
+            var fonts = new JsonArray();
+            foreach (string f in CustomFonts)
+            {
+                int eq = f.IndexOf('=');
+                if (eq > 0) fonts.Add(new JsonObject { ["fontFamily"] = f[..eq].Trim(), ["fontUrl"] = f[(eq + 1)..].Trim() });
+                else fonts.Add(f.Trim());
+            }
+
+            c["customFonts"] = fonts;
+        }
+
+        if (DrawioJson.ParseObject(GlobalVarsJson) is { } vars) c["globalVars"]                   = vars;
+        if (DrawioJson.ParseObject(KeyboardShortcutsJson) is { } keys) c["keyboardShortcuts"]     = keys;
+        if (DrawioJson.ParseObject(ResourcesJson) is { } res) c["resources"]                      = res;
+
+        // Last, so it can override anything above.
+        if (DrawioJson.ParseObject(ExtraConfigJson) is { } extra)
+            foreach (var (key, value) in extra.ToList())
+            {
+                extra.Remove(key);
+                c[key] = value;
+            }
+
         return c;
+    }
+
+    /// <summary>Bump when the defaults above change in a way draw.io's remembered settings should not survive.</summary>
+    public const int ConfigVersion = 1;
+
+    /// <summary>The options object the Silo plugin reads as <c>window.__SILO_PLUGIN_OPTIONS__</c>.</summary>
+    public JsonObject ToPluginOptions()
+    {
+        return new JsonObject
+               {
+                   ["debug"]           = PluginDebug,
+                   ["menu"]            = PluginSiloMenu,
+                   ["contextMenu"]     = PluginContextMenu,
+                   ["selectionEvents"] = PluginSelectionEvents,
+                   ["clickEvents"]     = PluginClickEvents,
+                   ["palettes"]        = PluginPalettes
+               };
     }
 
     private static JsonArray ToArray(IEnumerable<string> items)

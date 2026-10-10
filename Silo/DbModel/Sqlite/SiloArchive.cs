@@ -56,7 +56,13 @@ internal static class SiloArchive
                 foreach (var file in Directory.EnumerateFiles(workingDirectory, "*", SearchOption.AllDirectories))
                 {
                     var entryName = Path.GetRelativePath(workingDirectory, file).Replace('\\', '/');
-                    archive.CreateEntryFromFile(file, entryName, CompressionLevel.Optimal);
+                    // The databases are still open (SQLite holds them with write access), so the default
+                    // CreateEntryFromFile -- which opens with FileShare.Read -- would fail with a sharing violation.
+                    var entry = archive.CreateEntry(entryName, CompressionLevel.Optimal);
+                    entry.LastWriteTime = System.IO.File.GetLastWriteTime(file);
+                    using var source = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+                    using var target = entry.Open();
+                    source.CopyTo(target);
                 }
             }
 

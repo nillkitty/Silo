@@ -37,8 +37,16 @@ namespace Silo.DbModel.Sqlite;
 /// stub -- importing external connector data is a separate, connector-specific concern.
 /// </para>
 /// </remarks>
-public sealed partial class SqliteDatabaseProvider : IDatabaseProvider, IDisposable
+public sealed partial class SqliteDatabaseProvider : IDatabaseProvider, IDatabaseChanges, IDisposable
 {
+    /// <inheritdoc />
+    public event EventHandler? Changed;
+
+    private void RaiseChanged()
+    {
+        Changed?.Invoke(this, EventArgs.Empty);
+    }
+
     private readonly SqliteConnection            _conn;
     private readonly string                      _tempDir;
     private          string                      _siloPath;
@@ -100,6 +108,7 @@ public sealed partial class SqliteDatabaseProvider : IDatabaseProvider, IDisposa
                 var visited = new HashSet<object>(ReferenceEqualityComparer.Instance);
                 UpsertRecursive(item, tx, visited);
                 tx.Commit();
+                RaiseChanged();
                 return true;
             }
             catch (Exception ex)
@@ -177,7 +186,9 @@ public sealed partial class SqliteDatabaseProvider : IDatabaseProvider, IDisposa
                     cmd.Parameters.AddWithValue("@" + k, v ?? DBNull.Value);
             }
 
-            return cmd.ExecuteNonQuery() > 0;
+            bool removed = cmd.ExecuteNonQuery() > 0;
+            if (removed) RaiseChanged();
+            return removed;
         }
         finally
         {

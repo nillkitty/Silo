@@ -27,14 +27,23 @@ public record SaveSiloCommand(OpenSilo Silo)
     {
         var s = Silo.Required();
 
-        if (s.FileInfo?.Exists is true)
+        if (s.FileInfo?.Exists is not true)
         {
-            await s.Data.SaveAsync();
-            s.Debug("Silo saved successfully to {path}", Silo.FilePath);
+            // The file was deleted or moved since it was opened: ask where to put it.
+            await new SaveSiloAsCommand(Silo).ExecuteAsync(parameter);
             return;
         }
 
-        (new SaveSiloAsCommand(Silo)).Execute(parameter);
+        try
+        {
+            await s.SaveAsync();
+            App.Status($"Saved {s.Name}");
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Saving {path} failed", s.FilePath);
+            MessageBox.Show($"The Silo could not be saved:\n{ex.Message}", AppIdentity.AppName, MessageBoxButton.OK, MessageBoxImage.Error);
+        }
     }
 }
 
@@ -98,6 +107,8 @@ public record ExportStateCommand(OpenSilo Silo)
 public record SaveSiloAsCommand(OpenSilo Silo)
     : SiloCommand("Save _As...", Enabler.IsSiloLoaded)
 {
+    public Task ExecuteAsync(object? parameter) => OnExecute(parameter);
+
     protected override async Task OnExecute(object? parameter)
     {
         var s = Silo.Required()!;
@@ -106,18 +117,26 @@ public record SaveSiloAsCommand(OpenSilo Silo)
                       DefaultExt = ".silo",
                       Filter =
                           "Silo files (*.silo)|*.silo",
-                      FilterIndex = 0,
+                      FilterIndex = 1,
                       Title       = "Save Silo file as...",
                       FileName    = s.FilePath
                   };
-        if (sfd.ShowDialog() is false || sfd.FileName is null)
+        if (sfd.ShowDialog() != true || string.IsNullOrEmpty(sfd.FileName))
         {
             s.Debug("User cancelled out of Save As dialog.");
             return;
         }
 
         var path = sfd.FileName;
-        await s.Data.MigrateToCopyAsync(path);
-        s.Debug("Migrated silo to {path}", path);
+        try
+        {
+            await s.SaveAsAsync(path);
+            App.Status($"Saved as {s.Name}");
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Saving as {path} failed", path);
+            MessageBox.Show($"The Silo could not be saved:\n{ex.Message}", AppIdentity.AppName, MessageBoxButton.OK, MessageBoxImage.Error);
+        }
     }
 }

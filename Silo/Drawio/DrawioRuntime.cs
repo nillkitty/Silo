@@ -5,6 +5,7 @@ using System.IO;
 using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Serilog;
 
 namespace Silo.Drawio;
@@ -95,9 +96,21 @@ public static class DrawioRuntime
                                             host.postMessage(typeof e.data === 'string' ? e.data : JSON.stringify(e.data));
                                           });
 
-                                          // Silo -> editor
+                                          // Silo -> editor. Messages marked "siloPlugin":true are for the Silo plugin running inside the
+                                          // editor (see Drawio/Plugin/silo-plugin.js); draw.io itself would answer them with unknownMessage.
                                           host.addEventListener('message', function (e) {
-                                            frame.contentWindow.postMessage(typeof e.data === 'string' ? e.data : JSON.stringify(e.data), '*');
+                                            var text = typeof e.data === 'string' ? e.data : JSON.stringify(e.data);
+                                            if (text.indexOf('"siloPlugin":true') >= 0) {
+                                              var request = null;
+                                              try { request = JSON.parse(text); } catch (err) { return; }
+                                              var plugin = frame.contentWindow && frame.contentWindow.SiloPlugin;
+                                              if (plugin) { plugin.receive(request); }
+                                              else {
+                                                host.postMessage(JSON.stringify({ event: 'silo.result', requestId: request.requestId, ok: false, error: 'The Silo plugin is not loaded.' }));
+                                              }
+                                              return;
+                                            }
+                                            frame.contentWindow.postMessage(text, '*');
                                           });
 
                                           // Ctrl+right-click opens Silo's design menu instead of draw.io's own context menu. The editor
@@ -121,6 +134,36 @@ public static class DrawioRuntime
                                         """;
 
     public static DrawioRuntimeSettings Settings => _settings ??= LoadSettings();
+
+    /// <summary>Resource name of the Silo plugin built into the assembly (<c>Drawio/Plugin/silo-plugin.js</c>).</summary>
+    public const string PluginResourceName = "silo-plugin.js";
+
+    /// <summary>
+    ///     The script injected into every document the editor's web view creates: the plugin's options as
+    ///     <c>window.__SILO_PLUGIN_OPTIONS__</c>, then the plugin source -- from <paramref name="scriptPath" /> when that
+    ///     file exists (developer override), otherwise the copy embedded in Silo.
+    /// </summary>
+    public static string BuildPluginBootstrap(JsonObject options, string? scriptPath)
+    {
+        string source = "";
+
+        if (!string.IsNullOrWhiteSpace(scriptPath) && File.Exists(scriptPath))
+        {
+            source = File.ReadAllText(scriptPath);
+        }
+        else
+        {
+            var assembly = typeof(DrawioRuntime).Assembly;
+            using var stream = assembly.GetManifestResourceStream(PluginResourceName);
+            if (stream is null)
+                throw new InvalidOperationException($"The embedded resource '{PluginResourceName}' is missing. Add <EmbeddedResource Include=\"Drawio\\Plugin\\silo-plugin.js\" LogicalName=\"silo-plugin.js\" /> to Silo.csproj.");
+
+            using var reader = new StreamReader(stream);
+            source = reader.ReadToEnd();
+        }
+
+        return "window.__SILO_PLUGIN_OPTIONS__ = " + options.ToJsonString() + ";\n" + source;
+    }
 
     /// <summary>The folder the configured release is (or will be) unpacked into.</summary>
     public static string InstallDirectory => Path.Combine(Root, "v" + Settings.Version);

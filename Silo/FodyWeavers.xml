@@ -1,0 +1,13 @@
+<Weavers xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="FodyWeavers.xsd">
+  <!--
+    Costura folds every managed NuGet reference into this assembly (Silo.dll), so Silo.exe and Silo.com are
+    just small launcher stubs that start it.
+
+    IncludeRuntimeReferences=false: leave the `runtimes` folder alone. It holds the native libraries
+    (SQLite, libgit2, the WebView2 loader, the ConPTY pieces) which Windows loads from files and which cannot
+    live inside a managed assembly; Costura would otherwise embed and delete them.
+
+    IncludeDebugSymbols=false: keeps Silo.dll smaller; Silo's own symbols are unaffected.
+  -->
+  <Costura IncludeRuntimeReferences="false" IncludeDebugSymbols="false" />
+</Weavers>

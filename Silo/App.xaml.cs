@@ -139,6 +139,21 @@ public partial class App : Application, IContainerHost
         return null;
     }
 
+    /// <summary>
+    ///     Closes every open Silo, offering to save the ones with unsaved changes. Returns false -- leaving the remaining
+    ///     Silos open -- as soon as the person cancels.
+    /// </summary>
+    public async Task<bool> CloseAllSilosAsync()
+    {
+        foreach (var silo in OpenSilo.OpenSilos.ToList())
+        {
+            ActiveSilo = silo; // so the person sees which Silo is being asked about
+            if (!await silo.CloseAsync(true)) return false;
+        }
+
+        return true;
+    }
+
     public event EventHandler?           ActiveSiloChanged;
     public event EventHandler<OpenSilo>? SiloOpened;
     public event EventHandler<OpenSilo>? SiloOpening;
@@ -219,6 +234,10 @@ public partial class App : Application, IContainerHost
         ResourceIndex.Instance.Build();
 
         base.OnStartup(e);
+
+        // A .silo file given on the command line (double-click in Explorer, "silo.exe file.silo") opens once the window is up.
+        if (e.Args.FirstOrDefault(a => !a.StartsWith("-", StringComparison.Ordinal)) is { } path && System.IO.File.Exists(path))
+            Dispatcher.BeginInvoke(new Action(async () => await Silo.Commanding.OpenSiloCommand.OpenPathAsync(path)), System.Windows.Threading.DispatcherPriority.ApplicationIdle);
     }
 
     private void _configLogging()

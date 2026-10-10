@@ -1,9 +1,58 @@
+using System.ComponentModel;
+using System.Globalization;
+using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Markup;
 using System.Windows.Media;
 
 namespace Silo;
+
+/// <summary>
+///     Lets <see cref="AppIcon.Icon" />/<see cref="AppIconExtension.Icon" /> be set from a
+///     plain string key instead of a full <c>{StaticResource ...}</c> - e.g.
+///     <c>Icon="folder17"</c> instead of <c>Icon="{StaticResource Folder17}"</c>. Tries, in
+///     order: the key exactly as given; the key with just its first letter capitalized
+///     (covers the common case of typing an all-lowercase key against
+///     <c>Resources/Paths.xaml</c>'s PascalCase keys, e.g. "folder17" -&gt; "Folder17"); and,
+///     for a hyphen/underscore-separated key, each segment capitalized and joined (e.g.
+///     "hard-drive" -&gt; "HardDrive"). Deliberately does NOT fall back to null/empty on a
+///     miss - it throws, so a typo shows up immediately as an error instead of a silently
+///     blank icon (the exact failure mode the original <c>AppIconExtension</c> had for
+///     "hard-drive" vs. the real key "HardDrive" - see AppIcon's remarks above).
+/// </summary>
+public sealed class IconKeyConverter : TypeConverter
+{
+    public override bool CanConvertFrom(ITypeDescriptorContext? context, Type sourceType) =>
+        sourceType == typeof(string) || base.CanConvertFrom(context, sourceType);
+
+    public override object ConvertFrom(ITypeDescriptorContext? context, CultureInfo? culture, object value)
+    {
+        if (value is not string key || string.IsNullOrWhiteSpace(key))
+            return base.ConvertFrom(context, culture, value)!;
+
+        var tried = _candidates(key).ToList();
+        foreach (var candidate in tried)
+            if (Application.Current?.TryFindResource(candidate) is Geometry g)
+                return g;
+
+        throw new InvalidOperationException(
+            $"AppIcon: no Geometry resource found for icon key '{key}' (tried: {string.Join(", ", tried)}).");
+    }
+
+    private static IEnumerable<string> _candidates(string key)
+    {
+        yield return key;
+
+        yield return char.ToUpperInvariant(key[0]) + key[1..];
+
+        if (key.Contains('-') || key.Contains('_'))
+        {
+            var parts = key.Split(['-', '_'], StringSplitOptions.RemoveEmptyEntries);
+            yield return string.Concat(parts.Select(p => char.ToUpperInvariant(p[0]) + p[1..]));
+        }
+    }
+}
 
 /// <summary>
 ///     Renders an icon <see cref="Geometry" /> (typically one of the <c>StreamGeometry</c>
@@ -38,7 +87,8 @@ namespace Silo;
 /// </example>
 public class AppIcon : Control
 {
-    public static readonly DependencyProperty IconProperty = DependencyProperty.Register(nameof(Icon), typeof(Geometry), typeof(AppIcon));
+    public static readonly DependencyProperty IconProperty =
+        DependencyProperty.Register(nameof(Icon), typeof(Geometry), typeof(AppIcon));
 
     public static readonly DependencyProperty SizeProperty =
         DependencyProperty.Register(nameof(Size), typeof(double), typeof(AppIcon), new FrameworkPropertyMetadata(16d));
@@ -53,6 +103,14 @@ public class AppIcon : Control
     public static readonly DependencyProperty StrokeThicknessProperty =
         DependencyProperty.Register(nameof(StrokeThickness), typeof(double), typeof(AppIcon), new FrameworkPropertyMetadata(0d));
 
+    static AppIcon()
+    {
+        // Falls back to searching for an implicit Style keyed off this type (see App.xaml)
+        // before ever consulting a Generic.xaml theme dictionary - we don't have/need one.
+        DefaultStyleKeyProperty.OverrideMetadata(typeof(AppIcon), new FrameworkPropertyMetadata(typeof(AppIcon)));
+    }
+
+    [TypeConverter(typeof(IconKeyConverter))]
     public Geometry? Icon
     {
         get => (Geometry?)GetValue(IconProperty);
@@ -70,13 +128,6 @@ public class AppIcon : Control
         get => (double)GetValue(StrokeThicknessProperty);
         set => SetValue(StrokeThicknessProperty, value);
     }
-
-    static AppIcon()
-    {
-        // Falls back to searching for an implicit Style keyed off this type (see App.xaml)
-        // before ever consulting a Generic.xaml theme dictionary - we don't have/need one.
-        DefaultStyleKeyProperty.OverrideMetadata(typeof(AppIcon), new FrameworkPropertyMetadata(typeof(AppIcon)));
-    }
 }
 
 /// <summary>
@@ -88,44 +139,29 @@ public class AppIcon : Control
 ///     element out by hand; this only saves the line breaks.
 /// </summary>
 /// <example>
-///     Positional (icon only):
+///     Positional, by plain string key (shortest form - goes through
+///     <see cref="IconKeyConverter" />, so "folder17" resolves to the "Folder17" resource):
+///     <code>
+///     Icon="{l:AppIcon folder17}"
+///     </code>
+///     Positional, by an explicit resource lookup:
 ///     <code>
 ///     Icon="{l:AppIcon {StaticResource HardDrive}}"
 ///     </code>
 ///     Named (to also set Size/StrokeThickness):
 ///     <code>
-///     Icon="{l:AppIcon Icon={StaticResource HardDrive}, Size=20}"
+///     Icon="{l:AppIcon Icon=folder17, Size=20}"
 ///     </code>
 /// </example>
 [MarkupExtensionReturnType(typeof(AppIcon))]
 public class AppIconExtension : MarkupExtension
 {
+    [TypeConverter(typeof(IconKeyConverter))]
     public Geometry? Icon { get; set; }
 
-    /// <summary>
-    ///     Per-instance size override. Left <see langword="null"/> (the default) unless the
-    ///     markup explicitly sets it, so the constructed <see cref="AppIcon"/> gets no local
-    ///     <see cref="AppIcon.Size"/> value at all and falls through to the app-wide,
-    ///     runtime-adjustable default from the implicit <c>AppIcon</c> style in
-    ///     <c>App.xaml</c> (bound to <see cref="Silo.Design.AppDesignSettings.IconSize"/>).
-    ///     Setting this explicitly still wins, same as any local value beats a Style setter.
-    /// </summary>
-    public double? Size { get; set; }
+    public double Size { get; set; } = 16;
 
     public double StrokeThickness { get; set; }
-
-    public override object ProvideValue(IServiceProvider serviceProvider)
-    {
-        var icon = new AppIcon
-                   {
-                       Icon            = Icon,
-                       StrokeThickness = StrokeThickness
-                   };
-
-        if (Size.HasValue) icon.Size = Size.Value;
-
-        return icon;
-    }
 
     public AppIconExtension()
     {
@@ -135,4 +171,17 @@ public class AppIconExtension : MarkupExtension
     {
         Icon = icon;
     }
+
+    public AppIconExtension(string iconKey)
+    {
+        Icon = (Geometry)new IconKeyConverter().ConvertFrom(null!, null, iconKey)!;
+    }
+
+    public override object ProvideValue(IServiceProvider serviceProvider) =>
+        new AppIcon
+        {
+            Icon            = Icon,
+            Size            = Size,
+            StrokeThickness = StrokeThickness
+        };
 }

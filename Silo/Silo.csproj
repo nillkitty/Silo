@@ -6,9 +6,12 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
+    <!-- Program.Main (not the XAML-generated one) is the entry point: it picks GUI or command mode. -->
+    <StartupObject>Silo.Program</StartupObject>
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="easywindowsterminalcontrol" Version="1.0.38" />
     <PackageReference Include="LibGit2Sharp" Version="0.32.0" />
     <PackageReference Include="Serilog" Version="4.4.0" />
     <PackageReference Include="Serilog.Enrichers.Environment" Version="3.0.1" />
@@ -32,6 +35,17 @@
     <PackageReference Include="Markdig" Version="1.4.0" />
     <!-- Embedded draw.io (Drawio/*.cs): hosts the draw.io editor in a WebView2 pane -->
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4129.50" />
+    <!--
+      Costura folds the managed references into Silo.dll (see FodyWeavers.xml); Silo.exe and Silo.com are small
+      stubs that start it. Fody is build-time only.
+    -->
+    <PackageReference Include="Fody" Version="6.9.3">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Costura.Fody" Version="6.2.0">
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
   </ItemGroup>
 
   <ItemGroup>
@@ -41,12 +55,23 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- The Silo plugin injected into the draw.io editor (see Drawio/PLUGIN-ARCHITECTURE.md). -->
+    <EmbeddedResource Include="Drawio\Plugin\silo-plugin.js" LogicalName="silo-plugin.js" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Folder Include="Contracts\Providers\Data\Shape\" />
     <Folder Include="Providers\Uri\" />
     <Folder Include="Subconnectors\" />
     <Folder Include="ViewModel\Features\" />
   </ItemGroup>
 
-
+  <!--
+    After each build: make Silo.com (the console copy of the Silo.exe stub) and drop the now-embedded managed
+    assemblies from Silo.deps.json. See tools/PostBuild.ps1.
+  -->
+  <Target Name="SiloStubs" AfterTargets="Build" Condition="'$(OS)' == 'Windows_NT' and '$(DesignTimeBuild)' != 'true'">
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\tools\PostBuild.ps1&quot; -OutDir &quot;$(OutDir.TrimEnd('\'))&quot; -Name &quot;$(AssemblyName)&quot;" ContinueOnError="true" />
+  </Target>
 
 </Project>

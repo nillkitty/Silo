@@ -33,6 +33,8 @@ public class DrawioCanvasTool : ToolBase
     private readonly DispatcherTimer _saveTimer;
 
     private DrawioView? _view;
+    private IDiagramStore? _store;      // the store of the Silo the picker was last filled from (not "whatever is active now")
+    private OpenSilo?      _hookedSilo; // the Silo whose SaveHooks currently contain FlushAsync
     private Diagram?    _current;
     private bool        _loading;
     private bool        _subscribed;
@@ -76,6 +78,7 @@ public class DrawioCanvasTool : ToolBase
         bar.Children.Add(MakeButton("Delete", Delete));
         bar.Children.Add(MakeButton("Open file...", async () => await ImportAsync()));
         bar.Children.Add(MakeButton("Save as file...", async () => await ExportFileAsync()));
+        bar.Children.Add(MakeButton("Save Silo", () => App.Instance?.ActiveSilo?.Commands.SaveSilo.Execute(null)));
         bar.Children.Add(_status);
 
         root.Children.Add(bar);
@@ -83,18 +86,35 @@ public class DrawioCanvasTool : ToolBase
 
         DrawioDesign.Attach(root, _view);
 
+        // Leaving the pane must not lose an edit that is still waiting for the save timer.
+        root.Unloaded += async (_, _) => await FlushAsync();
+
         if (!_subscribed && App.Instance is { } app)
         {
             _subscribed             =  true;
             app.ActiveSiloChanged += async (_, _) =>
                                      {
                                          await FlushAsync();
+                                         HookSilo();
                                          await RefreshListAsync(null);
                                      };
         }
 
+        HookSilo();
+
         _ = RefreshListAsync(null);
         return root;
+    }
+
+    /// <summary>Makes sure saving (or closing) the active Silo first flushes this pane's pending edit into it.</summary>
+    private void HookSilo()
+    {
+        var silo = App.Instance?.ActiveSilo;
+        if (ReferenceEquals(silo, _hookedSilo)) return;
+
+        _hookedSilo?.SaveHooks.Remove(FlushAsync);
+        _hookedSilo = silo;
+        silo?.SaveHooks.Add(FlushAsync);
     }
 
     private static Button MakeButton(string text, Action click)
@@ -109,6 +129,7 @@ public class DrawioCanvasTool : ToolBase
     private async Task RefreshListAsync(int? select)
     {
         var store = Store;
+        _store = store;
         var list  = store?.ListDiagrams().Where(d => d.Kind == "canvas").ToList() ?? [];
 
         _loading = true;
@@ -144,7 +165,8 @@ public class DrawioCanvasTool : ToolBase
         _loading = true;
         try
         {
-            _current = d;
+            _current    = d;
+            _view.Title = d?.Name;
 
             if (d is null)
             {
@@ -188,7 +210,7 @@ public class DrawioCanvasTool : ToolBase
 
     private async Task SaveNowAsync()
     {
-        var store = Store;
+        var store = _store;
         if (store is null || _view is null || _current is null) return;
 
         try
@@ -206,6 +228,7 @@ public class DrawioCanvasTool : ToolBase
             edited.Modified    = DateTime.UtcNow;
             _current           = store.SaveDiagram(edited);
             _status.Text = $"Saved {_current.Modified.ToLocalTime():t}";
+            _view.SetStatus(null, false); // clear draw.io's "unsaved" marker; the Silo file itself is written by Save Silo
         }
         catch (Exception ex)
         {

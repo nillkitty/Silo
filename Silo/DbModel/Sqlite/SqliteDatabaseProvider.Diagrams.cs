@@ -69,6 +69,7 @@ public sealed partial class SqliteDatabaseProvider : IDiagramStore
 
                 UpsertRecursive(diagram, tx, new HashSet<object>(ReferenceEqualityComparer.Instance));
                 tx.Commit();
+                RaiseChanged();
                 return diagram;
             }
             catch
@@ -91,7 +92,9 @@ public sealed partial class SqliteDatabaseProvider : IDiagramStore
             using var cmd = _conn.CreateCommand();
             cmd.CommandText = "DELETE FROM [main].[Diagram] WHERE Id = @id";
             cmd.Parameters.AddWithValue("@id", id);
-            return cmd.ExecuteNonQuery() > 0;
+            bool deleted = cmd.ExecuteNonQuery() > 0;
+            if (deleted) RaiseChanged();
+            return deleted;
         }
         finally
         {

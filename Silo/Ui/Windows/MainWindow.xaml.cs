@@ -1,6 +1,8 @@
+using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
 using Silo.Design;
+using Silo.Model;
 using Silo.Nav;
 
 namespace Silo;
@@ -47,6 +49,50 @@ public partial class MainWindow : Window
             getValue: () => AppDesignSettings.Instance.IconSize,
             setValue: v => AppDesignSettings.Instance.IconSize = v,
             format: "{0:0} px"));
+
+        // Window title: "<file>[*] - Silo" for the active Silo; the star marks unsaved changes.
+        App.ActiveSiloChanged += (_, _) => WatchActiveSilo();
+        WatchActiveSilo();
+    }
+
+    private OpenSilo? _watched;
+
+    private void WatchActiveSilo()
+    {
+        if (_watched is not null) _watched.StateChanged -= OnSiloStateChanged;
+        _watched = App.ActiveSilo;
+        if (_watched is not null) _watched.StateChanged += OnSiloStateChanged;
+        UpdateTitle();
+    }
+
+    private void OnSiloStateChanged(object? sender, EventArgs e)
+    {
+        UpdateTitle();
+    }
+
+    private void UpdateTitle()
+    {
+        string app = AppIdentity.AppName;
+        Title = _watched is { Name: { } name } ? $"{name}{(_watched.IsDirty ? "*" : "")} - {app}" : app;
+    }
+
+    private bool _closeApproved;
+
+    /// <summary>
+    ///     Closing the window while a Silo has unsaved changes asks whether to save first (Save / Don't save / Cancel); the
+    ///     Silos are closed properly so their working folders are cleaned up. With nothing open the window just closes.
+    /// </summary>
+    protected override async void OnClosing(CancelEventArgs e)
+    {
+        base.OnClosing(e);
+        if (_closeApproved || e.Cancel || OpenSilo.OpenSilos.Count == 0) return;
+
+        e.Cancel = true; // decided asynchronously below
+        if (await App.CloseAllSilosAsync())
+        {
+            _closeApproved = true;
+            Close();
+        }
     }
 
     /// <summary>
