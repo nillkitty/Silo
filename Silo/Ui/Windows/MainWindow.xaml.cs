@@ -2,8 +2,11 @@ using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
 using Silo.Design;
+using Silo.Hosting;
 using Silo.Model;
 using Silo.Nav;
+using Silo.Remote;
+using Silo.Settings;
 
 namespace Silo;
 
@@ -50,9 +53,72 @@ public partial class MainWindow : Window
             setValue: v => AppDesignSettings.Instance.IconSize = v,
             format: "{0:0} px"));
 
+        AddFileDesignMenu();
+
+        // Drag a .silo file (or a link to one) onto the window to open it: a Solo Silo or a URL then gets a process of its own.
+        AllowDrop =  true;
+        DragOver  += OnDragOverSilo;
+        Drop      += OnDropSilo;
+
         // Window title: "<file>[*] - Silo" for the active Silo; the star marks unsaved changes.
         App.ActiveSiloChanged += (_, _) => WatchActiveSilo();
         WatchActiveSilo();
+    }
+
+    /// <summary>Author-mode file settings, reached with Ctrl+right-click anywhere in the window (see <see cref="DesignMenu" />).</summary>
+    private void AddFileDesignMenu()
+    {
+        var settings = SiloFileSettings.Instance;
+        var items    = DesignMenu.EnsureItems(this);
+
+        var policy = new ComboBox { ItemsSource = Enum.GetValues<ExternalChangePolicy>(), SelectedItem = settings.ConflictPolicy, MinWidth = 110 };
+        policy.SelectionChanged += (_, _) =>
+                                   {
+                                       if (policy.SelectedItem is ExternalChangePolicy p) settings.ConflictPolicy = p;
+                                   };
+        settings.PropertyChanged += (_, e) =>
+                                    {
+                                        if (e.PropertyName == nameof(SiloFileSettings.ConflictPolicy)) policy.SelectedItem = settings.ConflictPolicy;
+                                    };
+        var row = new StackPanel { Orientation = Orientation.Horizontal };
+        row.Children.Add(new TextBlock { Text = "If the file changed on disk: ", VerticalAlignment = VerticalAlignment.Center });
+        row.Children.Add(policy);
+        items.Add(new DesignMenuItem { MinLevel = DesignLevel.Author, Content = row });
+
+        var archives = new CheckBox { Content = "New Silos use the archive format", IsChecked = settings.NewSilosAreArchives };
+        archives.Click += (_, _) => settings.NewSilosAreArchives = archives.IsChecked == true;
+        items.Add(new DesignMenuItem { MinLevel = DesignLevel.Author, Content = archives });
+
+        items.Add(DesignMenuItem.Slider("Offer archive conversion above", DesignLevel.Author, 8, 1024,
+                                        () => settings.ExplodeThresholdMb, v => settings.ExplodeThresholdMb = (int)v, "{0:0} MB"));
+    }
+
+    private static bool TryGetDropped(IDataObject data, out List<string> targets)
+    {
+        targets = [];
+        if (data.GetDataPresent(DataFormats.FileDrop) && data.GetData(DataFormats.FileDrop) is string[] files)
+            targets.AddRange(files.Where(f => f.EndsWith(".silo", StringComparison.OrdinalIgnoreCase)));
+        else if (data.GetDataPresent(DataFormats.UnicodeText) && data.GetData(DataFormats.UnicodeText) is string text &&
+                 SiloLocation.IsRemote(text.Trim()))
+            targets.Add(text.Trim());
+
+        return targets.Count > 0;
+    }
+
+    private void OnDragOverSilo(object sender, DragEventArgs e)
+    {
+        if (!TryGetDropped(e.Data, out _)) return;
+
+        e.Effects = DragDropEffects.Copy;
+        e.Handled = true;
+    }
+
+    private async void OnDropSilo(object sender, DragEventArgs e)
+    {
+        if (!TryGetDropped(e.Data, out var targets)) return;
+
+        e.Handled = true;
+        foreach (var target in targets) await Commanding.OpenSiloCommand.OpenPathAsync(target);
     }
 
     private OpenSilo? _watched;
@@ -73,7 +139,14 @@ public partial class MainWindow : Window
     private void UpdateTitle()
     {
         string app = AppIdentity.AppName;
-        Title = _watched is { Name: { } name } ? $"{name}{(_watched.IsDirty ? "*" : "")} - {app}" : app;
+        string mode = App.Launch.Mode switch
+                      {
+                          LaunchMode.Solo   => " [Solo]",
+                          LaunchMode.Remote => " [Remote]",
+                          _                 => ""
+                      };
+        string flags = _watched is { IsUnsynced: true } ? " (not uploaded)" : "";
+        Title = _watched is { Name: { } name } ? $"{name}{(_watched.IsDirty ? "*" : "")}{flags} - {app}{mode}" : app + mode;
     }
 
     private bool _closeApproved;

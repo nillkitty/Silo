@@ -1,10 +1,15 @@
 ﻿using System.IO;
 using Microsoft.Win32;
 using Serilog;
+using Silo.Hosting;
 using Silo.Model;
+using Silo.Ui.Windows;
 
 namespace Silo.Commanding;
 
+/// <summary>
+///     File -> Open Silo
+/// </summary>
 public record OpenSiloCommand() : SiloCommand("_Open Silo...", Enabler.Always)
 {
     protected override async Task OnExecute(object? parameter)
@@ -30,22 +35,48 @@ public record OpenSiloCommand() : SiloCommand("_Open Silo...", Enabler.Always)
         await OpenPathAsync(path);
     }
 
-    /// <summary>Opens a .silo file and makes it the active Silo, reporting problems to the person instead of throwing.</summary>
-    public static Task<OpenSilo?> OpenPathAsync(string path)
+    /// <summary>
+    ///     Opens a .silo file or URL and makes it the active Silo -- in this process, or in a new one when it is a Solo
+    ///     Silo or a URL (see <see cref="SiloRouting" />). Reports problems to the person instead of throwing. Returns null
+    ///     when nothing was opened here.
+    /// </summary>
+    public static async Task<OpenSilo?> OpenPathAsync(string path)
     {
         try
         {
-            return Task.FromResult<OpenSilo?>(OpenSilo.OpenFile(new SiloFile(path)));
+            return await SiloRouting.OpenAsync(path);
         }
         catch (Exception ex)
         {
             Log.Error(ex, "Opening '{path}' failed", path);
-            MessageBox.Show($"The Silo could not be opened:\n{path}\n\n{ex.Message}", AppIdentity.AppName, MessageBoxButton.OK, MessageBoxImage.Error);
-            return Task.FromResult<OpenSilo?>(null);
+            MessageBox.Show($"The Silo could not be opened:\n{path}\n\n{ex.Message}", AppIdentity.AppName, MessageBoxButton.OK,
+                            MessageBoxImage.Error);
+            return null;
         }
     }
 }
 
+/// <summary>
+///     File -> Open from URL
+/// </summary>
+public record OpenSiloFromUrlCommand() : SiloCommand("Open from _URL...", Enabler.Always)
+{
+    protected override async Task OnExecute(object? parameter)
+    {
+        var url = parameter as string ?? PromptDialog.Ask("Open Silo from URL", "Address of the Silo (an https:// link to a .silo file):", "Open");
+        if (url is null)
+        {
+            App.Status("User cancelled out of Open from URL");
+            return;
+        }
+
+        await OpenSiloCommand.OpenPathAsync(url);
+    }
+}
+
+/// <summary>
+///     File -> New Silo
+/// </summary>
 public record NewSiloCommand() : SiloCommand("_New Silo...", Enabler.Always)
 {
     protected override async Task OnExecute(object? parameter)
@@ -68,9 +99,8 @@ public record NewSiloCommand() : SiloCommand("_New Silo...", Enabler.Always)
             return;
         }
 
-        if (File.Exists(full) &&
-            MessageBox.Show($"{full} already exists. Replace it with a new, empty Silo?", AppIdentity.AppName,
-                            MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
+        if (File.Exists(full) && MessageBox.Show($"{full} already exists. Replace it with a new, empty Silo?", AppIdentity.AppName,
+                                                 MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
             return;
 
         try
@@ -81,11 +111,15 @@ public record NewSiloCommand() : SiloCommand("_New Silo...", Enabler.Always)
         catch (Exception ex)
         {
             Log.Error(ex, "Creating '{path}' failed", full);
-            MessageBox.Show($"The Silo could not be created:\n{ex.Message}", AppIdentity.AppName, MessageBoxButton.OK, MessageBoxImage.Error);
+            MessageBox.Show($"The Silo could not be created:\n{ex.Message}", AppIdentity.AppName, MessageBoxButton.OK,
+                            MessageBoxImage.Error);
         }
     }
 }
 
+/// <summary>
+///     File -> Exit
+/// </summary>
 public record AppExitCommand() : SiloCommand("E_xit", Enabler.Always)
 {
     protected override async Task OnExecute(object? parameter)

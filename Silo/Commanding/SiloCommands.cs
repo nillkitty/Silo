@@ -3,6 +3,7 @@ using System.Windows.Controls;
 using Microsoft.AspNetCore.Mvc.Diagnostics;
 using Microsoft.Win32;
 using Serilog;
+using Silo.Contracts.Providers.Data;
 using Silo.Extensions;
 using Silo.Model;
 using Silo.Ui;
@@ -37,7 +38,11 @@ public record SaveSiloCommand(OpenSilo Silo)
         try
         {
             await s.SaveAsync();
-            App.Status($"Saved {s.Name}");
+            App.Status(s.IsUnsynced ? $"Saved {s.Name} on this computer only - not uploaded" : $"Saved {s.Name}");
+        }
+        catch (OperationCanceledException)
+        {
+            App.Status("Save cancelled");
         }
         catch (Exception ex)
         {
@@ -104,6 +109,34 @@ public record ExportStateCommand(OpenSilo Silo)
     }
 }
 
+public record ConvertToArchiveCommand(OpenSilo Silo)
+    : SiloCommand("Convert to _Archive Format", Enabler.IsSiloLoaded, ToolTip: "Splits a single-file Silo into the multi-file archive format")
+{
+    protected override async Task OnExecute(object? parameter)
+    {
+        var s = Silo.Required()!;
+        if (s.Data is not ISiloFile { Format: SiloStorageFormat.Simple })
+        {
+            App.Status($"{s.Name} is already in the archive format");
+            return;
+        }
+
+        try
+        {
+            await s.ConvertToArchiveAsync();
+        }
+        catch (OperationCanceledException)
+        {
+            App.Status("Conversion cancelled");
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Converting {path} failed", s.FilePath);
+            MessageBox.Show($"The Silo could not be converted:\n{ex.Message}", AppIdentity.AppName, MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+}
+
 public record SaveSiloAsCommand(OpenSilo Silo)
     : SiloCommand("Save _As...", Enabler.IsSiloLoaded)
 {
@@ -132,6 +165,10 @@ public record SaveSiloAsCommand(OpenSilo Silo)
         {
             await s.SaveAsAsync(path);
             App.Status($"Saved as {s.Name}");
+        }
+        catch (OperationCanceledException)
+        {
+            App.Status("Save cancelled");
         }
         catch (Exception ex)
         {

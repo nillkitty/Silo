@@ -60,7 +60,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Folder Include="Contracts\Providers\Data\Shape\" />
     <Folder Include="Providers\Uri\" />
     <Folder Include="Subconnectors\" />
     <Folder Include="ViewModel\Features\" />

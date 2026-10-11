@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.IO;
 using Silo.Cli;
+using Silo.Hosting;
 
 namespace Silo;
 
@@ -40,7 +41,12 @@ internal static class Program
             return SiloCli.Run(args);
         }
 
-        var app = new App();
+        // Decide what this process is for before any WPF object exists (see Hosting/STARTUP-FLOW.md): a launch that only hands
+        // its document to the running instance exits here, without ever showing a window.
+        var plan = StartupPlanner.Plan(args);
+        if (plan is null) return 0;
+
+        var app = new App { Launch = plan };
         app.InitializeComponent();
         return app.Run();
     }

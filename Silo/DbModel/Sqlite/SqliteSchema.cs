@@ -174,7 +174,7 @@ public static class EntitySchema
     ///     happen to collide with SQLite keywords (e.g. the <see cref="Table" /> and <c>Key</c>
     ///     types/properties) are never a problem.
     /// </summary>
-    public static string BuildCreateTableSql(EntityInfo info, string alias)
+    public static string BuildCreateTableSql(EntityInfo info, string alias, SiloLayout? layout = null)
     {
         var parts = new List<string>();
         if (info.IdProperty is not null)
@@ -187,7 +187,7 @@ public static class EntitySchema
         }
 
         var sb = new StringBuilder();
-        sb.Append("CREATE TABLE IF NOT EXISTS [").Append(alias).Append("].[").Append(info.TableName).Append("] (");
+        sb.Append("CREATE TABLE IF NOT EXISTS ").Append((layout ?? SiloLayout.Archive).Table(alias, info.TableName)).Append(" (");
         sb.Append(string.Join(", ", parts));
         sb.Append(");");
         return sb.ToString();
@@ -206,12 +206,12 @@ public static class EntitySchema
         return "TEXT"; // string, DateTime, Guid, Uri
     }
 
-    public static void EnsureFixedSchemas(SqliteConnection conn)
+    public static void EnsureFixedSchemas(SqliteConnection conn, SiloLayout? layout = null)
     {
         foreach (var info in _byType.Values.Where(i => i.SchemaKind == SchemaKind.Fixed))
         {
             using var cmd = conn.CreateCommand();
-            cmd.CommandText = BuildCreateTableSql(info, info.FixedAlias!);
+            cmd.CommandText = BuildCreateTableSql(info, info.FixedAlias!, layout);
             cmd.ExecuteNonQuery();
         }
     }
@@ -232,6 +232,7 @@ public static class EntitySchema
         Register(typeof(Authorization), nameof(Authorization), SchemaKind.Fixed, MainAlias);
         Register(typeof(GAssembly),     "Assembly",            SchemaKind.Fixed, MainAlias);
         Register(typeof(Diagram),       nameof(Diagram),       SchemaKind.Fixed, MainAlias);
+        Register(typeof(SaveLogEntry),  "SaveLog",             SchemaKind.Fixed, MainAlias);
 
         // --- Universal database (u.db) -> 'u' -------------------------------------------------
         Register(typeof(UniversalType),     nameof(UniversalType),     SchemaKind.Fixed, UniversalAlias);

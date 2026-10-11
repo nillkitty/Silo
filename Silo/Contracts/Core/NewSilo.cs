@@ -8,7 +8,13 @@ public interface INewSiloDialog
     NewSiloResult ShowDialog();
 }
 
-public record NewSiloResult(bool Cancel, string FilePath, SiloTemplate Template);
+/// <summary>
+///     Result from NewSiloDialog
+/// </summary>
+/// <param name="Cancel">True if user cancelled out of the dialog</param>
+/// <param name="FilePath">The file path to create</param>
+/// <param name="Template">The template to use</param>
+public record NewSiloResult(bool Cancel, string? FilePath, SiloTemplate? Template);
 
 public interface INewSiloBuilder
 {

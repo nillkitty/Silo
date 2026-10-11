@@ -53,6 +53,7 @@
     <MenuItem Header="_File" DataContext="{Binding App}">
         <MenuItem Header="_New Silo" Command="{Binding NewSiloCommand}"   />
         <MenuItem Header="_Open Silo" Command="{Binding OpenSiloCommand}" />
+        <MenuItem Header="Open from _URL..." Command="{Binding OpenSiloFromUrlCommand}" />
         <Separator />
         <MenuItem Header="E_xit"  Command="{Binding ExitCommand}" />
     </MenuItem>
@@ -65,6 +66,7 @@
         <MenuItem Header="_Credential" Command="{Binding Commands.NewCredential}" />
         <MenuItem Header="_Save Silo" CommandTarget="{Binding .}" Command="{Binding Commands.SaveSilo}" />
         <MenuItem Header="Save Silo _As..." CommandTarget="{Binding .}"  Command="{Binding Commands.SaveSiloAs}" />
+        <MenuItem Header="Convert to _Archive Format" CommandTarget="{Binding .}"  Command="{Binding Commands.ConvertToArchive}" />
         <Separator />
         <MenuItem Header="_Export/Backup" >
             <MenuItem Header="_Logs..." CommandTarget="{Binding .}"  Command="{Binding Commands.ExportLogs}" />

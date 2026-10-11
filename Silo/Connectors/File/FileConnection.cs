@@ -51,6 +51,9 @@ public class FileConnection : FileModel, IConnection
     public bool         IsInTree { get; }
     public List<object> Metadata { get; } = [];
 
+    /// <summary>
+    /// Gets any stored data which can be used to restore a lost surface
+    /// </summary>
     public string?        PersistentConfig { get; }
     public object?        State            { get; }
     public string?        TempConfig       { get; }

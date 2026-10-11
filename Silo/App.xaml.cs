@@ -3,17 +3,22 @@ using System.Diagnostics;
 using System.Media;
 using System.Reflection;
 using System.Runtime.ExceptionServices;
+using System.Windows.Threading;
 using Microsoft.Win32;
 using Serilog;
 using Serilog.Debugging;
 using Serilog.Events;
 using Silo.Assets;
 using Silo.Commanding;
+using Silo.DbModel.Sqlite;
 using Silo.Design;
 using Silo.Extensions;
+using Silo.Hosting;
 using Silo.Model;
+using Silo.Settings;
 using Silo.Theming;
 using Silo.Ui;
+using Silo.UI;
 using Silo.ViewModel;
 using Telefrag.DI;
 using Telefrag.Exceptions;
@@ -55,8 +60,17 @@ public partial class App : Application, IContainerHost
     /// </summary>
     public new static AppCommand ExitCommand => new AppExitCommand();
 
-
+    /// <summary>
+    ///     The app instance representing this process
+    /// </summary>
     public static App? Instance => Current as App;
+
+    /// <summary>
+    ///     What this process was started to do: which kind of process it is (stock / Solo / Remote), the document to open
+    ///     and whether it answers "open this" requests from later launches. Decided in <c>Program.Main</c> by
+    ///     <see cref="StartupPlanner" /> before this object exists.
+    /// </summary>
+    public LaunchPlan Launch { get; init; } = new(LaunchMode.Stock, null, false);
 
     /// <summary>
     ///     In-memory cache of logs
@@ -74,6 +88,11 @@ public partial class App : Application, IContainerHost
     public static AppCommand OpenSiloCommand => new OpenSiloCommand();
 
     /// <summary>
+    ///     File -> Open from URL
+    /// </summary>
+    public static AppCommand OpenSiloFromUrlCommand => new OpenSiloFromUrlCommand();
+
+    /// <summary>
     ///     Gets a collection of the open Silos.  This mirrors the actual live registry of
     ///     open silos (<see cref="OpenSilo.OpenSilos" />) rather than a separate, never-populated
     ///     tracking collection, so callers - such as <see cref="Silo.Commanding.AppExitCommand" />,
@@ -81,6 +100,10 @@ public partial class App : Application, IContainerHost
     /// </summary>
     public ObservableCollection<OpenSilo> OpenSilos => OpenSilo.OpenSilos;
 
+
+    /// <summary>
+    ///     Whether to show the Tolos menu
+    /// </summary>
     public static bool ShowToolsMenu { get; set; } = true;
 
     /// <summary>
@@ -148,13 +171,17 @@ public partial class App : Application, IContainerHost
         foreach (var silo in OpenSilo.OpenSilos.ToList())
         {
             ActiveSilo = silo; // so the person sees which Silo is being asked about
-            if (!await silo.CloseAsync(true)) return false;
+            if (!await silo.CloseAsync()) return false;
         }
 
         return true;
     }
 
-    public event EventHandler?           ActiveSiloChanged;
+    /// <summary>
+    ///     Raised when the active Silo has changed
+    /// </summary>
+    public event EventHandler? ActiveSiloChanged;
+
     public event EventHandler<OpenSilo>? SiloOpened;
     public event EventHandler<OpenSilo>? SiloOpening;
     public event EventHandler<OpenSilo>? SiloClosing;
@@ -230,14 +257,52 @@ public partial class App : Application, IContainerHost
         AppTheme.Apply();
         AppDesignSettings.Apply();
         AppDesignLevel.Apply();
+        SiloFileSettings.Apply();
         DesignMenu.Register();
         ResourceIndex.Instance.Build();
 
+        // Working folders left behind by a crashed Silo process (those still in use are locked and skipped).
+        _ = Task.Run(SiloArchive.SweepOrphans);
+
         base.OnStartup(e);
 
-        // A .silo file given on the command line (double-click in Explorer, "silo.exe file.silo") opens once the window is up.
-        if (e.Args.FirstOrDefault(a => !a.StartsWith("-", StringComparison.Ordinal)) is { } path && System.IO.File.Exists(path))
-            Dispatcher.BeginInvoke(new Action(async () => await Silo.Commanding.OpenSiloCommand.OpenPathAsync(path)), System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+        // Later launches hand their documents to the stock instance through a named pipe.
+        if (Launch.ServeRequests) SingleInstance.StartServer(HandleLaunchRequest);
+
+        // The document this launch is for (decided in Program.Main -- double-click in Explorer, "silo.exe file.silo", a URL) opens
+        // once the window is up.
+        if (Launch.Target is { } target)
+            Dispatcher.BeginInvoke(new Action(async () => await Commanding.OpenSiloCommand.OpenPathAsync(target)),
+                                   DispatcherPriority.ApplicationIdle);
+    }
+
+    protected override void OnExit(ExitEventArgs e)
+    {
+        SingleInstance.StopServer();
+        base.OnExit(e);
+    }
+
+    /// <summary>A later launch asked this (stock) instance to open a document, or just to come to the front.</summary>
+    private void HandleLaunchRequest(string? path)
+    {
+        Dispatcher.BeginInvoke(new Action(async () =>
+                                          {
+                                              if (path is not null) await Commanding.OpenSiloCommand.OpenPathAsync(path);
+                                              BringToFront();
+                                          }));
+    }
+
+    /// <summary>Restores and activates the main window.</summary>
+    public void BringToFront()
+    {
+        if (MainWindow is not { } w) return;
+
+        if (w.WindowState == WindowState.Minimized) w.WindowState = WindowState.Normal;
+        w.Show();
+        w.Activate();
+        w.Topmost = true; // the usual trick to get past foreground-lock rules
+        w.Topmost = false;
+        w.Focus();
     }
 
     private void _configLogging()
@@ -257,7 +322,7 @@ public partial class App : Application, IContainerHost
             Assembly.GetCallingAssembly(),
             Assembly.GetExecutingAssembly()
         ];
-        a.Distinct().ToList().ForEach(x => DiscoverRegistrations(x));
+        a.Where(x => x != null).Distinct().ToList().ForEach(x => DiscoverRegistrations(x));
     }
 
     public void DiscoverRegistrations(Assembly? a, bool critical = false)
@@ -324,6 +389,8 @@ public partial class App : Application, IContainerHost
     /// <summary>
     ///     Requires an app-level component
     /// </summary>
+    [DebuggerStepThrough]
+    [DebuggerHidden]
     public static TService Require<TService>() where TService : class
     {
         return Resolve<TService>() ??
@@ -334,6 +401,8 @@ public partial class App : Application, IContainerHost
     /// <summary>
     ///     Resolves an app-level component
     /// </summary>
+    [DebuggerStepThrough]
+    [DebuggerHidden]
     public static TService? Resolve<TService>() where TService : class
     {
         return Instance?.Components?.Resolve<TService>();
@@ -342,6 +411,8 @@ public partial class App : Application, IContainerHost
     /// <summary>
     ///     Invoked when an unhandled exception has occured off the primary thread
     /// </summary>
+    [DebuggerStepThrough]
+    [DebuggerHidden]
     public void Unhandled(Exception e)
     {
         Log.Error(e, "Unhandled exception: {e}", e);

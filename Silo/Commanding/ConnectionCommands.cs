@@ -4,6 +4,10 @@ using Silo.Ui.Windows;
 
 namespace Silo.Commanding;
 
+/// <summary>
+///     Silo -> New Connection
+/// </summary>
+/// <param name="Silo"></param>
 public record NewConnectionCommand(OpenSilo Silo) : SiloCommand("New _Connection...", Enabler.IsSiloAuthorable)
 {
     protected override async Task OnExecute(object? parameter)
@@ -20,6 +24,10 @@ public record NewConnectionCommand(OpenSilo Silo) : SiloCommand("New _Connection
     }
 }
 
+/// <summary>
+///     Silo -> New Credential
+/// </summary>
+/// <param name="Silo"></param>
 public record NewCredentialCommand(OpenSilo Silo) : SiloCommand("New Cre_dential...", Enabler.IsSiloAuthorable)
 {
     protected override async Task OnExecute(object? parameter)

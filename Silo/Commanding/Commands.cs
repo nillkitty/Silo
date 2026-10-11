@@ -6,38 +6,76 @@ using Silo.Model;
 
 namespace Silo;
 
+/// <summary>
+///     Silo commands (Silo Menu)
+/// </summary>
+/// <param name="silo">The target Silo (which likely /was/ the active silo at the time, but not necessarily)/</param>
 public class SiloCommands(OpenSilo silo)
 {
-    public SiloCommand ExportAll     => new ExportAllCommand(Silo);
-    public SiloCommand ExportLogs    => new ExportLogsCommand(Silo);
-    public SiloCommand ExportState   => new ExportStateCommand(Silo);
-    public SiloCommand ImportData    => new ImportDataCommand(Silo);
+    /// <summary>Silo -> Convert to Archive Format</summary>
+    public SiloCommand ConvertToArchive => new ConvertToArchiveCommand(Silo);
+
+    /// <summary>Silo -> Export All</summary>
+    public SiloCommand ExportAll => new ExportAllCommand(Silo);
+
+    /// <summary>Silo -> Export Logs</summary>
+    public SiloCommand ExportLogs => new ExportLogsCommand(Silo);
+
+    /// <summary>Silo -> Export State</summary>
+    public SiloCommand ExportState => new ExportStateCommand(Silo);
+
+    /// <summary>Silo -> Import Data</summary>
+    public SiloCommand ImportData => new ImportDataCommand(Silo);
+
+    /// <summary>Silo -> New Connectionl</summary>
     public SiloCommand NewConnection => new NewConnectionCommand(Silo);
+
+    /// <summary>Silo -> New Credential</summary>
     public SiloCommand NewCredential => new NewCredentialCommand(Silo);
-    public SiloCommand SaveSilo      => new SaveSiloCommand(Silo);
-    public SiloCommand SaveSiloAs    => new SaveSiloAsCommand(Silo);
-    public OpenSilo    Silo          { get; } = silo.Required();
+
+    /// <summary>Silo -> Save</summary>
+    public SiloCommand SaveSilo => new SaveSiloCommand(Silo);
+
+    /// <summary>Silo -> Save As</summary>
+    public SiloCommand SaveSiloAs => new SaveSiloAsCommand(Silo);
+
+    /// <summary>
+    ///     Parent, open silo/
+    /// </summary>
+    public OpenSilo Silo { get; } = silo.Required();
 }
 
+/// <summary>
+///     Application level command
+/// </summary>
 public record AppCommand : ICommand, INotifyPropertyChanged
 {
+    private readonly Checker.CheckerFunc? _checker;
     private readonly Func<object?, Task>? _executeHandler;
     private readonly Enabler.EnablerFunc? _itemEnabler;
-    private readonly Checker.CheckerFunc? _checker;
+    private readonly IToggle?             _toggle;
     private          string               _header;
     private          object?              _icon;
     private          bool                 _isCheckable;
-    private readonly IToggle?             _toggle;
     private          string?              _toolTip;
 
+    /// <summary>
+    ///     Gets or sets the model associated with the currentbiew/=.=
+    /// </summary>
     public object? DataContext { get; private set; }
 
+    /// <summary>
+    ///     Gets or sets the command header
+    /// </summary>
     public string Header
     {
         get => _toggle?.Header ?? _header;
         set => SetField(ref _header, value);
     }
 
+    /// <summary>
+    ///     Gets or sets the icon source
+    /// </summary>
     public object? Icon
     {
         get => _toggle?.Icon ?? _icon;
@@ -101,7 +139,6 @@ public record AppCommand : ICommand, INotifyPropertyChanged
         _checker        = checker;
     }
 
-    // --- ICommand ---
     public bool CanExecute(object? parameter)
     {
         return _toggle?.IsEnabled ?? _itemEnabler?.Invoke(parameter) ?? true;
