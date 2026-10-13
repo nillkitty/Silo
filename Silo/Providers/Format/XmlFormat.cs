@@ -4,9 +4,11 @@ using System.Xml.Linq;
 using Silo.Contracts.Providers.Document;
 using Silo.Contracts.Providers.Reflection;
 using Silo.Providers.Document;
+using Telefrag.DI;
 
 namespace Silo.Providers.Format;
 
+[Singleton(typeof(IFileFormat))]
 public class XmlFormat : IFileFormat, IDocumentProvider<XDocument>
 {
     public LoadOptions Options       { get; set; } = LoadOptions.SetBaseUri | LoadOptions.SetLineInfo;

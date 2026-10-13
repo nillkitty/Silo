@@ -1,5 +1,6 @@
 ﻿using Silo.Contracts.Connectors;
 using Silo.Shell;
+using Telefrag.DI;
 
 namespace Silo.Connectors.Web;
 
@@ -8,6 +9,7 @@ namespace Silo.Connectors.Web;
 ///     needed based on the <c>Content-Type</c> of the response to a
 ///     <c>HEAD</c> request.
 /// </summary>
+[Singleton(typeof(IUriProvider))]
 public class WebConnector : IConnector, IUriProvider
 {
     public ConnectorSetupFlags Flags { get; }

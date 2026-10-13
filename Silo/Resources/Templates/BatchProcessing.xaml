@@ -1,0 +1,24 @@
+﻿<SiloTemplate xmlns="clr-namespace:Silo.Contracts.Core"
+              xmlns:z="clr-namespace:Silo.DbModel.Global"
+              xmlns:w="clr-namespace:Silo.DbModel.Worlds"
+              xmlns:u="clr-namespace:Silo.DbModel.Universal"
+              xmlns:m="clr-namespace:Silo.DbModel.Meta"
+              xmlns:c="clr-namespace:Silo.DbModel"
+              xmlns:source="clr-namespace:Silo.Contracts.Providers.Data.Source"
+              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+              xmlns:silo="clr-namespace:Silo"
+              xmlns:cc="clr-namespace:Silo.Contracts"
+              Name="Batch Processing" Description="Monitor a local directory, file share, RSS feed, or any other data source for 
+			  new items, and run a set of pre-configured actions on each new item.">
+
+	<c:Placeholder PlaceholderForType="{x:Type cc:IObservableDataSource}" 
+                   Name="Source"
+                   Description="Select a watchable data source to start with" />
+
+    <c:Placeholder PlaceholderForType="{x:Type cc:IDataTransformGroup}"
+                   DependsOn="Source"
+                   Name="Transform Pipeline"
+                   Description="Configure your data transform pipeline" />
+
+    
+</SiloTemplate>

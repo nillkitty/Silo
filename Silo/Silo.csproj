@@ -25,6 +25,8 @@
     <PackageReference Include="Serilog.Sinks.Trace" Version="4.0.0" />
     <PackageReference Include="Telefrag.Common" Version="2026.9.11.372" />
     <PackageReference Include="Dirkster.AvalonDock" Version="4.72.1" />
+    <!-- Dark/Light chrome for the docking area (swapped by MainWindow when AppTheme changes). -->
+    <PackageReference Include="Dirkster.AvalonDock.Themes.VS2013" Version="4.72.1" />
     <!-- SQLite persistence layer (DbModel/Sqlite/*.cs) -->
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.12" />
     <!-- JsonFormat (Providers/Format/JsonFormat.cs) -->

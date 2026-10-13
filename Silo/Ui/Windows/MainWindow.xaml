@@ -8,6 +8,8 @@
         xmlns:l="clr-namespace:Silo"
         xmlns:ui="clr-namespace:Silo.Ui"
         mc:Ignorable="d"
+        Background="{DynamicResource Theme.Background}"
+        Foreground="{DynamicResource Theme.Text}"
         Title="MainWindow" Height="450" Width="800">
     <Window.Resources>
         <!--
@@ -19,8 +21,8 @@
             represents even with the pane collapsed.
         -->
         <Style x:Key="NavRailButtonStyle" TargetType="{x:Type ToggleButton}">
-            <Setter Property="Width" Value="28" />
-            <Setter Property="Height" Value="28" />
+            <!-- No fixed Width/Height: the button is as big as its icon (the live "Icon Size" setting) plus Padding. -->
+            <Setter Property="Padding" Value="5" />
             <Setter Property="Margin" Value="0,2" />
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="Foreground" Value="{DynamicResource Theme.Text}" />
@@ -30,7 +32,8 @@
                         <Border x:Name="Bd"
                                 Background="{TemplateBinding Background}"
                                 BorderBrush="Transparent"
-                                BorderThickness="2,0,0,0">
+                                BorderThickness="2,0,0,0"
+                                Padding="{TemplateBinding Padding}">
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
                         </Border>
                         <ControlTemplate.Triggers>
@@ -47,10 +50,52 @@
                 </Setter.Value>
             </Setter>
         </Style>
+
+        <!--
+            Shared by the top tree (NavTree) and the bottom tree (NavTreeBottom): one recursive template for a node
+            and its children, and the style that lets code drive selection/expansion through AppNavNode. The text
+            turns to the accent colour for the node of the active Silo (AppNavNode.IsEmphasized).
+        -->
+        <HierarchicalDataTemplate x:Key="NavNodeTemplate" ItemsSource="{Binding Children}">
+            <StackPanel Orientation="Horizontal">
+                <l:AppIcon Icon="{Binding Item.Icon}" Margin="0,0,6,0" />
+                <TextBlock x:Name="NavNodeText" Text="{Binding Header}" VerticalAlignment="Center" />
+            </StackPanel>
+            <HierarchicalDataTemplate.Triggers>
+                <!-- accent text marks the active Silo, but not while its row is selected (the accent on the selection colour is unreadable) -->
+                <MultiDataTrigger>
+                    <MultiDataTrigger.Conditions>
+                        <Condition Binding="{Binding IsEmphasized}" Value="True" />
+                        <Condition Binding="{Binding IsSelected}" Value="False" />
+                    </MultiDataTrigger.Conditions>
+                    <Setter TargetName="NavNodeText" Property="Foreground" Value="{DynamicResource Theme.Accent}" />
+                </MultiDataTrigger>
+            </HierarchicalDataTemplate.Triggers>
+        </HierarchicalDataTemplate>
+
+        <!--
+            Lets code (MainWindow.xaml.cs) drive selection and expansion by setting AppNavNode.IsSelected/IsExpanded,
+            without reaching into the TreeView's realized containers - the standard way to make a data-bound
+            TreeView's selection settable from outside a mouse click.
+        -->
+        <Style x:Key="NavNodeContainerStyle" TargetType="{x:Type TreeViewItem}" BasedOn="{StaticResource {x:Type TreeViewItem}}">
+            <Setter Property="IsSelected" Value="{Binding IsSelected, Mode=TwoWay}" />
+            <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
+        </Style>
+
+        <!-- One icon button in NavRail / NavRailBottom (the collapsed pane's gutter). -->
+        <DataTemplate x:Key="NavRailItemTemplate">
+            <ToggleButton Style="{StaticResource NavRailButtonStyle}"
+                          Click="NavRailButton_Click"
+                          IsChecked="{Binding IsActiveRoot, Mode=OneWay}"
+                          ToolTip="{Binding Header}">
+                <l:AppIcon Icon="{Binding Item.Icon}" />
+            </ToggleButton>
+        </DataTemplate>
     </Window.Resources>
     <Grid>
         <Grid.ColumnDefinitions>
-            <ColumnDefinition x:Name="NavColumn" Width="300" />
+            <ColumnDefinition x:Name="NavColumn" Width="32" />
             <ColumnDefinition Width="*"/>
         </Grid.ColumnDefinitions>
         <Grid.RowDefinitions>
@@ -71,15 +116,16 @@
 
             NavTree's structure (and NavRail's) is no longer written out here as XAML - it's
             built in code from Nav/AppNavTree.cs's AppNavItem/AppNavNode model (see
-            MainWindow.xaml.cs's constructor) and bound through the HierarchicalDataTemplate
+            MainWindow.xaml.cs's SyncNav) and bound through the HierarchicalDataTemplate
             below. Ctrl+right-click the tree (in Author mode or above) still reaches the pink
             design menu via Design/DesignMenu.cs - that attaches to any DependencyObject,
             unaffected by how the TreeView gets its items.
         -->
-        <Grid Grid.Row="2" Grid.Column="0">
+        <Grid x:Name="NavHost" Grid.Row="2" Grid.Column="0" SizeChanged="NavHost_SizeChanged">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
 
             <Border Grid.Row="0"
@@ -91,7 +137,8 @@
                                   DockPanel.Dock="Left"
                                   Width="24" Height="24"
                                   Click="NavCollapseToggle_Click"
-                                  ToolTip="Collapse navigation pane">
+                                  IsChecked="True"
+                                  ToolTip="Expand navigation pane">
                         <ToggleButton.Style>
                             <Style TargetType="{x:Type ToggleButton}">
                                 <Setter Property="Background" Value="Transparent" />
@@ -134,6 +181,7 @@
                     </ToggleButton>
                     <TextBlock x:Name="NavHeaderText"
                                Text="Navigation"
+                               Visibility="Collapsed"
                                VerticalAlignment="Center"
                                Margin="6,0,0,0"
                                FontWeight="SemiBold" />
@@ -141,67 +189,60 @@
             </Border>
 
             <!--
-                ItemsSource is set in code (MainWindow.xaml.cs's constructor, from
-                Nav/AppNavTree.BuildRoots()) rather than bound here, matching the rest of this
-                window's code-behind-driven style. The HierarchicalDataTemplate applies itself
-                recursively to AppNavNode.Children at every level, so one template covers the
-                whole tree (Silo > Schema > Metaverse Schema > Types, and so on) rather than a
-                template per level.
+                NavTree holds the top of the pane: "Recent" while no Silo is open, otherwise one node per open Silo
+                plus Connections and Performance. NavTreeBottom, in the last row, holds Inbox, Settings and Profile,
+                which stay at the bottom edge whatever the top shows (and grow upward when Settings is expanded -
+                MainWindow.xaml.cs caps its height so the top tree always keeps some room). Both bind to AppNavNode
+                lists that MainWindow.xaml.cs fills and keeps in step with the open Silos (SyncNav); the
+                HierarchicalDataTemplate applies itself recursively, so one template covers every level.
             -->
             <TreeView x:Name="NavTree"
                       Grid.Row="1"
                       FontWeight="Normal" FontSize="18"
-                      SelectedItemChanged="NavTree_SelectedItemChanged">
-                <TreeView.ItemTemplate>
-                    <HierarchicalDataTemplate ItemsSource="{Binding Children}">
-                        <StackPanel Orientation="Horizontal">
-                            <l:AppIcon Icon="{Binding Item.Icon}" Margin="0,0,6,0" />
-                            <TextBlock Text="{Binding Item.Text}" VerticalAlignment="Center" />
-                        </StackPanel>
-                    </HierarchicalDataTemplate>
-                </TreeView.ItemTemplate>
-                <TreeView.ItemContainerStyle>
-                    <!--
-                        Lets code (MainWindow.xaml.cs's NavRailButton_Click) drive selection and
-                        expansion by setting AppNavNode.IsSelected/IsExpanded, without reaching
-                        into the TreeView's realized containers - the standard way to make a
-                        data-bound TreeView's selection settable from outside a mouse click.
-                    -->
-                    <Style TargetType="{x:Type TreeViewItem}">
-                        <Setter Property="IsSelected" Value="{Binding IsSelected, Mode=TwoWay}" />
-                        <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
-                    </Style>
-                </TreeView.ItemContainerStyle>
-            </TreeView>
+                      ItemTemplate="{StaticResource NavNodeTemplate}"
+                      ItemContainerStyle="{StaticResource NavNodeContainerStyle}"
+                      SelectedItemChanged="NavTree_SelectedItemChanged" />
+
+            <TreeView x:Name="NavTreeBottom"
+                      Grid.Row="2"
+                      VerticalAlignment="Bottom"
+                      FontWeight="Normal" FontSize="18"
+                      ItemTemplate="{StaticResource NavNodeTemplate}"
+                      ItemContainerStyle="{StaticResource NavNodeContainerStyle}"
+                      SelectedItemChanged="NavTree_SelectedItemChanged" />
 
             <!--
-                Collapsed-pane gutter: one icon per top-level nav group (see
-                Nav/AppNavTree.BuildRoots()'s returned roots), with the active one highlighted
-                (see NavRailButtonStyle above and AppNavNode.IsActiveRoot). Occupies the same
-                Grid cell as NavTree - NavCollapseToggle_Click keeps their Visibility opposite
-                one another, so exactly one of the two is ever showing. ItemsSource is set in
-                code alongside NavTree's, from the same root list.
+                Collapsed-pane gutter: one icon per top-level node (the top ones under the header, Inbox/Settings/
+                Profile at the bottom), with the active one highlighted (see NavRailButtonStyle above and
+                AppNavNode.IsActiveRoot). Each shares a Grid cell with its tree - ApplyNavState keeps their
+                Visibility opposite one another, so exactly one of the two is ever showing.
             -->
             <ItemsControl x:Name="NavRail"
                           Grid.Row="1"
                           HorizontalAlignment="Center"
+                          VerticalAlignment="Top"
                           Margin="0,6,0,0"
+                          ItemTemplate="{StaticResource NavRailItemTemplate}"
                           Visibility="Collapsed">
                 <ItemsControl.ItemsPanel>
                     <ItemsPanelTemplate>
                         <StackPanel Orientation="Vertical" />
                     </ItemsPanelTemplate>
                 </ItemsControl.ItemsPanel>
-                <ItemsControl.ItemTemplate>
-                    <DataTemplate>
-                        <ToggleButton Style="{StaticResource NavRailButtonStyle}"
-                                      Click="NavRailButton_Click"
-                                      IsChecked="{Binding IsActiveRoot, Mode=OneWay}"
-                                      ToolTip="{Binding Item.Text}">
-                            <l:AppIcon Icon="{Binding Item.Icon}" Size="18" />
-                        </ToggleButton>
-                    </DataTemplate>
-                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <ItemsControl x:Name="NavRailBottom"
+                          Grid.Row="2"
+                          HorizontalAlignment="Center"
+                          VerticalAlignment="Bottom"
+                          Margin="0,0,0,6"
+                          ItemTemplate="{StaticResource NavRailItemTemplate}"
+                          Visibility="Collapsed">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <StackPanel Orientation="Vertical" />
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
             </ItemsControl>
         </Grid>
 
@@ -221,12 +262,12 @@
             UIElement and its Title to the view's Name - the "selected [nav] item" title was
             already a good fit for exactly that.
         -->
-        <xcad:DockingManager Grid.Row="2" Grid.Column="1">
+        <xcad:DockingManager x:Name="DockHost" Grid.Row="2" Grid.Column="1">
             <xcad:DockingManager.Layout>
                 <xcadLayout:LayoutRoot>
                     <xcadLayout:LayoutPanel Orientation="Vertical">
                         <xcadLayout:LayoutAnchorablePane>
-                            <xcadLayout:LayoutAnchorable Title="Toolbox">
+                            <xcadLayout:LayoutAnchorable x:Name="ToolboxPane" Title="Toolbox">
 
                             </xcadLayout:LayoutAnchorable>
                         </xcadLayout:LayoutAnchorablePane>

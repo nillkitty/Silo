@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 
@@ -22,18 +23,50 @@ namespace Silo.Nav;
 /// </remarks>
 public sealed class AppNavNode : INotifyPropertyChanged
 {
-    public AppNavItem                Item     { get; }
-    public IReadOnlyList<AppNavNode> Children { get; }
+    public AppNavItem Item { get; }
+
+    /// <summary>
+    ///     The child nodes. Observable, so a group can gain or lose children while it is on screen (the Silo's Worlds
+    ///     node, say, once its worlds are listed); the tree follows along.
+    /// </summary>
+    public ObservableCollection<AppNavNode> Children { get; }
 
     public AppNavNode(AppNavItem item, IReadOnlyList<AppNavNode>? children = null)
     {
         Item     = item;
-        Children = children ?? Array.Empty<AppNavNode>();
+        Children = children is null ? [] : new ObservableCollection<AppNavNode>(children);
+        _header  = item.Text;
     }
 
-    private bool _isSelected;
-    private bool _isExpanded;
-    private bool _isActiveRoot;
+    private string _header;
+    private bool   _isSelected;
+    private bool   _isExpanded;
+    private bool   _isActiveRoot;
+    private bool   _isEmphasized;
+
+    /// <summary>
+    ///     The text shown for the node. Starts as <see cref="AppNavItem.Text" />; a root that stands for an open Silo
+    ///     changes it as Silos open and close (see <c>MainWindow.xaml.cs</c>'s <c>SyncNav</c>).
+    /// </summary>
+    public string Header
+    {
+        get => _header;
+        set
+        {
+            if (_header == value)
+                return;
+
+            _header = value;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Header)));
+        }
+    }
+
+    /// <summary>Shown in the accent colour: the node of the Silo that is currently active.</summary>
+    public bool IsEmphasized
+    {
+        get => _isEmphasized;
+        set => _set(ref _isEmphasized, value);
+    }
 
     /// <summary>Two-way bound to TreeViewItem.IsSelected via NavTree's ItemContainerStyle.</summary>
     public bool IsSelected

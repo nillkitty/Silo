@@ -1,6 +1,7 @@
 ﻿using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Windows.Input;
+
 using Silo.Commanding;
 using Silo.Model;
 
@@ -12,6 +13,9 @@ namespace Silo;
 /// <param name="silo">The target Silo (which likely /was/ the active silo at the time, but not necessarily)/</param>
 public class SiloCommands(OpenSilo silo)
 {
+    /// <summary>File -> Close Silo</summary>
+    public SiloCommand CloseSilo => new CloseSiloCommand(Silo);
+
     /// <summary>Silo -> Convert to Archive Format</summary>
     public SiloCommand ConvertToArchive => new ConvertToArchiveCommand(Silo);
 
@@ -33,10 +37,10 @@ public class SiloCommands(OpenSilo silo)
     /// <summary>Silo -> New Credential</summary>
     public SiloCommand NewCredential => new NewCredentialCommand(Silo);
 
-    /// <summary>Silo -> Save</summary>
+    /// <summary>File -> Save Silo</summary>
     public SiloCommand SaveSilo => new SaveSiloCommand(Silo);
 
-    /// <summary>Silo -> Save As</summary>
+    /// <summary>File -> Save Silo As</summary>
     public SiloCommand SaveSiloAs => new SaveSiloAsCommand(Silo);
 
     /// <summary>

@@ -51,21 +51,34 @@
         </Style>
     </Menu.Resources>
     <MenuItem Header="_File" DataContext="{Binding App}">
-        <MenuItem Header="_New Silo" Command="{Binding NewSiloCommand}"   />
-        <MenuItem Header="_Open Silo" Command="{Binding OpenSiloCommand}" />
-        <MenuItem Header="Open from _URL..." Command="{Binding OpenSiloFromUrlCommand}" />
+        <MenuItem Header="_New Silo" InputGestureText="Ctrl+N" Command="{Binding NewSiloCommand}" />
+        <MenuItem Header="_Open Silo" InputGestureText="Ctrl+O" Command="{Binding OpenSiloCommand}" />
+        <MenuItem Header="Open from _URL..." InputGestureText="Ctrl+Shift+O" Command="{Binding OpenSiloFromUrlCommand}" />
         <Separator />
-        <MenuItem Header="E_xit"  Command="{Binding ExitCommand}" />
+        <!-- These act on the active Silo: each item re-points its own DataContext from App (this menu's) to App.ActiveSilo. -->
+        <MenuItem Header="_Save Silo" InputGestureText="Ctrl+S"
+                  DataContext="{Binding ActiveSilo}"
+                  CommandTarget="{Binding .}"
+                  Command="{Binding Commands.SaveSilo}" />
+        <MenuItem Header="Save Silo _As..." InputGestureText="Ctrl+Shift+S"
+                  DataContext="{Binding ActiveSilo}"
+                  CommandTarget="{Binding .}"
+                  Command="{Binding Commands.SaveSiloAs}" />
+        <MenuItem Header="_Close Silo"
+                  DataContext="{Binding ActiveSilo}"
+                  CommandTarget="{Binding .}"
+                  Command="{Binding Commands.CloseSilo}" />
+        <Separator />
+        <MenuItem Header="E_xit" InputGestureText="Alt+F4" Command="{Binding ExitCommand}" />
     </MenuItem>
     <MenuItem Header="_Silo"
                    IsEnabled="{Binding ., Converter={StaticResource ObjectExistsToBool}}"
                    DataContext="{Binding App.ActiveSilo}">
         <MenuItem Header="C_onnection"
+                       InputGestureText="Ctrl+Shift+N"
                        CommandTarget="{Binding .}"
                        Command="{Binding Commands.NewConnection}" />
         <MenuItem Header="_Credential" Command="{Binding Commands.NewCredential}" />
-        <MenuItem Header="_Save Silo" CommandTarget="{Binding .}" Command="{Binding Commands.SaveSilo}" />
-        <MenuItem Header="Save Silo _As..." CommandTarget="{Binding .}"  Command="{Binding Commands.SaveSiloAs}" />
         <MenuItem Header="Convert to _Archive Format" CommandTarget="{Binding .}"  Command="{Binding Commands.ConvertToArchive}" />
         <Separator />
         <MenuItem Header="_Export/Backup" >
@@ -83,7 +96,7 @@
     <MenuItem Header="_Edit">
 
     </MenuItem>
-    <MenuItem Header="_View">
+    <MenuItem Header="_View" SubmenuOpened="ViewMenu_SubmenuOpened">
         <MenuItem Header="_Theme" DataContext="{Binding App.Theme}">
             <MenuItem Header="_Light"
                            IsCheckable="True"
@@ -128,6 +141,13 @@
                            Command="{Binding}"
                            CommandParameter="Debug" />
         </MenuItem>
+        <!--
+            The dock panes can be closed with their own X; these bring them back (and hide them again). The check
+            marks are refreshed each time the menu opens (ViewMenu_SubmenuOpened).
+        -->
+        <Separator />
+        <MenuItem x:Name="ViewToolbox" Header="_Toolbox" IsCheckable="True" Click="ViewPane_Click" />
+        <MenuItem x:Name="ViewSelectedItem" Header="_Selected Item" IsCheckable="True" Click="ViewPane_Click" />
     </MenuItem>
     <MenuItem Header="_Run">
 

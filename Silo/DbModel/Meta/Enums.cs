@@ -3,7 +3,7 @@
 /// <summary>
 ///     Represents a user-defined enumeration which ties known values to labels
 /// </summary>
-public class MvEnum
+public class MvEnum : ItemContainer<MvEnumValue>
 {
     /// <summary>
     ///     Flags related to this enum type
@@ -95,7 +95,7 @@ public enum EnumFlags
 /// <summary>
 ///     Defines a known value in an MvEnum
 /// </summary>
-public class MvEnumValue
+public class MvEnumValue : Item
 {
     /// <summary>
     ///     The parent Enum which owns this value

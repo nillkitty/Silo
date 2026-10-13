@@ -1,6 +1,5 @@
 ﻿using System.Windows;
 using System.Windows.Controls;
-using Microsoft.AspNetCore.Mvc.Diagnostics;
 using Microsoft.Win32;
 using Serilog;
 using Silo.Contracts.Providers.Data;
@@ -19,6 +18,21 @@ public abstract record SiloCommand(
     bool                 IsCheckable = false)
     : AppCommand(Header, null, null, ToolTip, Icon, IsCheckable, Checker)
 {
+}
+
+/// <summary>
+///     File -> Close Silo: closes the Silo, first offering to save unsaved changes (cancelling the offer keeps it open).
+/// </summary>
+public record CloseSiloCommand(OpenSilo Silo)
+    : SiloCommand("_Close Silo", Enabler.IsSiloLoaded)
+{
+    protected override async Task OnExecute(object? parameter)
+    {
+        var    s    = Silo.Required();
+        string name = s.Name ?? "Silo";
+
+        App.Status(await s.CloseAsync() ? $"Closed {name}" : "Close cancelled");
+    }
 }
 
 public record SaveSiloCommand(OpenSilo Silo)

@@ -1,6 +1,7 @@
 using System.IO;
 using Silo.Providers.Document;
 using YamlDotNet.Core;
+using Telefrag.DI;
 
 namespace Silo.Providers.Format;
 
@@ -21,6 +22,7 @@ namespace Silo.Providers.Format;
 ///     <c>YamlDotNet.Core.Events</c> -- both to avoid needing it and to avoid name collisions
 ///     with this file's own <c>Yaml*Node</c> types.
 /// </remarks>
+[Singleton(typeof(IFileFormat))]
 public class YamlFormat : IFileFormat, IDocumentProvider<YamlDocNode>
 {
     public string DisplayName   { get; } = "YAML File";

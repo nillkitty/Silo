@@ -159,7 +159,11 @@ public class AppIconExtension : MarkupExtension
     [TypeConverter(typeof(IconKeyConverter))]
     public Geometry? Icon { get; set; }
 
-    public double Size { get; set; } = 16;
+    /// <summary>
+    ///     Null (the default) leaves <see cref="AppIcon.Size" /> unset, so the icon follows the live
+    ///     <c>AppDesignSettings.IconSize</c> via the style in App.xaml; a value pins this icon to that size.
+    /// </summary>
+    public double? Size { get; set; }
 
     public double StrokeThickness { get; set; }
 
@@ -177,11 +181,18 @@ public class AppIconExtension : MarkupExtension
         Icon = (Geometry)new IconKeyConverter().ConvertFrom(null!, null, iconKey)!;
     }
 
-    public override object ProvideValue(IServiceProvider serviceProvider) =>
-        new AppIcon
-        {
-            Icon            = Icon,
-            Size            = Size,
-            StrokeThickness = StrokeThickness
-        };
+    public override object ProvideValue(IServiceProvider serviceProvider)
+    {
+        var icon = new AppIcon
+                   {
+                       Icon            = Icon,
+                       StrokeThickness = StrokeThickness
+                   };
+
+        // Only a local value when asked for: a local Size would beat the style's live IconSize binding.
+        if (Size is { } size)
+            icon.Size = size;
+
+        return icon;
+    }
 }

@@ -260,6 +260,8 @@ public static class DesignMenu
                        Padding         = new Thickness(3)
                    };
 
+        var hosted = new List<UIElement>();
+
         for (int g = 0; g < groups.Count; g++)
         {
             if (g > 0) menu.Items.Add(BuildSeparator());
@@ -268,10 +270,65 @@ public static class DesignMenu
                 if (item.IsSeparator)
                     menu.Items.Add(BuildSeparator());
                 else
+                {
+                    if (item.Content != null) hosted.Add(item.Content);
                     menu.Items.Add(BuildMenuItem(item));
+                }
         }
 
+        // A content item's element is created once and lives as long as the item, but every showing builds a
+        // brand new menu around it - and an element can have only one logical parent. Letting go of it when the
+        // menu closes (and again, as a safety net, when the next menu takes it) keeps it reusable.
+        // Only release what this menu still holds: a right-click while one menu is open builds the next menu
+        // (and hands it the shared content) before the old one's Closed event arrives, and releasing then would
+        // empty the new menu.
+        if (hosted.Count > 0)
+            menu.Closed += (_, _) =>
+                           {
+                               foreach (var element in hosted)
+                                   if (IsInside(element, menu))
+                                       Release(element);
+                           };
+
         return menu;
+    }
+
+    private static bool IsInside(DependencyObject? node, DependencyObject root)
+    {
+        while (node != null)
+        {
+            if (ReferenceEquals(node, root)) return true;
+            node = LogicalTreeHelper.GetParent(node);
+        }
+
+        return false;
+    }
+
+    /// <summary>Takes <paramref name="content"/> out of whatever menu piece last held it, so another can adopt it.</summary>
+    private static void Release(UIElement content)
+    {
+        switch (LogicalTreeHelper.GetParent(content))
+        {
+            case Panel panel:
+                panel.Children.Remove(content);
+                break;
+            case HeaderedItemsControl headered when ReferenceEquals(headered.Header, content):
+                headered.Header = null;
+                break;
+            case ContentControl host when ReferenceEquals(host.Content, content):
+                host.Content = null;
+                break;
+            case Decorator decorator when ReferenceEquals(decorator.Child, content):
+                decorator.Child = null;
+                break;
+        }
+    }
+
+    /// <summary>The item's content, ready to be put in a new menu piece (see <see cref="Release"/>).</summary>
+    private static UIElement TakeContent(UIElement content)
+    {
+        Release(content);
+        return content;
     }
 
     private static MenuItem BuildMenuItem(DesignMenuItem item)
@@ -286,13 +343,13 @@ public static class DesignMenu
         {
             if (string.IsNullOrEmpty(item.Header))
             {
-                mi.Header = item.Content;
+                mi.Header = TakeContent(item.Content);
             }
             else
             {
                 var labeled = new StackPanel();
                 labeled.Children.Add(new TextBlock { Text = item.Header, FontWeight = FontWeights.Bold, Margin = new Thickness(0, 0, 0, 3) });
-                labeled.Children.Add(item.Content);
+                labeled.Children.Add(TakeContent(item.Content));
                 mi.Header = labeled;
             }
 

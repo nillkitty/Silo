@@ -1,126 +1,35 @@
-﻿## Silo
-### Format
-A silo file is a zipped folder containing several
-SQLite databases.  Some of the files that may be found
-in a Silo are:
+﻿# Silo
 
-| File | Format | Description
-|------|--------|--------------------|
-| u.db | SQLite | Universal Database |
-| w.db | SQLite | World Database(s)  |
-| x.db | SQLite | Scratch/Temp Database |
-| y.db | SQLite | Metaverse Database |
-| z.db | SQLite | Global Database  |
+## Introduction
+Silo is a powerful data processing and authoring application that puts you in control of an open-ended universe of data, 
+data processing, automation, interaction, visualization, and data analysis.
 
-### Storage formats
-A Silo is stored in one of two formats; both are `.silo` files and open the same way (the first bytes say which):
+Create your own personal view of the data around you,  or publish a turnkey view of your own systems' data for others to interact with your data through.
 
-| Format | On disk | Use for |
-|--------|---------|---------|
-| **Simple** (default for new Silos) | One bare SQLite file. Every database below is a set of prefixed tables in it: `Header`, `User`, ... (z), `x_Scalar` (x), `u_Unit` (u), `y_MvType` (y), `w_<key>_World` (a World). | Most Silos. |
-| **Archive** | A zip of `z.db`, `x.db`, `u.db`, `y.db`, one `w-<key>.db` per World (max 7) and optionally an `assemblies/` folder. | Big Silos; Silos that carry .NET assemblies. |
-
-A simple Silo that grows past a threshold (author setting, 64 MB) is *offered* conversion to the archive format (File menu:
-Silo > Convert to Archive Format). It is never converted silently.
-
-**The original file is never locked.** A Silo is edited in a private working copy (a copy of the single file, or the archive
-extracted to `%TEMP%\SiloWorking`); the original is only read with shared access and replaced atomically on save, so other
-programs can open, copy, sync or back it up while it is open. Before saving, the file is checked for changes made by someone
-else; what happens then is an author setting (prompt - the default, with "Don't ask me again" -, always overwrite, or always save
-a "conflicted copy").
-
-**Every save is recorded** in the Silo's `SaveLog` table, the same way for both formats: time, save counter
-(`Header.Version`), format, user, machine and the SHA-256 of the file as it was before the save (a file cannot contain its own
-hash, so each row carries its predecessor's). The saved file's last-write time is set to exactly the logged time. The same
-record is raised as an event after each save.
-
-**Solo Silos** must run in their own process: an archive containing an `assemblies/` folder (or a `.solo` marker file), or a
-simple Silo whose SQLite header has `application_id = 0x53494C4F` ("SILO") and bit 0 of `user_version` set. This is readable
-without extracting or opening the database. See `Hosting/STARTUP-FLOW.md`.
-
-**Remote Silos** (`silo.exe https://host/path/my.silo`): opened by a conditional GET (only a changed file is downloaded) into a
-local cache, saved locally, then uploaded with PUT. If the remote changed meanwhile it is a conflict (same author setting). Git
-URLs are recognised but not implemented yet (`Remote/GitSiloRemote.cs`).
-
-### Encryption
-#### Unencrypted Silos
-Unencrypted silos are a single level archive containing
-all of the relevant databse files, with no encryption (except
-the cipher used for **Secret** blobs such as connection credentials).
-
-* my_silo.silo  [zip]
-  * z.db
-  * x.db
-  * u.db
-
-#### Encrypted Silos
-Encrypted silos are structured so that the bulk of the data is stored in an encrypted, inner-archive (named 'encrypted') along with a stub header database in the outer (unencypted) archive:
-
-* my_silo.silo  [zip, no pwd]
-  * z.db        [stub]
-  * encrypted   [zip, secured]
-	* z.db
-	* x.db
-	* u.db
-
-#### The Stub Database
-The stub database must contain exactly 1 of:
-
-* **Header** record
-
-And can contain any of:
-
-* **Password** record(s) - the key for the encrypted archive, encrypted with a human-enterable password which can be used to unlock the Silo.
-* **UserKey** record(s) - the key for the encrypted archive, encrypted using the public key of a user from one of their user certificates, salted by their Sid.
- 
-### Global Index
-**z.db** is the only required database in a silo and it
-contains the Silo's top level indexes and cross-references, as well as the silo's schema, audit log, and metadata, 
-e.g. for synchronization.
-
-* Header
-* User
-* File
-* Connection
-* Location
-* Pref
-* Secret
-* Node
-* Assembly
-* Window
-* Audit
-* Authorization
-
-### Scratch Database
-The scratch database (**x.db**) is where all session information, such as variables, temporarily defined functions, pasted data,
-and any other trasient data.
-
-* Scalar
-* Table
-* Function
-* Synonym
-* Pasted
-* ReplStack
-* OpenFile
-* OpenFileMru
-* VariableMru
-* PeopleMru
-* ColorMru
-* TextMru
-* AssemblyMru
-
-### World Database(s)
-World databases (**w-*.db**) store cached and/or mirrored data in the source schema of the system it was read from.  All data read via connectors is read into a world database for manipulation.
-
-
-### Metaverse Database
-The metaverse database (**y.db**) is used to define and store the aggregate, normalized version of objects which are derived from multiple sources.
-
-* mv_class
-* mv_attribute
-* mv_class_attribute
-* mv_obj
-
-### Universal Database
-The universal databse (**u.db**) stores data which is authoritative outSide of the Silo and all connected worlds;  ambient data which theoretically is the same for everyone, such as the list of all Zip codes, Area codes, or US states.
-
+### Things you can do with Silo
+* **Pull in data**
+	* Get data from any number of sources, including files, local APIs, network APIs, web content, LDAP, SQL, spreadsheets, blob storage, and more.
+	* Customizable level of detail determines how much of the data you're replicating locally, versus what's pulled as needed
+	* Paste in arbitrary data to play with, importing an entire data source, or scheduling ongoing synchronization 
+* **Shape anything**
+	* Give your own names, descriptions, icon, formatting, and behaviors to anything
+	* Reshape the data, build new meta types using fields from connected data, push data to other sources based on your custom composition
+	* Create relationships between data from disparate sources
+* **Search everything**
+	* Search across everything with highly customizable search and indexing options
+	* Query your data -- regardless of source -- using SQL or other query languages
+* **Interaction**
+	* Build custom user interfaces for visualizing objects, table rows, documents -- anything
+* **Visualization**
+	* Create interactive diagrams, network maps, org charts that update as your data sources update.
+	* Create dashboards by assembling multiple views of relevant data in panels
+* **Analytics**
+	* Find outliers, anamolies, missing data, duplicate records, and mismatched relations automatically
+	* Use AI to summarize, sanitize, interpret, augment, or synthesize data.
+* **Authoring**
+	* Package any set of functionality up as a **template** (to build new Silos from) or a **bundle** (to be imported into an existing Silo).
+	* When you're ready to work on something new, hand off the entire Silo to a new user, choosing what (credentials, keys) they keep and what they'll need to supply
+* **Ecosystem**
+	* Create an Exchange to publish and subscribe to peer Silo users' data types, views, sources, and processing offerings.
+	* Run your Silo as a server or host it from IIS to provide APIs, web pages, and other resources from your Silo to your business or the world.
+	* Register system URI schemes that allow hyperlinking directly to discrete pieces of data.

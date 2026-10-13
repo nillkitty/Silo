@@ -5,9 +5,11 @@ using Newtonsoft.Json.Linq;
 using Silo.Contracts.Providers.Document;
 using Silo.Contracts.Providers.Reflection;
 using Silo.Providers.Document;
+using Telefrag.DI;
 
 namespace Silo.Providers.Format;
 
+[Singleton(typeof(IFileFormat))]
 public class JsonFormat : IFileFormat, IDocumentProvider<JToken>
 {
     public JsonLoadSettings? Settings { get; set; } = new()

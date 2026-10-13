@@ -52,3 +52,39 @@ public class Header
     /// </summary>
     public int Version { get; set; }
 }
+
+/// <summary>
+///     Placeholder used in s template for something the user provides at runtime
+/// </summary>
+public class Placeholder
+{
+    /// <summary>
+    ///     Can be a placeholder instance, placeholder name, or array of any of those
+    /// </summary>
+    public object? DependsOn { get; set; }
+
+    /// <summary>
+    ///     Description shown to user while collecting value
+    /// </summary>
+    public string? Description { get; set; }
+
+    /// <summary>
+    ///     Database primary key
+    /// </summary>
+    public int Id { get; set; }
+
+    /// <summary>
+    ///     Name of placeholder
+    /// </summary>
+    public string? Name { get; set; }
+
+    /// <summary>
+    ///     Placeholder content to use until it is filled in
+    /// </summary>
+    public object? PlaceholderContent { get; set; }
+
+    /// <summary>
+    ///     The type that the placeholder is placeholding
+    /// </summary>
+    public Type? PlaceholderForType { get; set; }
+}

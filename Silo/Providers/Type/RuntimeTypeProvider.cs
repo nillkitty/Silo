@@ -8,12 +8,14 @@ using System.Linq;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using Silo.Contracts.Providers.Data.Shape;
+using Telefrag.DI;
 
 namespace Silo.Providers;
 
 /// <summary>
 ///     Provides access to runtime types with the prefix 'clr:'
 /// </summary>
+[Singleton(typeof(ITypeProvider))]
 public class RuntimeTypeProvider : ITypeProvider
 {
     public string? DisplayName => "Runtime Types";

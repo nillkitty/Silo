@@ -250,11 +250,31 @@ public partial class App : Application, IContainerHost
         return _db.AddItem(item);
     }
 
+    /// <summary>
+    ///     WPF matches an implicit style (Theme.Styles.xaml's <c>TargetType=Window</c> one) on the exact type only, so
+    ///     MainWindow, FormWindow, ConnectionWindow and every other Window subclass would miss it and keep the stock white
+    ///     background whatever the theme. Making that style the default <c>Style</c> of <see cref="Window" /> itself reaches
+    ///     all of them. Must run before the first window is created.
+    /// </summary>
+    private void _themeDerivedWindows()
+    {
+        try
+        {
+            if (TryFindResource(typeof(Window)) is Style windowStyle)
+                FrameworkElement.StyleProperty.OverrideMetadata(typeof(Window), new FrameworkPropertyMetadata(windowStyle));
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Could not apply the themed Window style to window subclasses");
+        }
+    }
+
     protected override void OnStartup(StartupEventArgs e)
     {
         _configLogging();
         _discoverRegs();
         AppTheme.Apply();
+        _themeDerivedWindows();
         AppDesignSettings.Apply();
         AppDesignLevel.Apply();
         SiloFileSettings.Apply();
@@ -434,5 +454,21 @@ public partial class App : Application, IContainerHost
         {
             action();
         }
+    }
+
+    public static OpenSilo? RequireActiveSilo()
+    {
+        if (Instance?.ActiveSilo is not { } silo)
+        {
+            Alert("Creating this item requires an open, active Silo");
+            return null;
+        }
+
+        return silo;
+    }
+
+    private static void Alert(string creatingThisItemRequiresAnOpenActiveSilo)
+    {
+        throw new NotImplementedException();
     }
 }

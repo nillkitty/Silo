@@ -1,0 +1,114 @@
+﻿<SiloTemplate xmlns="clr-namespace:Silo.Contracts.Core"
+              xmlns:z="clr-namespace:Silo.DbModel.Global"
+              xmlns:w="clr-namespace:Silo.DbModel.Worlds"
+              xmlns:u="clr-namespace:Silo.DbModel.Universal"
+              xmlns:m="clr-namespace:Silo.DbModel.Meta"
+              Name="Small Business" Description="Local database for Product, Order, Invoice, Employee, Customer, etc.">
+
+	<u:IncludeUniversal Id="region-us-state" Critical="true" />
+	<u:IncludeUniversal Id="region-us-zipcode" Critical="true" />
+	<u:IncludeUniversal Id="region-country" Critical="true" />
+
+    <m:MvEnum Name="EmpStatus">
+        <m:MvEnumValue Value="0" Name="Interview Scheduled" />
+        <m:MvEnumValue Value="1" Name="Probation" />
+        <m:MvEnumValue Value="2" Name="Active" />
+        <m:MvEnumValue Value="3" Name="Suspended" />
+        <m:MvEnumValue Value="4" Name="Terminated" />
+        <m:MvEnumValue Value="5" Name="OnLeave" />
+    </m:MvEnum>
+    <m:MvEnum Name="OrderStatus">
+        <m:MvEnumValue Value="0" Name="Placed" />
+        <m:MvEnumValue Value="1" Name="Shipped" />
+        <m:MvEnumValue Value="2" Name="Cancelled" />
+        <m:MvEnumValue Value="3" Name="Completed" />
+    </m:MvEnum>
+    <m:MvEnum Name="LocationType" Type="String">
+        <m:MvEnumValue Value="Store" Name="Store" />
+        <m:MvEnumValue Value="Office" Name="Office" />
+    </m:MvEnum>
+    <w:World Key="conglomo" DisplayName="Conglomo®, We own you™" Flags="Authority">
+		<w:WorldType Name="Contact">
+            <w:WorldField Flags="Key,Identity" Name="Id" DataType="int"/>
+            <w:WorldField Flags="Anr,Index,Required" Name="Name" DataType="string" />
+            <w:WorldField Flags="Anr,Index" Name="Company" DataType="string" />
+           
+            <w:WorldField Name="Phone" DataType="phone" />
+            <w:WorldField Name="Email" DataType="email" />
+            <w:WorldField Name="Web" DataType="url" />
+            <w:WorldField Name="Photo" DataType="thumbnail" />
+		</w:WorldType>
+        <w:WorldType Name="Employee" Inherits="Contact">
+            <w:WorldField Flags="Anr,Index,Required" Name="Employee ID" DataType="string" />
+            <w:WorldField Flags="Reference,Index" Name="Boss" DataType="conglomo:Employee" />
+            <w:WorldField Flags="Index,Required" Name="Status" DataType="meta:EmpStatus" />
+            <w:WorldField Flags="Reference,Index,Multivalue" Name="Workers" DataType="conglomo:Employee" />
+            <w:WorldField Flags="Reference,Index,Multivalue" Name="Equipment" DataType="conglomo:Device" />
+		</w:WorldType>
+        <w:WorldType Name="Customer" Inherits="Contact">
+            <w:WorldField Flags="Reference,Index,Multivalue" Name="Orders" DataType="conglomo:Order" />
+			<w:WorldField Flags="Reference,Index,Multivalue" Name="Invoices" DataType="conglomo:Invoice" />
+			<w:WorldField Flags="Reference,Multivalue" Name="Products" DataType="conglomo:Product" />
+		</w:WorldType>
+        <w:WorldType Name="Product">
+			<w:WorldField Name="ProductUrl" DataType="url" />
+			<w:WorldField Flags="Index,Anr" Name="Name" DataType="string" />
+			<w:WorldField Flags="Index,Anr,Key" Name="SKU" DataType="string" />
+            <w:WorldField Name="SupplierContact" DataType="conglomo:Contact" />
+			<w:WorldField Name="Supplier" DataType="string" />
+			<w:WorldField Name="Price" DataType="usd" />
+			<w:WorldField Name="Cost" DataType="supply" />
+			<w:WorldField Name="PriceHistory" DataType="usd history" />
+			<w:WorldField Name="CostHistory" DataType="supply history" />
+            
+        </w:WorldType>
+        <w:WorldType Name="Order">
+            <w:WorldField Flags="Key,Identity" Name="OrderId" DataType="int" />
+            <w:WorldField Flags="Index,Required" Name="Customer" DataType="conglomo:Customer" />
+            <w:WorldField Flags="Required" Name="Items" DataType="(conglomo:Product, int) Array" />
+            <w:WorldField Flags="Required" Name="ShipTo" DataType="coglomo:PhysicalAddress" />
+            <w:WorldField Flags="Required" Name="BillTo" DataType="coglomo:PhysicalAddress" />
+			<w:WorldField Name="Notes" DataType="string" />
+            <w:WorldField Flags="Required" Name="TimePlaced" DataType="DateTime" />
+            <w:WorldField Name="TimeShipped" DataType="DateTime" />
+            <w:WorldField Name="TimeDeliveryConfirmed" DataType="DateTime" />
+            <w:WorldField Name="TimeCancelled" DataType="DateTime" />
+            <w:WorldField Name="State" DataType="meta:OrderStatus" />
+		</w:WorldType>
+        <w:WorldType Name="Invoice">
+            <w:WorldField Flags="Required" Name="Order" DataType="conglomo:Order" />
+            <w:WorldField Flags="Key,Identity" Name="InvoiceNumber" DataType="int" />
+            <w:WorldField Name="Payment" DataType="string" />
+            <w:WorldField Flags="Anr" Name="Amount" DataType="usd" />
+            <w:WorldField Name="Tax" DataType="usd" />
+            <w:WorldField Flags="Anr" Name="Total" DataType="usd" />
+            <w:WorldField Name="State" DataType="meta:InvoiceStatus" />
+		</w:WorldType>
+		<w:WorldType Name="Device">
+            <w:WorldField Flags="Key" Name="Name" DataType="string" />
+            <w:WorldField Flags="Anr,Index" Name="Serial" DataType="string" />
+            <w:WorldField Name="Manufacturer" DataType="string" />
+            <w:WorldField Name="Model" DataType="string" />
+            <w:WorldField Flags="Required" Name="RegisteredTo" DataType="conglomo:Employee" />
+		</w:WorldType>
+        <w:WorldType Name="PhysicalAddress">
+            <w:WorldField Name="Address" DataType="string" />
+            <w:WorldField Name="City" DataType="string" />
+            <w:WorldField Name="State" DataType="region-us-state" />
+            <w:WorldField Name="Country" DataType="region-country" />
+            <w:WorldField Name="ZIP" DataType="region-us-zipcode" />
+            <w:WorldField Name="Postal Code" DataType="string" />
+        </w:WorldType>
+        <w:WorldType Name="Location" Include="PhysicalAddress">
+			<w:WorldField Flags="Anr,Index,Required" Name="Name" DataType="string" />
+            <w:WorldField Flags="Index" Name="LocationType" DataType="meta:LocationType" />
+		</w:WorldType>
+        <w:WorldType Name="Inventory">
+            <w:WorldField Flags="Key" Name="Product" DataType="conglomo:Product" />
+            <w:WorldField Flags="Key" Name="Location" DataType="conglomo:Location" />
+            <w:WorldField Name="QtyOnHand" DataType="int" />
+        </w:WorldType>
+    </w:World>
+    
+</SiloTemplate>
+

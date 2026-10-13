@@ -1,0 +1,17 @@
+﻿<SiloTemplate xmlns="clr-namespace:Silo.Contracts.Core"
+              xmlns:z="clr-namespace:Silo.DbModel.Global"
+              xmlns:u="clr-namespace:Silo.DbModel.Universal"
+              xmlns:m="clr-namespace:Silo.DbModel.Meta"
+              Name="Starter" Description="Includes a number of common pre-existing types, 
+              interfaces, examples; just delete anything you don't want.">
+
+    <u:IncludeUniversal Id="region-*" />
+    <u:IncludeUniversal Id="net-*" />
+    <u:IncludeUniversal Id="silo-*" />
+
+    <z:Connection SourceUri="file:///" />      
+    <z:Connection SourceUri="reg:///" />      
+    <z:Connection SourceUri="reg:///" />      
+    
+</SiloTemplate>
+

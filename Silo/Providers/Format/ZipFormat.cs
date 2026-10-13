@@ -1,8 +1,10 @@
 using System.IO;
 using System.IO.Compression;
+using Telefrag.DI;
 
 namespace Silo.Providers.Format;
 
+[Singleton(typeof(IFileFormat))]
 public class ZipFormat : IFileFormat, IArchiveFormat
 {
     public string DisplayName   { get; } = "Zip Archive";

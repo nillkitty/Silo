@@ -124,7 +124,8 @@ public class DefaultNewSiloDialog : INewSiloDialog
             details.Children.Add(_contents);
             var scroller = new ScrollViewer
                            {
-                               Content = details, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Margin = new Thickness(4, 0, 0, 0)
+                               Content = details, VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                               Margin  = new Thickness(4, 0, 0, 0)
                            };
             Grid.SetColumn(scroller, 1);
             middle.Children.Add(_list);

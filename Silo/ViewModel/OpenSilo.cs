@@ -165,6 +165,7 @@ public class OpenSilo : ModelBase
 
         var silo = OpenFile(new SiloFile(sync.LocalFile));
         silo.RemoteUri = uri;
+        RecentSilos.Instance.Record(silo); // now listed by its URL rather than its local cache file
         if (silo.Data is ISiloFile f) f.Remote = sync.Remote;
         if (sync.Notice is { } notice) App.Status(notice);
         silo.StateChanged?.Invoke(silo, EventArgs.Empty);
@@ -190,6 +191,9 @@ public class OpenSilo : ModelBase
 
         OpenSilos.Add(this);
         App.Instance!.ActiveSilo = this;
+
+        // the Recent view lists this Silo from now on
+        RecentSilos.Instance.Record(this);
     }
 
     private void SetDirty(bool dirty)

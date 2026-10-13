@@ -1,4 +1,5 @@
 ﻿using System.ComponentModel;
+using Silo.Converters;
 using Silo.Model;
 
 namespace Silo.DbModel.Global;
@@ -28,13 +29,13 @@ public abstract class TimedUserEntity : UserEntity
 /// </summary>
 public class Window : TimedUserEntity
 {
+    public int    Height { get; set; }
     public int    Id     { get; set; }
     public string Type   { get; set; } = string.Empty;
     public Uri    Uri    { get; set; } = null!;
+    public int    Width  { get; set; }
     public int    X      { get; set; }
     public int    Y      { get; set; }
-    public int    Width  { get; set; }
-    public int    Height { get; set; }
 }
 
 /// <summary>
@@ -43,8 +44,8 @@ public class Window : TimedUserEntity
 public class Audit : TimedUserEntity
 {
     public int      Id      { get; set; }
-    public DateTime TimeUtc { get; set; } = DateTime.UtcNow;
     public string   Message { get; set; } = string.Empty;
+    public DateTime TimeUtc { get; set; } = DateTime.UtcNow;
 }
 
 /// <summary>
@@ -52,9 +53,11 @@ public class Audit : TimedUserEntity
 /// </summary>
 public class Connection : TimedUserEntity
 {
-    public int    Id          { get; set; }
     public string DisplayName { get; set; } = string.Empty;
-    public Uri    SourceUri   { get; set; } = null!;
+    public int    Id          { get; set; }
+
+    [TypeConverter(typeof(LenientUriTypeConverter))]
+    public Uri? SourceUri { get; set; } = null!;
 }
 
 /// <summary>
@@ -62,9 +65,9 @@ public class Connection : TimedUserEntity
 /// </summary>
 public class Location : TimedUserEntity
 {
+    public string DisplayName { get; set; } = string.Empty;
     public int    Id          { get; set; }
     public Uri    Uri         { get; set; } = null!;
-    public string DisplayName { get; set; } = string.Empty;
 }
 
 /// <summary>
@@ -72,18 +75,17 @@ public class Location : TimedUserEntity
 /// </summary>
 public class User
 {
-    public int Id { get; set; }
-
     /// <summary>User domain name</summary>
     public string Domain { get; set; } = string.Empty;
+
+    public bool Group { get; set; }
+    public int  Id    { get; set; }
 
     /// <summary>User name</summary>
     public string Name { get; set; } = string.Empty;
 
     /// <summary>OS Security identifier</summary>
     public string SID { get; set; } = string.Empty;
-
-    public bool Group { get; set; }
 }
 
 /// <summary>
@@ -91,9 +93,9 @@ public class User
 /// </summary>
 public class Pref : TimedUserEntity
 {
+    public string Data { get; set; } = string.Empty;
     public int    Id   { get; set; }
     public string Key  { get; set; } = string.Empty;
-    public string Data { get; set; } = string.Empty;
 }
 
 /// <summary>
@@ -101,11 +103,11 @@ public class Pref : TimedUserEntity
 /// </summary>
 public class Secret : TimedUserEntity
 {
-    public int    Id  { get; set; }
-    public string Key { get; set; } = string.Empty;
-
     [TypeConverter(typeof(ByteArrayConverter))]
     public byte[] Data { get; set; } = [];
+
+    public int    Id  { get; set; }
+    public string Key { get; set; } = string.Empty;
 
     public OpenSilo UpdateCredential(string user, string pass, string? domain)
     {
@@ -118,13 +120,13 @@ public class Secret : TimedUserEntity
 /// </summary>
 public class Node : TimedUserEntity
 {
-    public int    Id       { get; set; }
-    public string Name     { get; set; } = string.Empty;
-    public Uri    Uri      { get; set; } = null!;
-    public Uri    IconUri  { get; set; } = null!;
-    public int    Expanded { get; set; }
+    public int Expanded { get; set; }
+    public Uri IconUri  { get; set; } = null!;
+    public int Id       { get; set; }
 
-    public bool IsVisible { get; set; }
+    public bool   IsVisible { get; set; }
+    public string Name      { get; set; } = string.Empty;
+    public Uri    Uri       { get; set; } = null!;
 }
 
 /// <summary>
@@ -132,13 +134,13 @@ public class Node : TimedUserEntity
 /// </summary>
 public class File : TimedUserEntity
 {
-    public int          Id           { get; set; }
-    public string       Filename     { get; set; } = string.Empty;
-    public SiloFileType Type         { get; set; }
-    public int          ExpectedSize { get; set; }
-
     [TypeConverter(typeof(ByteArrayConverter))]
     public byte[] Crc32 { get; set; } = [];
+
+    public int          ExpectedSize { get; set; }
+    public string       Filename     { get; set; } = string.Empty;
+    public int          Id           { get; set; }
+    public SiloFileType Type         { get; set; }
 }
 
 public enum SiloFileType
@@ -189,9 +191,9 @@ public enum SiloFileType
 /// </remarks>
 public class Authorization : TimedUserEntity
 {
-    public int           Id              { get; set; }
     public User          AuthorizedUser  { get; set; } = null!;
     public User          AuthorizingUser { get; set; } = null!;
+    public int           Id              { get; set; }
     public SiloUserLevel Level           { get; set; }
 
     public override User User
@@ -206,10 +208,10 @@ public class Authorization : TimedUserEntity
 /// </summary>
 public class Assembly : TimedUserEntity
 {
-    public int    Id           { get; set; }
     public string AssemblyName { get; set; } = string.Empty;
-    public Uri    SourceUri    { get; set; } = null!;
     public bool   Critical     { get; set; }
+    public int    Id           { get; set; }
+    public Uri    SourceUri    { get; set; } = null!;
 }
 
 [Flags]

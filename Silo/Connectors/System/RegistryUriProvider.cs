@@ -1,8 +1,10 @@
 using Microsoft.Win32;
 using Silo.Shell;
+using Telefrag.DI;
 
 namespace Silo.Connectors.System;
 
+[Singleton(typeof(IUriProvider<RegistryPath>))]
 public class RegistryUriProvider : IUriProvider<RegistryPath>
 {
     // reg:/hkcu:/hklm:/hkcr:/hku: are only meaningful inside Silo -- nothing to register with the shell.

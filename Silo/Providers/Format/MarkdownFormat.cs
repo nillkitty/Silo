@@ -4,6 +4,7 @@ using Silo.Providers.Data;
 using Silo.Providers.Document;
 using MarkdigDocument = Markdig.Syntax.MarkdownDocument;
 using Markdown = Markdig.Markdown;
+using Telefrag.DI;
 
 namespace Silo.Providers.Format;
 
@@ -18,6 +19,7 @@ namespace Silo.Providers.Format;
 ///     the alias, a type named <c>MarkdownDocument</c> declared in this very namespace (see below)
 ///     would shadow Markdig's own type of the same simple name.
 /// </remarks>
+[Singleton(typeof(IFileFormat))]
 public class MarkdownFormat : IFileFormat, IDocumentProvider<MarkdigDocument>
 {
     /// <summary>

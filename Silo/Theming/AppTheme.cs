@@ -67,6 +67,13 @@ public sealed class AppTheme : ICommand, INotifyPropertyChanged
     public bool IsSystem => _mode == ThemeMode.System;
 
     /// <summary>
+    ///     True when the dark palette is the one actually applied - <see cref="ThemeMode.Dark" />, or
+    ///     <see cref="ThemeMode.System" /> on a machine set to dark. (<see cref="IsDark" /> is only the menu's "Dark" choice.)
+    ///     Things that cannot follow the palette brushes (the docking chrome) switch on this.
+    /// </summary>
+    public bool IsEffectivelyDark { get; private set; }
+
+    /// <summary>
     ///     Applies the last-saved Light/Dark/System choice (defaulting to System). Call
     ///     once, early in startup - before the main window is created - and after
     ///     <c>Theme.Styles.xaml</c> has already been merged into
@@ -96,6 +103,7 @@ public sealed class AppTheme : ICommand, INotifyPropertyChanged
         };
 
         var palette = new ResourceDictionary { Source = dark ? DarkPaletteUri : LightPaletteUri };
+        IsEffectivelyDark = dark;
 
         var merged = Application.Current.Resources.MergedDictionaries;
         if (_appliedPalette != null) merged.Remove(_appliedPalette);
@@ -114,6 +122,7 @@ public sealed class AppTheme : ICommand, INotifyPropertyChanged
         OnPropertyChanged(nameof(IsLight));
         OnPropertyChanged(nameof(IsDark));
         OnPropertyChanged(nameof(IsSystem));
+        OnPropertyChanged(nameof(IsEffectivelyDark));
     }
 
     /// <summary>
