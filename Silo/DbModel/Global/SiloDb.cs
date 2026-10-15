@@ -24,13 +24,32 @@ public abstract class TimedUserEntity : UserEntity
     public DateTime Modified { get; set; } = DateTime.UtcNow;
 }
 
+/// <summary>How a remembered window was showing when it was last closed.</summary>
+public enum WindowPlacementState
+{
+    Normal    = 0,
+    Maximized = 1
+}
+
 /// <summary>
 ///     Tracks window position and sizes; row per Window type
 /// </summary>
+/// <remarks>
+///     A row is one window of one kind for one person: <see cref="Type" /> says what kind ("Main", "Table", "Tool", "Dialog"),
+///     <see cref="Uri" /> which one of that kind (<c>silo:main</c>, <c>silo:table/5</c>, <c>silo:tool/drawiocanvas</c>), and
+///     <see cref="UserEntity.User" /> whose it is -- a row without a user is the Silo's shared default, used by anyone who has
+///     no row of their own. Position and size are in device-independent units (WPF's 1/96 inch). Writing these rows does
+///     not mark the Silo as changed: they are saved along with the next save for any other reason.
+/// </remarks>
 public class Window : TimedUserEntity
 {
     public int    Height { get; set; }
     public int    Id     { get; set; }
+
+    /// <summary>The main window's dock layout (AvalonDock XML: where the panes sit, floating ones, their sizes); null for other windows.</summary>
+    public string? Layout { get; set; }
+
+    public WindowPlacementState State { get; set; }
     public string Type   { get; set; } = string.Empty;
     public Uri    Uri    { get; set; } = null!;
     public int    Width  { get; set; }

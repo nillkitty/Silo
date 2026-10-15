@@ -1,16 +1,21 @@
 using System.ComponentModel;
+using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Windows.Input;
 using System.Windows.Media;
 using AvalonDock.Layout;
+using Silo.Ui.Windows;
 using Telefrag.DI;
 
 namespace Silo.Tools;
 
 [Transient(typeof(ITool))]
-public abstract class ToolBase(string name) : ITool, ICommand, INotifyPropertyChanged
+public abstract class ToolBase : ITool, ICommand, INotifyPropertyChanged
 {
+    private static readonly List<WeakReference<ToolBase>> _all = [];
+
     private UIElement?        _ctrl;
+    private UIElement?        _paneContent; // what the pane shows: built once, whichever pane object currently holds it
     private bool              _isEnabled = true;
     private bool              _isVisible = true;
     private LayoutAnchorable? _pane;
@@ -33,7 +38,23 @@ public abstract class ToolBase(string name) : ITool, ICommand, INotifyPropertyCh
     ///     this simply mirrors that window's visibility rather than tracking separate
     ///     state that could drift out of sync with it.
     /// </summary>
-    public bool IsChecked => _window?.IsVisible ?? false;
+    public bool IsChecked
+    {
+        get
+        {
+            if (PaneHost is { } host && _pane is not null) return host.IsToolPaneOpen(_pane);
+            return _window?.IsVisible ?? false;
+        }
+    }
+
+    /// <summary>
+    ///     True for a tool that opens as a pane in the main window's dock area (which can also be dragged out into a
+    ///     floating window and docked back) instead of as a separate window.
+    /// </summary>
+    protected virtual bool UsesPane => false;
+
+    /// <summary>The main window, when this tool opens as a pane in it.</summary>
+    private MainWindow? PaneHost => UsesPane && Application.Current?.MainWindow is MainWindow w ? w : null;
 
     /// <inheritdoc cref="ITool.IsEnabled" />
     public bool IsEnabled
@@ -62,8 +83,45 @@ public abstract class ToolBase(string name) : ITool, ICommand, INotifyPropertyCh
 
     public bool ModalOnly { get; set; }
 
-    public string Name     { get; } = name.Required();
+    public string Name     { get; }
     public int    Priority { get; set; }
+
+    protected ToolBase(string name)
+    {
+        Name = name.Required();
+        lock (_all) _all.Add(new WeakReference<ToolBase>(this));
+    }
+
+    /// <summary>The tools that open as a pane in the dock area (the main window asks, to put their panes back where they were left).</summary>
+    internal static IReadOnlyList<ToolBase> PaneTools()
+    {
+        lock (_all)
+            return _all.Select(r => r.TryGetTarget(out var t) ? t : null).OfType<ToolBase>().Where(t => t.UsesPane).DistinctBy(t => t.Name).ToList();
+    }
+
+    /// <summary>What the tool's pane shows (built now if it never was): the same object whichever pane object holds it.</summary>
+    internal UIElement BuildPaneContent()
+    {
+        return _paneContent ??= OnBuildContent();
+    }
+
+    /// <summary>
+    ///     A saved dock layout was put back and has this tool's pane in it: the tool takes that pane object as its own (the
+    ///     content was handed to it with <see cref="BuildPaneContent" />).
+    /// </summary>
+    internal void AdoptPane(LayoutAnchorable pane)
+    {
+        _pane = pane;
+        HookPane(pane);
+        OnPropertyChanged(nameof(IsChecked));
+    }
+
+    /// <summary>The pane left the layout for good (the layout that was put back does not have it): it is made again, empty, when next opened.</summary>
+    internal void ResetPane()
+    {
+        _pane = null;
+        OnPropertyChanged(nameof(IsChecked));
+    }
 
     protected abstract UIElement OnBuildContent();
 
@@ -95,11 +153,27 @@ public abstract class ToolBase(string name) : ITool, ICommand, INotifyPropertyCh
 
     private LayoutAnchorable? PaneWrap(UIElement content)
     {
-        return new LayoutAnchorable
+        var pane = new LayoutAnchorable
                {
-                   Title   = DisplayName,
-                   Content = content.Required()
+                   Title          = DisplayName,
+                   ContentId      = "tool:" + Name,
+                   Content        = content.Required(),
+                   CanFloat       = true,
+                   FloatingWidth  = 900,
+                   FloatingHeight = 640
                };
+
+        HookPane(pane);
+        return pane;
+    }
+
+    private void HookPane(LayoutAnchorable pane)
+    {
+        // closing the pane with its own X must update the Tools menu check mark too
+        pane.PropertyChanged += (_, e) =>
+                                {
+                                    if (e.PropertyName is "IsVisible" or "Parent") OnPropertyChanged(nameof(IsChecked));
+                                };
     }
 
     protected void OnPropertyChanged([CallerMemberName] string? propertyName = null)
@@ -111,7 +185,7 @@ public abstract class ToolBase(string name) : ITool, ICommand, INotifyPropertyCh
     {
         if (ModalOnly) return null;
 
-        _pane ??= PaneWrap(OnBuildContent());
+        _pane ??= PaneWrap(_paneContent ??= OnBuildContent());
         return _pane;
     }
 
@@ -121,6 +195,16 @@ public abstract class ToolBase(string name) : ITool, ICommand, INotifyPropertyCh
         var d = App.Instance!.Dispatcher;
         if (!d.CheckAccess())
             return d.Invoke(Toggle);
+
+        // a pane tool is shown or hidden in the dock area (it may be floating there; that is still "open")
+        if (PaneHost is { } host && GetPane() is { } pane)
+        {
+            if (host.IsToolPaneOpen(pane)) host.HideToolPane(pane);
+            else host.ShowToolPane(pane);
+
+            OnPropertyChanged(nameof(IsChecked));
+            return null;
+        }
 
         // Executing the command while the window is open closes it, rather than
         // re-showing (or, worse, rebuilding) an already-open window.
@@ -142,11 +226,33 @@ public abstract class ToolBase(string name) : ITool, ICommand, INotifyPropertyCh
         // gating something else later.
         _ctrl ??= OnBuildContent();
         Window window = WindowWrap(_ctrl);
+        WindowPlacements.Track(window, App.Instance?.ActiveSilo, WindowPlacements.Tool, "silo:tool/" + Name);
 
         window.Show();
         window.Activate();
         OnPropertyChanged(nameof(IsChecked));
         return window;
+    }
+
+    /// <summary>Opens the tool (a pane is shown and selected, a window is shown and activated) without ever closing it.</summary>
+    public void Show()
+    {
+        var d = App.Instance!.Dispatcher;
+        if (!d.CheckAccess())
+        {
+            d.Invoke(Show);
+            return;
+        }
+
+        if (PaneHost is { } host && GetPane() is { } pane)
+        {
+            host.ShowToolPane(pane);
+            OnPropertyChanged(nameof(IsChecked));
+            return;
+        }
+
+        if (!IsChecked) Toggle();
+        else _window?.Activate();
     }
 
     public UIElement? GetContent()

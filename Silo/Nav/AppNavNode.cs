@@ -1,6 +1,8 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
+using System.Windows;
+using Silo.Design;
 
 namespace Silo.Nav;
 
@@ -21,7 +23,7 @@ namespace Silo.Nav;
 ///     forever. Keeping the parent link on <see cref="AppNavItem" /> and the child link here, on
 ///     a different object, means neither direction is ever reachable from the other.
 /// </remarks>
-public sealed class AppNavNode : INotifyPropertyChanged
+public sealed class AppNavNode : INotifyPropertyChanged, IOverridableNode
 {
     public AppNavItem Item { get; }
 
@@ -36,6 +38,14 @@ public sealed class AppNavNode : INotifyPropertyChanged
         Item     = item;
         Children = children is null ? [] : new ObservableCollection<AppNavNode>(children);
         _header  = item.Text;
+
+        // the default icon size follows the Author-mode slider; weak, so nodes of closed Silos can be collected
+        PropertyChangedEventManager.AddHandler(AppDesignSettings.Instance, OnDesignSettingsChanged, nameof(AppDesignSettings.IconSize));
+    }
+
+    private void OnDesignSettingsChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IconSize)));
     }
 
     private string _header;
@@ -50,7 +60,7 @@ public sealed class AppNavNode : INotifyPropertyChanged
     /// </summary>
     public string Header
     {
-        get => _header;
+        get => LabelOverride ?? _header;
         set
         {
             if (_header == value)
@@ -93,6 +103,69 @@ public sealed class AppNavNode : INotifyPropertyChanged
         get => _isActiveRoot;
         set => _set(ref _isActiveRoot, value);
     }
+
+    // ---- author-mode customisation (see NodeOverrides) -----------------------------------------
+
+    /// <summary>The icon size shown: this node's own override, else the app-wide Icon Size setting.</summary>
+    public double IconSize => IconSizeOverride ?? AppDesignSettings.Instance.IconSize;
+
+    /// <summary>The key in <see cref="NodeOverrides" />: the texts of the node and its ancestors (the same for every Silo).</summary>
+    public string OverrideKey => NodeOverrides.NavPrefix + PathText.Replace(" / ", "/");
+
+    public string OriginalName => Item.Text;
+
+    public string KindText => Children.Count > 0 ? "Navigation group" : Item.View is not null ? "Navigation view" : "Navigation item";
+
+    public string PathText
+    {
+        get
+        {
+            var parts = new List<string>();
+            for (AppNavItem? i = Item; i is not null; i = i.Parent) parts.Insert(0, i.Text);
+            return string.Join(" / ", parts);
+        }
+    }
+
+    public double DefaultIconSize => AppDesignSettings.Instance.IconSize;
+
+    public string DesignTypeName => nameof(AppNavNode);
+
+    public string? LabelOverride
+    {
+        get => NodeOverrides.Get(OverrideKey)?.Label;
+        set => NodeOverrides.Update(OverrideKey, o => o.Label = value);
+    }
+
+    public double? IconSizeOverride
+    {
+        get => NodeOverrides.Get(OverrideKey)?.IconSize;
+        set => NodeOverrides.Update(OverrideKey, o => o.IconSize = value);
+    }
+
+    public bool IsHidden
+    {
+        get => NodeOverrides.Get(OverrideKey)?.Hidden == true;
+        set => NodeOverrides.Update(OverrideKey, o => o.Hidden = value);
+    }
+
+    /// <summary>Opens the node's view (true: as a permanent tab, false: as the preview tab). Set by the window for nodes that have a view.</summary>
+    public Action<bool>? Opener { get; set; }
+
+    /// <summary>Called after the overrides changed: tells the tree to redraw this node's text, icon and visibility.</summary>
+    public void RefreshOverrides()
+    {
+        foreach (var name in new[] { nameof(Header), nameof(IconSize), nameof(IsHidden), nameof(LabelOverride), nameof(IconSizeOverride) })
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+    }
+
+    public IEnumerable<DesignMenuItem> OpenMenuItems()
+    {
+        if (Opener is not { } open) return [];
+
+        return [DesignMenuItem.Run("Open (preview tab)", () => open(false)), DesignMenuItem.Run("Open (keep as a tab)", () => open(true))];
+    }
+
+    public IEnumerable<DesignMenuItem> DesignMenuItems() => NodeDesignMenu.Build(this);
 
     private void _set(ref bool field, bool value, [CallerMemberName] string? propertyName = null)
     {

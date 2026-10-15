@@ -74,12 +74,30 @@
     <MenuItem Header="_Silo"
                    IsEnabled="{Binding ., Converter={StaticResource ObjectExistsToBool}}"
                    DataContext="{Binding App.ActiveSilo}">
-        <MenuItem Header="C_onnection"
+        <MenuItem Header="_New Connection"
                        InputGestureText="Ctrl+Shift+N"
                        CommandTarget="{Binding .}"
                        Command="{Binding Commands.NewConnection}" />
         <MenuItem Header="_Credential" Command="{Binding Commands.NewCredential}" />
         <MenuItem Header="Convert to _Archive Format" CommandTarget="{Binding .}"  Command="{Binding Commands.ConvertToArchive}" />
+        <Separator />
+        <!--
+            Add Data: things authored here rather than pulled from a source. Each item hands its kind to the same command
+            as its CommandParameter (rich, plain or typed: see TableTemplate.FromKey).
+        -->
+        <MenuItem Header="Add _Data">
+            <MenuItem Header="_Tabular">
+                <MenuItem Header="_Rich Text" CommandTarget="{Binding .}" Command="{Binding Commands.NewTable}" CommandParameter="rich"
+                          ToolTip="A table whose every column is rich text (bold, italic, code, links)" />
+                <MenuItem Header="_Plain Text" CommandTarget="{Binding .}" Command="{Binding Commands.NewTable}" CommandParameter="plain"
+                          ToolTip="A table whose every column is literal text" />
+                <MenuItem Header="T_yped Columns" CommandTarget="{Binding .}" Command="{Binding Commands.NewTable}" CommandParameter="typed"
+                          ToolTip="Starts with a text, a number and a date column; change each column's type as needed" />
+                <Separator />
+                <MenuItem Header="From _Clipboard..." CommandTarget="{Binding .}" Command="{Binding Commands.NewTable}" CommandParameter="clipboard"
+                          ToolTip="A table made of the table or text on the clipboard (Excel, a web page, CSV...)" />
+            </MenuItem>
+        </MenuItem>
         <Separator />
         <MenuItem Header="_Export/Backup" >
             <MenuItem Header="_Logs..." CommandTarget="{Binding .}"  Command="{Binding Commands.ExportLogs}" />
@@ -93,10 +111,25 @@
         </MenuItem>
 
     </MenuItem>
-    <MenuItem Header="_Edit">
-
+    <!--
+        Standard editing acts on whichever control has the keyboard focus (a text box, the data grid...). Below the
+        separator come the entries of the active document, added each time the menu opens (EditMenu_SubmenuOpened).
+    -->
+    <MenuItem x:Name="EditMenu" Header="_Edit" SubmenuOpened="EditMenu_SubmenuOpened">
+        <MenuItem Header="_Undo" Command="ApplicationCommands.Undo" />
+        <MenuItem Header="_Redo" Command="ApplicationCommands.Redo" />
+        <Separator />
+        <MenuItem Header="Cu_t" Command="ApplicationCommands.Cut" />
+        <MenuItem Header="_Copy" Command="ApplicationCommands.Copy" />
+        <MenuItem Header="_Paste" Command="ApplicationCommands.Paste" />
+        <MenuItem Header="Paste as _New Table..." Click="PasteNewTable_Click"
+                  ToolTip="Make a new table in the Silo from the table or text on the clipboard" />
+        <MenuItem Header="_Delete" Command="ApplicationCommands.Delete" />
+        <Separator />
+        <MenuItem Header="Select _All" Command="ApplicationCommands.SelectAll" />
+        <Separator x:Name="EditDynamicSeparator" Visibility="Collapsed" />
     </MenuItem>
-    <MenuItem Header="_View" SubmenuOpened="ViewMenu_SubmenuOpened">
+    <MenuItem x:Name="ViewMenu" Header="_View" SubmenuOpened="ViewMenu_SubmenuOpened">
         <MenuItem Header="_Theme" DataContext="{Binding App.Theme}">
             <MenuItem Header="_Light"
                            IsCheckable="True"
@@ -146,8 +179,14 @@
             marks are refreshed each time the menu opens (ViewMenu_SubmenuOpened).
         -->
         <Separator />
+        <MenuItem x:Name="ViewExplorer" Header="_Explorer" IsCheckable="True" Click="ViewPane_Click" />
+        <MenuItem x:Name="ViewProperties" Header="_Properties" IsCheckable="True" Click="ViewPane_Click" />
         <MenuItem x:Name="ViewToolbox" Header="_Toolbox" IsCheckable="True" Click="ViewPane_Click" />
-        <MenuItem x:Name="ViewSelectedItem" Header="_Selected Item" IsCheckable="True" Click="ViewPane_Click" />
+        <Separator />
+        <MenuItem Header="Reset _Window Layout" Click="ResetLayout_Click"
+                  ToolTip="Put the panes back where a new window has them and forget the remembered window sizes" />
+        <!-- Tables popped out into their own windows are listed here (filled in ViewMenu_SubmenuOpened). -->
+        <Separator x:Name="ViewWindowsSeparator" Visibility="Collapsed" />
     </MenuItem>
     <MenuItem Header="_Run">
 

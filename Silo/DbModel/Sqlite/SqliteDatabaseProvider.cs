@@ -280,6 +280,7 @@ public sealed partial class SqliteDatabaseProvider : IDatabaseProvider, IDatabas
                       WorldMapping wm => wm.World?.Key,
                       WorldSync ws    => ws.World?.Key,
                       FieldMapping fm => fm.Field?.World?.Key,
+                      AuthoredTable at => at.World?.Key,
                       _               => null
                   };
 

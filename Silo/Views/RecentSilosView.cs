@@ -61,6 +61,12 @@ public class RecentSilosView : UserControl
         DockPanel.SetDock(_empty, Dock.Top);
         root.Children.Add(_empty);
 
+        var settings = SiloFileSettings.Instance;
+        var reopen   = new CheckBox { Content = "Reopen the last Silo when Silo starts", IsChecked = settings.ReopenLastSilo, Margin = new Thickness(0, 12, 0, 0) };
+        reopen.Click += (_, _) => settings.ReopenLastSilo = reopen.IsChecked == true;
+        DockPanel.SetDock(reopen, Dock.Bottom);
+        root.Children.Add(reopen);
+
         _list = new ListBox { BorderThickness = new Thickness(0), HorizontalContentAlignment = HorizontalAlignment.Stretch };
         _list.SetResourceReference(BackgroundProperty, "Theme.Background");
         _list.MouseDoubleClick += OnDoubleClick;

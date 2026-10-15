@@ -1,5 +1,6 @@
 ﻿using Silo.Contracts.Connectors;
 using Silo.Shell;
+using Silo.Ui.Windows.Connecting;
 using Telefrag.DI;
 
 namespace Silo.Connectors.Web;
@@ -10,7 +11,7 @@ namespace Silo.Connectors.Web;
 ///     <c>HEAD</c> request.
 /// </summary>
 [Singleton(typeof(IUriProvider))]
-public class WebConnector : IConnector, IUriProvider
+public class WebConnector : IConnector, IUriProvider, IUriConnector, IConnectorUi
 {
     public ConnectorSetupFlags Flags { get; }
 
@@ -20,6 +21,19 @@ public class WebConnector : IConnector, IUriProvider
     public ExistingProviderHandling OtherProvidersHandling => ExistingProviderHandling.Default;
     public Exception?               LastError              { get; }
     public List<object>             Metadata               { get; }
+
+    public string? Description => "Web sites and web services (http and https)";
+
+    public string? Validate(Uri uri)
+    {
+        return uri.Host.Length > 0 ? null : "A web address needs a host name, such as https://example.com/.";
+    }
+
+    public IConnectorSetup CreateSetup(ConnectorSetupContext context)
+    {
+        return new UriFieldSetup(this, text => UriRules.Check(text, [this], UriRules.AnyScope), "Web address",
+                                 "Examples:  https://example.com/    https://api.example.com/v1/items");
+    }
 
     public UriSchemeScope HandlesScheme(string scheme)
     {

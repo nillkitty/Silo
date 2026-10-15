@@ -35,6 +35,23 @@ public record CloseSiloCommand(OpenSilo Silo)
     }
 }
 
+/// <summary>
+///     Silo -> Add Data -> Tabular -> ...: makes a new hand-authored table in the Silo and opens the editor on it. The
+///     command parameter says which kind: <c>rich</c> (every column rich text), <c>plain</c> or <c>typed</c>.
+/// </summary>
+public record NewTableCommand(OpenSilo Silo)
+    : SiloCommand("New _Table", Enabler.IsSiloLoaded, ToolTip: "Type data into a new table that lives in this Silo")
+{
+    protected override Task OnExecute(object? parameter)
+    {
+        if (parameter as string == "clipboard")
+            Tabular.TablePaste.AsNewTable(Silo.Required());
+        else
+            Tabular.TableEditors.CreateAndOpen(Silo.Required(), Tabular.TableTemplate.FromKey(parameter as string));
+        return Task.CompletedTask;
+    }
+}
+
 public record SaveSiloCommand(OpenSilo Silo)
     : SiloCommand("_Save", Enabler.IsSiloLoaded)
 {

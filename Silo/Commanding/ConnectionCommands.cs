@@ -12,10 +12,9 @@ public record NewConnectionCommand(OpenSilo Silo) : SiloCommand("New _Connection
 {
     protected override async Task OnExecute(object? parameter)
     {
-        if (ConnectionWindow.Modal() is IConnection c)
+        // the dialog makes the connection; the Silo adds it and saves its name and URI
+        if (Silo.NewConnection() is { } c)
         {
-            Silo.Data.AddItem(c);
-            Silo.Connections.Add(c);
             Log.Debug("Added new connection:  {connection}", c);
             return;
         }

@@ -34,6 +34,7 @@ public sealed class SiloFileSettings : INotifyPropertyChanged
     private ExternalChangePolicy _conflictPolicy = ExternalChangePolicy.Prompt;
     private int                  _explodeThresholdMb = 64;
     private bool                 _newSilosAreArchives;
+    private bool                 _reopenLastSilo = true;
 
     private SiloFileSettings()
     {
@@ -53,6 +54,17 @@ public sealed class SiloFileSettings : INotifyPropertyChanged
     {
         get => _newSilosAreArchives;
         set => Set(ref _newSilosAreArchives, value);
+    }
+
+    /// <summary>
+    ///     Starting Silo (without a document to open) reopens the Silo that was open last, when it is a local file that still
+    ///     exists. Default: true -- one Silo is meant to hold everything a person keeps, so by default there is just the one
+    ///     document and no reason to hunt for it each time.
+    /// </summary>
+    public bool ReopenLastSilo
+    {
+        get => _reopenLastSilo;
+        set => Set(ref _reopenLastSilo, value);
     }
 
     /// <summary>A simple Silo bigger than this many MB prompts (after a save) to be converted to an archive.</summary>
@@ -80,6 +92,7 @@ public sealed class SiloFileSettings : INotifyPropertyChanged
                 Instance._newSilosAreArchives = s.NewSilosAreArchives;
                 Instance._explodeThresholdMb  = Math.Clamp(s.ExplodeThresholdMb, 1, 100_000);
                 Instance._askToExplode        = s.AskToExplode;
+                Instance._reopenLastSilo      = s.ReopenLastSilo;
             }
         }
         catch
@@ -106,7 +119,8 @@ public sealed class SiloFileSettings : INotifyPropertyChanged
                                                                          ConflictPolicy      = _conflictPolicy,
                                                                          NewSilosAreArchives = _newSilosAreArchives,
                                                                          ExplodeThresholdMb  = _explodeThresholdMb,
-                                                                         AskToExplode        = _askToExplode
+                                                                         AskToExplode        = _askToExplode,
+                                                                         ReopenLastSilo      = _reopenLastSilo
                                                                      }));
         }
         catch
@@ -125,5 +139,6 @@ public sealed class SiloFileSettings : INotifyPropertyChanged
         public bool NewSilosAreArchives { get; set; }
         public int  ExplodeThresholdMb  { get; set; } = 64;
         public bool AskToExplode        { get; set; } = true;
+        public bool ReopenLastSilo      { get; set; } = true;
     }
 }

@@ -8,6 +8,7 @@ using Silo.Hosting;
 using Silo.Remote;
 using Silo.Settings;
 using Silo.Ui.Windows;
+using Silo.Ui.Windows.Connecting;
 using Telefrag.DI;
 
 namespace Silo.Model;
@@ -125,6 +126,7 @@ public class OpenSilo : ModelBase
         }
 
         Log.Debug("Opening file:  {path}", file.FilePath);
+        WarnAboutProgramFiles(full);
         var cc = a.Components.CreateChildContainer(file.FilePath);
         OpenSilo c = new()
                      {
@@ -135,6 +137,20 @@ public class OpenSilo : ModelBase
         c.Attach(Database.Load(file));
         a.NotifySiloOpened(c, c);
         return c;
+    }
+
+    /// <summary>
+    ///     This version of Silo does not run code from Silo files. Tells the person when the file they are opening carries
+    ///     some (.dll/.exe), so it is not silently ignored; see <see cref="Silo.DbModel.Sqlite.SiloContentScan" />.
+    /// </summary>
+    private static void WarnAboutProgramFiles(string path)
+    {
+        var programs = Silo.DbModel.Sqlite.SiloContentScan.FindProgramFiles(path);
+        if (programs.Count == 0)
+            return;
+
+        Log.Warning("'{Path}' contains program files that this version of Silo does not load: {Files}", path, string.Join(", ", programs));
+        MessageBox.Show(Silo.DbModel.Sqlite.SiloContentScan.WarningText(programs), AppIdentity.AppName, MessageBoxButton.OK, MessageBoxImage.Warning);
     }
 
     /// <summary>
@@ -384,15 +400,37 @@ public class OpenSilo : ModelBase
     }
 
     /// <summary>
-    ///     Initiates a ne
+    ///     Shows the New Connection dialog and, when a connection is made, adds it to this Silo
+    ///     (see <see cref="AddConnection" />). Returns the connection, or null if the dialog was cancelled.
     /// </summary>
-    /// <returns></returns>
     public IConnection? NewConnection()
     {
-        if (ConnectionWindow.Modal() is IConnection c) return c;
+        if (ConnectionWindow.Modal(this) is { } result) return AddConnection(result);
 
         App.Status("New connection cancelled");
         return null;
+    }
+
+    /// <summary>
+    ///     Adds a connection to <see cref="Connections" /> and saves it (its name and URI) in the Silo's <c>Connection</c>
+    ///     table, which marks the Silo as changed. Failing to save is logged, not thrown: the connection is still usable
+    ///     for this session.
+    /// </summary>
+    public IConnection AddConnection(ConnectionResult result)
+    {
+        Connections.Add(result.Connection);
+
+        if (Data is IConnectionStore store)
+            try
+            {
+                store.SaveConnection(result.Name, result.Uri);
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "The connection {name} could not be saved in the Silo", result.Name);
+            }
+
+        return result.Connection;
     }
 
 

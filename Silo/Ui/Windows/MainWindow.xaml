@@ -58,7 +58,7 @@
         -->
         <HierarchicalDataTemplate x:Key="NavNodeTemplate" ItemsSource="{Binding Children}">
             <StackPanel Orientation="Horizontal">
-                <l:AppIcon Icon="{Binding Item.Icon}" Margin="0,0,6,0" />
+                <l:AppIcon Icon="{Binding Item.Icon}" Size="{Binding IconSize}" Margin="0,0,6,0" />
                 <TextBlock x:Name="NavNodeText" Text="{Binding Header}" VerticalAlignment="Center" />
             </StackPanel>
             <HierarchicalDataTemplate.Triggers>
@@ -81,16 +81,38 @@
         <Style x:Key="NavNodeContainerStyle" TargetType="{x:Type TreeViewItem}" BasedOn="{StaticResource {x:Type TreeViewItem}}">
             <Setter Property="IsSelected" Value="{Binding IsSelected, Mode=TwoWay}" />
             <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
+            <Style.Triggers>
+                <!-- a node hidden in author mode (see Design/NodeOverrides.cs) takes no room in the tree -->
+                <DataTrigger Binding="{Binding IsHidden}" Value="True">
+                    <Setter Property="Visibility" Value="Collapsed" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <!--
+            The navigation flyout is application chrome, not a document: its trees sit on the window colour with no
+            border, unlike the Explorer pane, whose tree (the default TreeView look) is on the editor surface colour.
+            That difference is what tells the two apart at a glance.
+        -->
+        <Style x:Key="NavChromeTreeStyle" TargetType="{x:Type TreeView}" BasedOn="{StaticResource {x:Type TreeView}}">
+            <Setter Property="Background" Value="{DynamicResource Theme.Background}" />
+            <Setter Property="BorderThickness" Value="0" />
         </Style>
 
         <!-- One icon button in NavRail / NavRailBottom (the collapsed pane's gutter). -->
         <DataTemplate x:Key="NavRailItemTemplate">
-            <ToggleButton Style="{StaticResource NavRailButtonStyle}"
+            <ToggleButton x:Name="RailButton"
+                          Style="{StaticResource NavRailButtonStyle}"
                           Click="NavRailButton_Click"
                           IsChecked="{Binding IsActiveRoot, Mode=OneWay}"
                           ToolTip="{Binding Header}">
                 <l:AppIcon Icon="{Binding Item.Icon}" />
             </ToggleButton>
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding IsHidden}" Value="True">
+                    <Setter TargetName="RailButton" Property="Visibility" Value="Collapsed" />
+                </DataTrigger>
+            </DataTemplate.Triggers>
         </DataTemplate>
     </Window.Resources>
     <Grid>
@@ -121,7 +143,8 @@
             design menu via Design/DesignMenu.cs - that attaches to any DependencyObject,
             unaffected by how the TreeView gets its items.
         -->
-        <Grid x:Name="NavHost" Grid.Row="2" Grid.Column="0" SizeChanged="NavHost_SizeChanged">
+        <Grid x:Name="NavHost" Grid.Row="2" Grid.Column="0" SizeChanged="NavHost_SizeChanged"
+              Background="{DynamicResource Theme.Background}">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
@@ -198,18 +221,22 @@
             -->
             <TreeView x:Name="NavTree"
                       Grid.Row="1"
+                      Style="{StaticResource NavChromeTreeStyle}"
                       FontWeight="Normal" FontSize="18"
                       ItemTemplate="{StaticResource NavNodeTemplate}"
                       ItemContainerStyle="{StaticResource NavNodeContainerStyle}"
-                      SelectedItemChanged="NavTree_SelectedItemChanged" />
+                      SelectedItemChanged="NavTree_SelectedItemChanged"
+                      MouseDoubleClick="NavTree_DoubleClick" />
 
             <TreeView x:Name="NavTreeBottom"
                       Grid.Row="2"
+                      Style="{StaticResource NavChromeTreeStyle}"
                       VerticalAlignment="Bottom"
                       FontWeight="Normal" FontSize="18"
                       ItemTemplate="{StaticResource NavNodeTemplate}"
                       ItemContainerStyle="{StaticResource NavNodeContainerStyle}"
-                      SelectedItemChanged="NavTree_SelectedItemChanged" />
+                      SelectedItemChanged="NavTree_SelectedItemChanged"
+                      MouseDoubleClick="NavTree_DoubleClick" />
 
             <!--
                 Collapsed-pane gutter: one icon per top-level node (the top ones under the header, Inbox/Settings/
@@ -247,34 +274,28 @@
         </Grid>
 
         <!--
-            Was Telerik RadDocking/RadSplitContainer/RadPaneGroup/RadPane. AvalonDock's
-            DockingManager/LayoutRoot/LayoutPanel/LayoutAnchorablePane/LayoutAnchorable is
-            the closest free/open-source equivalent - same idea (a LayoutPanel arranges
-            LayoutAnchorablePanes, each holding one or more LayoutAnchorable "pane tabs"),
-            same two permanently-docked panes (Toolbox above, Selected Item below) as
-            before. Every ITool that opens into the dock area (see Tools/IconViewer.cs's
-            ToolBase.GetPane()) now returns a LayoutAnchorable the same way it used to
-            return a RadPane.
+            The workspace, arranged like classic Visual Studio (or SSMS): the Explorer tree on the left, the document
+            tabs in the middle (everything you open to look at or edit - a table, a navigation view), and the tool
+            panes Properties for whatever is selected in the Explorer, the Toolbox  on the right. Every pane can
+            be dragged, tabbed together, floated or hidden; View menu items bring them back.
 
-            "Selected Item" (now named SelectedItemPane) doubles as the nav content host:
-            when a selected nav item has an AppView, MainWindow.xaml.cs's
-            NavTree_SelectedItemChanged sets this pane's Content to that view's built
-            UIElement and its Title to the view's Name - the "selected [nav] item" title was
-            already a good fit for exactly that.
+            Was Telerik RadDocking; AvalonDock's DockingManager/LayoutRoot/LayoutPanel/LayoutAnchorablePane is the
+            closest free equivalent. Every ITool that opens into the dock area (see Tools/ToolBase.cs GetPane()) returns
+            a LayoutAnchorable the same way it used to return a RadPane. Documents are added to the document pane by
+            DocumentTabs (Ui/Documents/DocumentTabs.cs); the Explorer and Properties panes get their content in
+            MainWindow.xaml.cs.
         -->
         <xcad:DockingManager x:Name="DockHost" Grid.Row="2" Grid.Column="1">
             <xcad:DockingManager.Layout>
                 <xcadLayout:LayoutRoot>
-                    <xcadLayout:LayoutPanel Orientation="Vertical">
-                        <xcadLayout:LayoutAnchorablePane>
-                            <xcadLayout:LayoutAnchorable x:Name="ToolboxPane" Title="Toolbox">
-
-                            </xcadLayout:LayoutAnchorable>
+                    <xcadLayout:LayoutPanel Orientation="Horizontal">
+                        <xcadLayout:LayoutAnchorablePane DockWidth="270">
+                            <xcadLayout:LayoutAnchorable x:Name="ExplorerPane" Title="Explorer" ContentId="explorer" />
                         </xcadLayout:LayoutAnchorablePane>
-                        <xcadLayout:LayoutAnchorablePane>
-                            <xcadLayout:LayoutAnchorable x:Name="SelectedItemPane" Title="Selected Item">
-
-                            </xcadLayout:LayoutAnchorable>
+                        <xcadLayout:LayoutDocumentPane />
+                        <xcadLayout:LayoutAnchorablePane DockWidth="280">
+                            <xcadLayout:LayoutAnchorable x:Name="PropertiesPane" Title="Properties" ContentId="properties" />
+                            <xcadLayout:LayoutAnchorable x:Name="ToolboxPane" Title="Toolbox" ContentId="toolbox" />
                         </xcadLayout:LayoutAnchorablePane>
                     </xcadLayout:LayoutPanel>
                 </xcadLayout:LayoutRoot>

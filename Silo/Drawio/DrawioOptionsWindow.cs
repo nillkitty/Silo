@@ -86,6 +86,8 @@ public sealed class DrawioOptionsWindow : Window
         root.Children.Add(new ScrollViewer { VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Content = _body });
         Content = root;
 
+        Silo.Ui.Windows.WindowPlacements.Track(this, App.Instance?.ActiveSilo, Silo.Ui.Windows.WindowPlacements.Dialog, "silo:dialog/diagram-options");
+
         Build();
     }
 

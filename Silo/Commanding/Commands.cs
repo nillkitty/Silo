@@ -31,6 +31,9 @@ public class SiloCommands(OpenSilo silo)
     /// <summary>Silo -> Import Data</summary>
     public SiloCommand ImportData => new ImportDataCommand(Silo);
 
+    /// <summary>Silo -> Add Data -> Tabular -> ... (the command parameter picks the template: rich, plain or typed)</summary>
+    public SiloCommand NewTable => new NewTableCommand(Silo);
+
     /// <summary>Silo -> New Connectionl</summary>
     public SiloCommand NewConnection => new NewConnectionCommand(Silo);
 

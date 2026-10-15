@@ -35,6 +35,30 @@ public sealed class DesignMenuItem
 
     public static DesignMenuItem Separator(DesignLevel minLevel = DesignLevel.Author) => new() { IsSeparator = true, MinLevel = minLevel };
 
+    /// <summary>A greyed-out, non-clickable line of information (the item's type name, its key...).</summary>
+    public bool IsInfo { get; init; }
+
+    /// <summary>False greys the row out and ignores clicks.</summary>
+    public bool IsEnabled { get; init; } = true;
+
+    /// <summary>A read-only line of text (shown disabled).</summary>
+    public static DesignMenuItem Info(string text, DesignLevel minLevel = DesignLevel.Author) => new() { Header = text, IsInfo = true, MinLevel = minLevel };
+
+    /// <summary>A plain clickable row that runs <paramref name="run" />.</summary>
+    public static DesignMenuItem Run(string header, Action run, DesignLevel minLevel = DesignLevel.Author, bool enabled = true) =>
+        new() { Header = header, Command = new ActionCommand(run), MinLevel = minLevel, IsEnabled = enabled };
+
+    private sealed class ActionCommand(Action run) : ICommand
+    {
+        public bool CanExecute(object? parameter) => true;
+
+        public void Execute(object? parameter) => run();
+
+#pragma warning disable CS0067
+        public event EventHandler? CanExecuteChanged;
+#pragma warning restore CS0067
+    }
+
     /// <summary>
     ///     A ready-made labeled-slider <see cref="DesignMenuItem"/>: drag it, the value calls
     ///     back live via <paramref name="setValue"/> (no data-binding plumbing required), and
@@ -89,6 +113,22 @@ public sealed class DesignMenuItem
         return new DesignMenuItem { MinLevel = minLevel, Content = box };
     }
 }
+
+/// <summary>
+///     Implemented by the data behind a tree node (or any other item): its own author-mode menu. A Ctrl+right-click on the
+///     node's row shows these items <em>instead of</em> the menus attached to the tree and the window around it.
+/// </summary>
+public interface IDesignMenuSource
+{
+    /// <summary>The type name shown, greyed out, at the top of the menu ("AppNavNode", "ExplorerNode"...).</summary>
+    string DesignTypeName { get; }
+
+    /// <summary>The items, built fresh each time the menu is shown.</summary>
+    IEnumerable<DesignMenuItem> DesignMenuItems();
+}
+
+/// <summary>One block of a design menu: the items one element contributes, headed by that element's type name.</summary>
+internal sealed record DesignGroup(string TypeName, List<DesignMenuItem> Items);
 
 /// <summary>
 ///     The mechanism: gives <em>any</em> <see cref="DependencyObject"/> - a control, a window,
@@ -223,20 +263,34 @@ public static class DesignMenu
         return true;
     }
 
-    /// <summary>Walks up from <paramref name="start"/> collecting each ancestor's level-qualifying items, closest element first.</summary>
-    private static List<List<DesignMenuItem>> CollectGroups(DependencyObject? start)
+    /// <summary>
+    ///     Walks up from <paramref name="start"/> collecting each ancestor's level-qualifying items, closest element first.
+    ///     An element whose data (DataContext) is an <see cref="IDesignMenuSource"/> - a tree row, a rail button - contributes
+    ///     that source's items and ends the walk: a node has its own menu, not the tree's or the window's.
+    /// </summary>
+    private static List<DesignGroup> CollectGroups(DependencyObject? start)
     {
-        var groups = new List<List<DesignMenuItem>>();
+        var groups = new List<DesignGroup>();
         var level  = AppDesignLevel.Instance.Level;
         var node   = start;
         var seen   = new HashSet<DependencyObject>();
 
         while (node != null && seen.Add(node))
         {
+            if (node is FrameworkElement { DataContext: IDesignMenuSource source })
+            {
+                var own = SafeItems(source).Where(i => i.MinLevel <= level).ToList();
+                if (own.Count > 0)
+                {
+                    groups.Add(new DesignGroup(source.DesignTypeName, own));
+                    return groups;
+                }
+            }
+
             if (GetItems(node) is { Count: > 0 } items)
             {
                 var qualifying = items.Where(i => i.MinLevel <= level).ToList();
-                if (qualifying.Count > 0) groups.Add(qualifying);
+                if (qualifying.Count > 0) groups.Add(new DesignGroup(node.GetType().Name, qualifying));
             }
 
             node = GetParent(node);
@@ -245,19 +299,32 @@ public static class DesignMenu
         return groups;
     }
 
+    private static List<DesignMenuItem> SafeItems(IDesignMenuSource source)
+    {
+        try
+        {
+            return source.DesignMenuItems().ToList();
+        }
+        catch (Exception ex)
+        {
+            Serilog.Log.Warning(ex, "Building a design menu for {type} failed", source.DesignTypeName);
+            return [];
+        }
+    }
+
     /// <summary>Visual-tree parent, falling back to the logical tree for elements (like some template-internal or logical-only nodes) that don't have one.</summary>
     private static DependencyObject? GetParent(DependencyObject node) =>
         (node is Visual or System.Windows.Media.Media3D.Visual3D ? VisualTreeHelper.GetParent(node) : null)
         ?? LogicalTreeHelper.GetParent(node);
 
-    private static ContextMenu BuildContextMenu(List<List<DesignMenuItem>> groups)
+    private static ContextMenu BuildContextMenu(List<DesignGroup> groups)
     {
         var menu = new ContextMenu
                    {
                        Background      = PinkFill,
                        BorderBrush     = PinkBorder,
-                       BorderThickness = new Thickness(2),
-                       Padding         = new Thickness(3)
+                       BorderThickness = new Thickness(1),
+                       Padding         = new Thickness(2)
                    };
 
         var hosted = new List<UIElement>();
@@ -266,7 +333,10 @@ public static class DesignMenu
         {
             if (g > 0) menu.Items.Add(BuildSeparator());
 
-            foreach (var item in groups[g])
+            // every block starts with the type of the thing it belongs to, greyed out
+            menu.Items.Add(BuildMenuItem(DesignMenuItem.Info(groups[g].TypeName)));
+
+            foreach (var item in groups[g].Items)
                 if (item.IsSeparator)
                     menu.Items.Add(BuildSeparator());
                 else
@@ -367,14 +437,20 @@ public static class DesignMenu
             mi.CommandParameter = item.CommandParameter;
         }
 
+        if (item.IsInfo || !item.IsEnabled)
+        {
+            mi.IsEnabled = false;
+            if (item.IsInfo && mi.Header is string text) mi.Header = new TextBlock { Text = text, FontStyle = FontStyles.Italic };
+        }
+
         return mi;
     }
 
-    private static Separator BuildSeparator() => new() { Background = PinkBorder, Margin = new Thickness(4, 2, 4, 2) };
+    private static Separator BuildSeparator() => new() { Background = PinkBorder, Margin = new Thickness(2, 3, 2, 3) };
 
     /// <summary>
-    ///     A deliberately simple pink chrome - a rounded border that darkens on hover - rather
-    ///     than the default theme's MenuItem template. Flat/single-row by design: design-menu
+    ///     A deliberately simple pink chrome - a flat row that darkens on hover, like an ordinary context menu
+    ///     but pink - rather than the default theme's MenuItem template. Flat/single-row by design: design-menu
     ///     items don't need icons, check glyphs, shortcut-text columns, or submenus, so
     ///     replicating those parts of the stock template would only be visual noise here.
     /// </summary>
@@ -384,15 +460,11 @@ public static class DesignMenu
     {
         var border = new FrameworkElementFactory(typeof(Border));
         border.Name = "Bg";
-        border.SetValue(Border.BackgroundProperty, PinkFill);
-        border.SetValue(Border.BorderBrushProperty, PinkBorder);
-        border.SetValue(Border.BorderThicknessProperty, new Thickness(1));
-        border.SetValue(Border.CornerRadiusProperty, new CornerRadius(4));
-        border.SetValue(FrameworkElement.MarginProperty, new Thickness(2, 1, 2, 1));
+        border.SetValue(Border.BackgroundProperty, Brushes.Transparent);
 
         var presenter = new FrameworkElementFactory(typeof(ContentPresenter));
         presenter.SetValue(ContentPresenter.ContentSourceProperty, "Header");
-        presenter.SetValue(FrameworkElement.MarginProperty, new Thickness(10, 6, 10, 6));
+        presenter.SetValue(FrameworkElement.MarginProperty, new Thickness(12, 4, 12, 4));
         presenter.SetValue(FrameworkElement.VerticalAlignmentProperty, VerticalAlignment.Center);
         border.AppendChild(presenter);
 

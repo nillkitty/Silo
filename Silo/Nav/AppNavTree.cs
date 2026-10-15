@@ -71,6 +71,8 @@ public static class AppNavTree
                                                              _leaf("Data Sources", "Database6", silo,
                                                                    view: _view("Data Sources",
                                                                                () => new EntityListView("IDataSource"))),
+                                                             _leaf("Tables", "Data1", silo, "Tables typed into this Silo",
+                                                                   view: _view("Tables", () => new TablesView())),
                                                              _leaf("Visualization", "MindMap", silo,
                                                                    view: _view("Visualization",
                                                                                () => new PlaceholderView("Visualization"))),

@@ -23,6 +23,12 @@ public class ConnectionBase : ModelBase, IConnection
 
     public bool IsInTree => Node?.IsVisible ?? false;
 
+    /// <summary>
+    ///     What to call this connection in lists (the name it was given when it was created); null to work one out
+    ///     from the connector and destination.
+    /// </summary>
+    public string? DisplayText { get; set; }
+
     public List<object> Metadata { get; }
     public SiloNode?    Node     { get; protected set; }
 
@@ -104,9 +110,10 @@ public class ConnectionBase : ModelBase, IConnection
         return Task.CompletedTask;
     }
 
-    public Window? BuildWindow()
+    /// <summary>A connection has no window of its own unless a connector says otherwise.</summary>
+    public virtual Window? BuildWindow()
     {
-        throw new NotImplementedException();
+        return null;
     }
 
     public Task InitAsync(ConnectContext context)
@@ -119,9 +126,10 @@ public class ConnectionBase : ModelBase, IConnection
         return GetHostname();
     }
 
-    public Task<bool> Connect(CancellationToken cancel = default)
+    /// <summary>A connectionless connection is always there; one that is not stays as it is (a connector with a real link overrides this).</summary>
+    public virtual Task<bool> Connect(CancellationToken cancel = default)
     {
-        throw new NotImplementedException();
+        return Task.FromResult(ConnectionState is not false);
     }
 
     public async Task<bool> Disconnect()

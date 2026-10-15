@@ -146,11 +146,34 @@
         <Setter Property="Foreground" Value="{DynamicResource Theme.Text}" />
     </Style>
 
+    <!--
+        The stock ContextMenu template draws a pale grey "icon gutter" strip down its left side, which ignores the palette
+        (a light grey bar in dark mode) and does not match our MenuItem template, whose icon column is part of the item.
+        This template is just the surface, the border and the items  the same look as the popups of the menu bar.
+    -->
     <Style TargetType="{x:Type ContextMenu}">
         <Setter Property="Background" Value="{DynamicResource Theme.Surface}" />
         <Setter Property="Foreground" Value="{DynamicResource Theme.Text}" />
         <Setter Property="BorderBrush" Value="{DynamicResource Theme.Border}" />
         <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Padding" Value="0,2" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type ContextMenu}">
+                    <Border Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            Padding="{TemplateBinding Padding}"
+                            SnapsToDevicePixels="True">
+                        <ScrollViewer CanContentScroll="False"
+                                      VerticalScrollBarVisibility="Hidden"
+                                      HorizontalScrollBarVisibility="Disabled">
+                            <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Cycle" />
+                        </ScrollViewer>
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
     </Style>
 
     <Style TargetType="{x:Type Separator}">

@@ -19,9 +19,14 @@ namespace Silo;
 ///     Telerik dependency. The file itself keeps its old name (<c>RadMenuGroup.cs</c>) since
 ///     renaming it requires a local rename this session's remote-device bridge can't do
 ///     without a shell - feel free to rename the file to <c>MenuGroup.cs</c> to match.
+///     <para>
+///         It derives from <see cref="Separator" /> only because a <see cref="MenuItem" />'s item list uses a Separator
+///         (or a MenuItem) as its own container; any other element is wrapped in an extra, empty MenuItem, which showed
+///         up as a blank, highlightable entry above the injected items. The placeholder itself is collapsed.
+///     </para>
 /// </remarks>
 [ContentProperty(nameof(Items))]
-public class MenuGroup : FrameworkElement, IAddChild
+public class MenuGroup : Separator, IAddChild
 {
     public static readonly DependencyProperty IsActiveProperty =
         DependencyProperty.Register(nameof(IsActive), typeof(bool), typeof(MenuGroup), new PropertyMetadata(true, OnIsActiveChanged));

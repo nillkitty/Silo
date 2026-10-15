@@ -15,6 +15,12 @@ public class ConnectionRequest
     public IConnector? Connector { get; set; }
 
     /// <summary>
+    ///     What to call the connection (the name the person gave it in the New Connection dialog), if anything;
+    ///     the connection shows it in lists instead of working a name out from its destination.
+    /// </summary>
+    public string? DisplayName { get; set; }
+
+    /// <summary>
     ///     The requested destination, if any
     /// </summary>
     public IDestination? Destination { get; set; }
@@ -64,5 +70,7 @@ public class ConnectionRequest
     /// </summary>
     public ConnectionRequest(Uri uri)
     {
+        RequestedUri = uri.Required();
+        Destination  = new Destination(uri);
     }
 }

@@ -38,6 +38,9 @@ public class FileConnection : FileModel, IConnection
 
     public SiloNode? Node { get; }
 
+    /// <summary>What to call this connection in lists (the name it was given); null to use its path.</summary>
+    public string? DisplayText { get; set; }
+
     /// <summary>
     ///     Tri-state connection status
     /// </summary>
@@ -70,11 +73,12 @@ public class FileConnection : FileModel, IConnection
 
     public static FileConnection FromFsi(FileConnector connector, FileSystemInfo fsi, ConnectionRequest? crq = null)
     {
-        return new FileConnection
+        return new FileConnection(fsi.Required().FullName)
                {
-                   Data              = fsi.Required(),
+                   Data              = fsi,
                    ConnectionRequest = crq,
-                   Connector         = connector.Required()
+                   Connector         = connector.Required(),
+                   DisplayText       = crq?.DisplayName
                };
     }
 
@@ -82,50 +86,53 @@ public class FileConnection : FileModel, IConnection
     {
         path.Required();
         FileSystemInfo f = Directory.Exists(path) ? new DirectoryInfo(path) : new FileInfo(path);
-        return new FileConnection
+        return new FileConnection(path)
                {
                    Data              = f,
                    ConnectionRequest = crq,
-                   Connector         = connector.Required()
+                   Connector         = connector.Required(),
+                   DisplayText       = crq?.DisplayName
                };
     }
 
-    private FileConnection() : base(GetRootPath())
+    private FileConnection(string path) : base(path)
     {
     }
 
     public void InitProvider(IReceiver<Container> receiver)
     {
-        throw new NotImplementedException();
+        receiver.Required().Receiver(Components);
     }
 
+    /// <summary>The server of a network share (\\server\share), else "." for this computer.</summary>
     public string? GetHostname()
     {
-        throw new NotImplementedException();
+        return Uri.TryCreate(Path, UriKind.Absolute, out var uri) && uri.IsUnc ? uri.Host : ".";
     }
 
+    /// <summary>A file system connection is connectionless: it is there as long as the path is.</summary>
     public Task<bool> Connect(CancellationToken cancel = default)
     {
-        throw new NotImplementedException();
+        return Task.FromResult(true);
     }
 
     public Task<bool> Disconnect()
     {
-        throw new NotImplementedException();
+        return Task.FromResult(false);
     }
 
     public Task<bool> Remove()
     {
-        throw new NotImplementedException();
+        return Task.FromResult(true);
     }
 
     public Window? BuildWindow()
     {
-        throw new NotImplementedException();
+        return null;
     }
 
     public Task InitAsync(ConnectContext context)
     {
-        throw new NotImplementedException();
+        return Task.CompletedTask;
     }
 }

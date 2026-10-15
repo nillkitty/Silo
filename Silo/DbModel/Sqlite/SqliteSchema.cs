@@ -210,9 +210,24 @@ public static class EntitySchema
     {
         foreach (var info in _byType.Values.Where(i => i.SchemaKind == SchemaKind.Fixed))
         {
-            using var cmd = conn.CreateCommand();
-            cmd.CommandText = BuildCreateTableSql(info, info.FixedAlias!, layout);
-            cmd.ExecuteNonQuery();
+            using (var cmd = conn.CreateCommand())
+            {
+                cmd.CommandText = BuildCreateTableSql(info, info.FixedAlias!, layout);
+                cmd.ExecuteNonQuery();
+            }
+
+            // A Silo made by an older build has the table without columns added since: add them (empty), so the model
+            // can grow without older Silos refusing to open.
+            var columns = info.Columns.Where(c => info.IdProperty is null || c.Property != info.IdProperty)
+                              .Select(c => (c.ColumnName, SqlTypeAffinity(c.Property.PropertyType, c.Kind)));
+            try
+            {
+                SchemaUpgrade.AddMissingColumns(conn, (layout ?? SiloLayout.Archive).Table(info.FixedAlias!, info.TableName), columns);
+            }
+            catch (Exception ex)
+            {
+                Serilog.Log.Warning(ex, "Could not bring the {table} table up to date", info.TableName);
+            }
         }
     }
 
@@ -270,6 +285,7 @@ public static class EntitySchema
         Register(typeof(FieldMapping), nameof(FieldMapping), SchemaKind.WorldFamily, null);
         Register(typeof(WorldMapping), nameof(WorldMapping), SchemaKind.WorldFamily, null);
         Register(typeof(WorldSync),    nameof(WorldSync),    SchemaKind.WorldFamily, null);
+        Register(typeof(AuthoredTable), nameof(AuthoredTable), SchemaKind.WorldFamily, null); // rows of the built-in local world (see LocalWorld)
 
         // Second pass: now that every entity type is known, classify each type's columns
         // (an EntityRef column is any property whose type is itself a registered entity).

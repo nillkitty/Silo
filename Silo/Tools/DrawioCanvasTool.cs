@@ -38,11 +38,21 @@ public class DrawioCanvasTool : ToolBase
     private Diagram?    _current;
     private bool        _loading;
     private bool        _subscribed;
+    private int?        _pendingSelect; // a diagram the Explorer asked for before the canvas was built
+    private bool        _raising;       // true while this tool itself raises DiagramEvents.Changed
+
+    /// <summary>The (single) canvas tool, once it exists; the Explorer opens diagrams through it.</summary>
+    public static DrawioCanvasTool? Current { get; private set; }
+
+    /// <summary>The canvas opens as a pane in the dock area, which can be dragged out into its own window.</summary>
+    protected override bool UsesPane => true;
 
     public DrawioCanvasTool() : base("drawiocanvas")
     {
         DisplayName = "Diagram Canvas";
         GroupName   = "Diagrams";
+        Current     = this;
+        DiagramEvents.Changed += OnDiagramsChanged;
 
         _saveTimer = new DispatcherTimer(DispatcherPriority.Background) { Interval = SaveDelay };
         _saveTimer.Tick += (_, _) =>
@@ -126,8 +136,93 @@ public class DrawioCanvasTool : ToolBase
 
     // ---- list / open -----------------------------------------------------------------------------
 
+    private void Raise()
+    {
+        _raising = true;
+        try
+        {
+            DiagramEvents.RaiseChanged();
+        }
+        finally
+        {
+            _raising = false;
+        }
+    }
+
+    /// <summary>Shows the canvas (opening its pane if needed) on the diagram <paramref name="id" /> of the active Silo.</summary>
+    public async void ShowDiagram(int id)
+    {
+        try
+        {
+            if (_view is null)
+            {
+                // the first fill of the picker, when the content is built, selects it
+                _pendingSelect = id;
+                Show();
+                return;
+            }
+
+            Show();
+
+            await FlushAsync();
+            await RefreshListAsync(id);
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Opening the diagram {id} failed", id);
+        }
+    }
+
+    /// <summary>Someone else (the Explorer) created, renamed or deleted a diagram: keep the picker and the open diagram in step.</summary>
+    private void OnDiagramsChanged(object? sender, EventArgs e)
+    {
+        if (_raising || _view is null) return;
+
+        var store = Store;
+        _store = store;
+        var list = store?.ListDiagrams().Where(d => d.Kind == "canvas").ToList() ?? [];
+
+        _loading = true;
+        try
+        {
+            _picker.ItemsSource = list;
+            _picker.IsEnabled   = store is not null;
+        }
+        finally
+        {
+            _loading = false;
+        }
+
+        if (_current is null) return;
+
+        var latest = list.FirstOrDefault(d => d.Id == _current.Id);
+        if (latest is null)
+        {
+            // the open diagram was deleted: nothing of it is left to save
+            _saveTimer.Stop();
+            _current = null;
+            _ = OpenAsync(list.FirstOrDefault());
+            return;
+        }
+
+        _current    = latest;
+        _view.Title = latest.Name;
+        _loading    = true;
+        try
+        {
+            _picker.SelectedItem = latest;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
     private async Task RefreshListAsync(int? select)
     {
+        select         ??= _pendingSelect;
+        _pendingSelect =   null;
+
         var store = Store;
         _store = store;
         var list  = store?.ListDiagrams().Where(d => d.Kind == "canvas").ToList() ?? [];
@@ -221,13 +316,18 @@ public class DrawioCanvasTool : ToolBase
 
             if (xml == _current.Xml && opt == _current.OptionsJson && _view.Profile.Name == _current.Profile) return;
 
-            var edited = _current.Clone();
+            // start from what the store holds now, so a rename made elsewhere (the Explorer) is not undone by this save
+            var latest = store.GetDiagram(_current.Id);
+            if (latest is null) return; // deleted elsewhere
+
+            var edited = latest.Clone();
             edited.Xml         = xml;
             edited.OptionsJson = opt;
             edited.Profile     = _view.Profile.Name;
             edited.Modified    = DateTime.UtcNow;
             _current           = store.SaveDiagram(edited);
             _status.Text = $"Saved {_current.Modified.ToLocalTime():t}";
+            Raise();
             _view.SetStatus(null, false); // clear draw.io's "unsaved" marker; the Silo file itself is written by Save Silo
         }
         catch (Exception ex)
@@ -254,6 +354,7 @@ public class DrawioCanvasTool : ToolBase
         if (name is null) return;
 
         var d = store.SaveDiagram(new Diagram { Name = name, Kind = "canvas", Profile = DrawioProfiles.Canvas, Xml = DrawioDocument.EmptyXml });
+        Raise();
         await RefreshListAsync(d.Id);
     }
 
@@ -270,6 +371,7 @@ public class DrawioCanvasTool : ToolBase
         renamed.Name     = name;
         renamed.Modified = DateTime.UtcNow;
         var updated = store.SaveDiagram(renamed);
+        Raise();
         await RefreshListAsync(updated.Id);
     }
 
@@ -282,6 +384,7 @@ public class DrawioCanvasTool : ToolBase
 
         _saveTimer.Stop();
         store.DeleteDiagram(_current.Id);
+        Raise();
         await RefreshListAsync(null);
     }
 
@@ -316,6 +419,7 @@ public class DrawioCanvasTool : ToolBase
                                           Profile = DrawioProfiles.Canvas,
                                           Xml     = xml
                                       });
+            Raise();
             await RefreshListAsync(d.Id);
         }
         else

@@ -294,6 +294,28 @@ public partial class App : Application, IContainerHost
         if (Launch.Target is { } target)
             Dispatcher.BeginInvoke(new Action(async () => await Commanding.OpenSiloCommand.OpenPathAsync(target)),
                                    DispatcherPriority.ApplicationIdle);
+        else if (Launch.Mode == LaunchMode.Stock && SiloFileSettings.Instance.ReopenLastSilo)
+            Dispatcher.BeginInvoke(new Action(async () => await ReopenLastSiloAsync()), DispatcherPriority.ApplicationIdle);
+    }
+
+    /// <summary>
+    ///     Starting with no document to open: reopens the Silo that was open last. Only a local file that is still there
+    ///     and is an ordinary (non-Solo) Silo qualifies -- a URL or a Solo Silo would need a process of its own, which is
+    ///     not something to start behind the person's back. Keeps people from ending up with several scattered Silos.
+    /// </summary>
+    private async Task ReopenLastSiloAsync()
+    {
+        try
+        {
+            if (RecentSilos.Instance.Items.FirstOrDefault() is not { IsRemote: false, Exists: true } last) return;
+            if (SiloProbe.Probe(last.Target).IsSolo) return;
+
+            await Commanding.OpenSiloCommand.OpenPathAsync(last.Target);
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Reopening the last Silo failed");
+        }
     }
 
     protected override void OnExit(ExitEventArgs e)
