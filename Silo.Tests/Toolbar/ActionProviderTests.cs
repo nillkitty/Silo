@@ -1,6 +1,8 @@
 ﻿using System.IO;
+using System.Windows.Controls;
 using Silo.Commanding;
 using Silo.Connectors.File;
+using Silo.Contracts.Core;
 using Silo.Explorer;
 using Silo.Providers.Action;
 using Silo.Toolbar;
@@ -9,48 +11,23 @@ namespace Silo.Tests.Toolbar;
 
 public class ActionProviderTests
 {
-    private class Animal;
-
-    private sealed class Dog : Animal;
-
-    private sealed class AnimalActions : IActionProvider<Animal>
-    {
-        public IEnumerable<ProvidedCommand> GetCommands(Animal node)
-        {
-            yield return ProvidedCommand.From("feed", "Feed", () => { }, group: "General");
-        }
-    }
-
-    private sealed class DogActions : IActionProvider<Dog>
-    {
-        public IEnumerable<ProvidedCommand> GetCommands(Dog node)
-        {
-            yield return ProvidedCommand.From("walk", "Walk", () => { }, group: "Dog");
-        }
-    }
-
-    private sealed class ThrowingActions : IActionProvider<Dog>
-    {
-        public IEnumerable<ProvidedCommand> GetCommands(Dog node) => throw new InvalidOperationException("boom");
-    }
-
     [Test]
     public void Providers_are_asked_most_specific_type_first()
     {
-        ActionProviders.Register<Animal>(new AnimalActions());
-        ActionProviders.Register<Dog>(new DogActions());
+        ActionProviders.Register(new AnimalActions());
+        ActionProviders.Register(new DogActions());
 
         var ids = ActionProviders.CommandsFor(new Dog()).Select(c => c.Id).ToList();
 
-        Assert.That(ids, Is.EqualTo(new[] { "walk", "feed" }));
+        Assert.That(ids,                                                         Is.EqualTo(new[] { "walk", "feed" }));
         Assert.That(ActionProviders.CommandsFor(new Animal()).Select(c => c.Id), Is.EqualTo(new[] { "feed" }));
     }
 
     [Test]
     public void A_provider_that_throws_does_not_stop_the_others()
     {
-        ActionProviders.Register<Animal>(new AnimalActions());
-        ActionProviders.Register<Dog>(new ThrowingActions());
+        ActionProviders.Register(new AnimalActions());
+        ActionProviders.Register(new ThrowingActions());
 
         Assert.That(ActionProviders.CommandsFor(new Dog()).Select(c => c.Id), Does.Contain("feed"));
     }
@@ -60,7 +37,7 @@ public class ActionProviderTests
     {
         IActionProvider provider = new DogActions();
 
-        Assert.That(provider.GetCommands(new Dog()), Is.Not.Empty);
+        Assert.That(provider.GetCommands(new Dog()),  Is.Not.Empty);
         Assert.That(provider.GetCommands("a string"), Is.Empty);
     }
 
@@ -98,9 +75,11 @@ public class ActionProviderTests
         var node = new ExplorerNode("k", "n", "Node")
                    {
                        Model = new Dog(),
-                       Commands = new Provider(ProvidedCommand.From("p", "P", () => { }, group: ProvidedCommand.LastGroup),
-                                               ProvidedCommand.From("a", "A", () => { }, group: "One"),
-                                               ProvidedCommand.From("b", "B", () => { }, group: "Two"))
+                       Commands =
+                           new Provider(ProvidedCommand.From("p", "P", () => { },
+                                                             group: ProvidedCommand.LastGroup),
+                                        ProvidedCommand.From("a", "A", () => { }, group: "One"),
+                                        ProvidedCommand.From("b", "B", () => { }, group: "Two"))
                    };
 
         Assert.That(NodeCommandHub.CommandsFor(node).Select(c => c.Id), Is.EqualTo(new[] { "a", "b", "p" }));
@@ -126,44 +105,53 @@ public class ActionProviderTests
         }
     }
 
-    private sealed class Provider(params ProvidedCommand[] commands) : ICommandProvider
-    {
-        public IEnumerable<ProvidedCommand> GetCommands() => commands;
-    }
-
     [Test]
     public void A_submenu_command_carries_its_children_into_the_node_command()
     {
-        var parent = ProvidedCommand.Submenu("p", "P", [ProvidedCommand.From("c1", "C1", () => { }), ProvidedCommand.From("c2", "C2", () => { })], "G");
+        var parent =
+            ProvidedCommand.Submenu("p", "P", [ProvidedCommand.From("c1", "C1", () => { }), ProvidedCommand.From("c2", "C2", () => { })],
+                                    "G");
 
         var node = NodeCommand.From(parent);
 
-        Assert.That(node.Children!.Select(c => c.Id), Is.EqualTo(new[] { "c1", "c2" }));
+        Assert.That(node.Children!.Select(c => c.Id),            Is.EqualTo(new[] { "c1", "c2" }));
         Assert.That(node.SelfAndDescendants().Select(c => c.Id), Is.EqualTo(new[] { "p", "c1", "c2" }));
     }
 
     [Test]
     public void Menu_entries_get_a_heading_per_named_group_and_a_separator_between_unnamed_ones()
     {
-        NodeCommand Make(string id, string? group) => new(id, id, new DelegateCommand(_ => { }), null, null, null, group, true);
+        NodeCommand Make(string id, string? group)
+        {
+            return new NodeCommand(id, id, new DelegateCommand(_ => { }), null, null, null, group, true);
+        }
 
-        System.Windows.Controls.Control[]? built = null;
-        var thread = new Thread(() => built = CommandMenu.Items([Make("1", "Dir"), Make("2", "Dir"), Make("3", "Loc"), Make("4", ""), Make("5", null)]).ToArray());
+        Control[]? built = null;
+        var thread = new Thread(() => built = CommandMenu
+                                             .Items([Make("1", "Dir"), Make("2", "Dir"), Make("3", "Loc"), Make("4", ""), Make("5", null)])
+                                             .ToArray());
         thread.SetApartmentState(ApartmentState.STA);
         thread.Start();
         thread.Join();
 
         Assert.That(built!.Select(c => c.GetType().Name),
-                    Is.EqualTo(new[] { "MenuItem", "MenuItem", "MenuItem", "MenuItem", "MenuItem", "MenuItem", "Separator", "MenuItem", "Separator", "MenuItem" }));
+                    Is.EqualTo(new[]
+                               {
+                                   "MenuItem", "MenuItem", "MenuItem", "MenuItem", "MenuItem", "MenuItem", "Separator", "MenuItem",
+                                   "Separator", "MenuItem"
+                               }));
     }
 
     [Test]
     public void The_last_group_gets_a_separator_and_no_heading()
     {
-        NodeCommand Make(string id, string? group) => new(id, id, new DelegateCommand(_ => { }), null, null, null, group, true);
+        NodeCommand Make(string id, string? group)
+        {
+            return new NodeCommand(id, id, new DelegateCommand(_ => { }), null, null, null, group, true);
+        }
 
-        System.Windows.Controls.Control[]? built = null;
-        var thread = new Thread(() => built = CommandMenu.Items([Make("1", "Dir"), Make("2", ProvidedCommand.LastGroup)]).ToArray());
+        Control[]? built  = null;
+        var        thread = new Thread(() => built = CommandMenu.Items([Make("1", "Dir"), Make("2", ProvidedCommand.LastGroup)]).ToArray());
         thread.SetApartmentState(ApartmentState.STA);
         thread.Start();
         thread.Join();
@@ -174,15 +162,51 @@ public class ActionProviderTests
     [Test]
     public void A_heading_is_upper_case_accent_text_that_cannot_be_chosen()
     {
-        System.Windows.Controls.MenuItem? heading = null;
-        var thread = new Thread(() => heading = CommandMenu.Heading("Contents"));
+        MenuItem? heading = null;
+        var       thread  = new Thread(() => heading = CommandMenu.Heading("Contents"));
         thread.SetApartmentState(ApartmentState.STA);
         thread.Start();
         thread.Join();
 
-        Assert.That(heading!.Header, Is.EqualTo("CONTENTS"));
+        Assert.That(heading!.Header,          Is.EqualTo("CONTENTS"));
         Assert.That(heading.IsHitTestVisible, Is.False);
-        Assert.That(heading.Focusable, Is.False);
+        Assert.That(heading.Focusable,        Is.False);
+    }
+
+    private class Animal;
+
+    private sealed class Dog : Animal;
+
+    private sealed class AnimalActions : IActionProvider<Animal>
+    {
+        public IEnumerable<ProvidedCommand> GetCommands(Animal node)
+        {
+            yield return ProvidedCommand.From("feed", "Feed", () => { }, group: "General");
+        }
+    }
+
+    private sealed class DogActions : IActionProvider<Dog>
+    {
+        public IEnumerable<ProvidedCommand> GetCommands(Dog node)
+        {
+            yield return ProvidedCommand.From("walk", "Walk", () => { }, group: "Dog");
+        }
+    }
+
+    private sealed class ThrowingActions : IActionProvider<Dog>
+    {
+        public IEnumerable<ProvidedCommand> GetCommands(Dog node)
+        {
+            throw new InvalidOperationException("boom");
+        }
+    }
+
+    private sealed class Provider(params ProvidedCommand[] commands) : ICommandProvider
+    {
+        public IEnumerable<ProvidedCommand> GetCommands()
+        {
+            return commands;
+        }
     }
 }
 
@@ -210,19 +234,27 @@ public class FileActionsTests
         }
     }
 
-    private static FileModel Model(string path) => FileConnection.FromPath(new FileConnector(), path);
+    private static FileModel Model(string path)
+    {
+        return FileConnection.FromPath(new FileConnector(), path);
+    }
 
-    private static IEnumerable<string> Ids(FileModel m) => new FileActions().GetCommands(m).Select(c => c.Id);
+    private static IEnumerable<string> Ids(FileModel m)
+    {
+        return new FileActions().GetCommands(m).Select(c => c.Id);
+    }
 
     /// <summary>The commands that do something, without the disabled placeholders.</summary>
-    private static List<ProvidedCommand> Working(FileModel m) =>
-        new FileActions().GetCommands(m).Where(c => c.Command is not PlannedFileCommand).ToList();
+    private static List<ProvidedCommand> Working(FileModel m)
+    {
+        return new FileActions().GetCommands(m).Where(c => c.Command is not PlannedFileCommand).ToList();
+    }
 
     [Test]
     public void Planned_items_are_disabled_placeholders_with_distinct_ids()
     {
         string file = Path.Combine(_dir, "a.txt");
-        global::System.IO.File.WriteAllText(file, "x");
+        File.WriteAllText(file, "x");
 
         var planned = new FileActions().GetCommands(Model(file)).Where(c => c.Command is PlannedFileCommand).ToList();
 
@@ -245,12 +277,13 @@ public class FileActionsTests
     public void A_file_gets_the_File_section_and_the_Location_section()
     {
         string file = Path.Combine(_dir, "a.txt");
-        global::System.IO.File.WriteAllText(file, "x");
+        File.WriteAllText(file, "x");
 
         var commands = Working(Model(file));
 
-        Assert.That(commands.Select(c => c.Id), Is.EqualTo(new[] { "file.launch", "file.openwith", "file.reveal", "file.refresh", "file.copypath", "file.copyuri" }));
-        Assert.That(commands.Select(c => c.Group), Is.EqualTo(new[] { "File", "File", "File", "File", "Location", "Location" }));
+        Assert.That(commands.Select(c => c.Id),
+                    Is.EqualTo(new[] { "file.launch", "file.openwith", "file.reveal", "file.refresh", "file.copypath", "file.copyuri" }));
+        Assert.That(commands.Select(c => c.Group),        Is.EqualTo(new[] { "File", "File", "File", "File", "Location", "Location" }));
         Assert.That(commands.Single(c => c.IsDefault).Id, Is.EqualTo("file.launch"));
     }
 
@@ -269,7 +302,7 @@ public class FileActionsTests
     {
         var launch = new FileActions().GetCommands(Model(_dir)).First(c => c.Id == "file.reveal");
 
-        Assert.That(launch.Header, Is.EqualTo("_Reveal in Explorer"));
+        Assert.That(launch.Header,  Is.EqualTo("_Reveal in Explorer"));
         Assert.That(launch.IconKey, Is.EqualTo("Folder17"));
         Assert.That(launch.ToolTip, Is.Not.Empty);
     }
@@ -278,11 +311,11 @@ public class FileActionsTests
     public void Launching_is_only_enabled_for_a_file_that_is_there()
     {
         string file = Path.Combine(_dir, "a.txt");
-        global::System.IO.File.WriteAllText(file, "x");
+        File.WriteAllText(file, "x");
 
-        Assert.That(new LaunchFileCommand(Model(file)).CanExecute(null), Is.True);
+        Assert.That(new LaunchFileCommand(Model(file)).CanExecute(null),                              Is.True);
         Assert.That(new LaunchFileCommand(Model(Path.Combine(_dir, "missing.txt"))).CanExecute(null), Is.False);
-        Assert.That(new LaunchFileCommand(Model(_dir)).CanExecute(null), Is.False);
+        Assert.That(new LaunchFileCommand(Model(_dir)).CanExecute(null),                              Is.False);
     }
 
     [Test]
@@ -309,12 +342,12 @@ public class ShellExecutorTests
         try
         {
             string file = Path.Combine(dir, "a b.txt");
-            global::System.IO.File.WriteAllText(file, "x");
+            File.WriteAllText(file, "x");
 
-            Assert.That(ShellExecutor.RevealStart(file)!.Arguments, Is.EqualTo($"/select,\"{file}\""));
-            Assert.That(ShellExecutor.RevealStart(dir)!.Arguments, Is.EqualTo($"\"{dir}\""));
+            Assert.That(ShellExecutor.RevealStart(file)!.Arguments,                               Is.EqualTo($"/select,\"{file}\""));
+            Assert.That(ShellExecutor.RevealStart(dir)!.Arguments,                                Is.EqualTo($"\"{dir}\""));
             Assert.That(ShellExecutor.RevealStart(Path.Combine(dir, "gone", "x.txt"))!.Arguments, Is.EqualTo($"\"{dir}\""));
-            Assert.That(ShellExecutor.RevealStart(""), Is.Null);
+            Assert.That(ShellExecutor.RevealStart(""),                                            Is.Null);
         }
         finally
         {

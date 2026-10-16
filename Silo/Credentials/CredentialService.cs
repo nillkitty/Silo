@@ -118,6 +118,7 @@ public sealed class CredentialService
                {
                    Id       = row.Id,
                    Name     = row.Key,
+                   Realm    = payload.ReadRealm(),
                    Username = payload.Username,
                    Domain   = payload.Domain,
                    Password = payload.Password,

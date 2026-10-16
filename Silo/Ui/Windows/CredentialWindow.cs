@@ -9,7 +9,8 @@ using Silo.Model;
 namespace Silo.Ui.Windows;
 
 /// <summary>
-///     The New Credential / Edit Credential dialog (modal): a name, a user name, a domain, a password and notes. It saves
+///     The New Credential / Edit Credential dialog (modal): a name, what kind of credential it is (its realm: which of the
+///     user name, domain and password it uses), those fields, and notes. It saves
 ///     the credential
 ///     itself (sealed by the Silo's encryption) when Save is pressed, and says what is wrong in the dialog if it cannot.
 /// </summary>
@@ -25,6 +26,7 @@ public sealed class CredentialWindow : Window
     private readonly Button _copy = new() { Content = "Copy", Padding = new Thickness(10, 2, 10, 2), Margin = new Thickness(8, 0, 0, 0) };
     private readonly Credential _credential;
     private readonly TextBox _domain = new();
+    private readonly ComboBox _realm = new();
     private readonly bool _isNew;
 
     private readonly TextBlock _message = new()
@@ -53,6 +55,7 @@ public sealed class CredentialWindow : Window
                                           Margin  = new Thickness(8, 0, 0, 0)
                                       };
 
+    private readonly Label   _secretLabel = new() { Content = "_Password" };
     private readonly TextBox _user = new();
     private          bool    _revealAllowed;
 
@@ -179,10 +182,13 @@ public sealed class CredentialWindow : Window
     private void Save()
     {
         var c = _credential.Clone();
+        var realm = SelectedRealm;
+        var uses  = CredentialRules.Uses(realm);
         c.Name     = _name.Text.Trim();
-        c.Username = Clean(_user.Text);
-        c.Domain   = Clean(_domain.Text);
-        c.Password = CurrentPassword.Length == 0 ? null : CurrentPassword;
+        c.Realm    = realm;
+        c.Username = uses.UserName ? Clean(_user.Text) : null; // what the realm does not use is not kept
+        c.Domain   = uses.Domain ? Clean(_domain.Text) : null;
+        c.Password = !uses.Secret || CurrentPassword.Length == 0 ? null : CurrentPassword;
         c.Notes    = string.IsNullOrWhiteSpace(_notes.Text) ? null : _notes.Text;
 
         if (_service.Validate(c) is { } problem)
@@ -200,6 +206,21 @@ public sealed class CredentialWindow : Window
         {
             ShowMessage(ex.Message, true);
         }
+    }
+
+    private AuthRealm SelectedRealm => _realm.SelectedValue is AuthRealm r ? r : AuthRealm.Conventional;
+
+    /// <summary>Enables the boxes the realm signs in with and leaves the others alone (their text is kept until Save in case the person changes their mind).</summary>
+    private void ApplyRealm()
+    {
+        var uses = CredentialRules.Uses(SelectedRealm);
+        _user.IsEnabled     = uses.UserName;
+        _domain.IsEnabled   = uses.Domain;
+        _password.IsEnabled = uses.Secret;
+        _plain.IsEnabled    = uses.Secret;
+        _show.IsEnabled     = uses.Secret;
+        _copy.IsEnabled     = uses.Secret;
+        _secretLabel.Content = "_" + char.ToUpperInvariant(CredentialRules.SecretLabel(SelectedRealm)[0]) + CredentialRules.SecretLabel(SelectedRealm)[1..];
     }
 
     private static string? Clean(string text)
@@ -220,13 +241,16 @@ public sealed class CredentialWindow : Window
 
     private static void AddRow(Grid grid, int row, string label, UIElement field)
     {
+        AddRow(grid, row, new Label { Content = label }, field);
+    }
+
+    private static void AddRow(Grid grid, int row, Label text, UIElement field)
+    {
         grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
-        var text = new Label
-                   {
-                       Content = label, Target = field is Panel ? null : field, VerticalAlignment = VerticalAlignment.Top,
-                       Padding = new Thickness(0, 3, 12, 0)
-                   };
+        text.Target            = field is Panel ? null : field;
+        text.VerticalAlignment = VerticalAlignment.Top;
+        text.Padding           = new Thickness(0, 3, 12, 0);
         Grid.SetRow(text, row);
         Grid.SetColumn(text, 0);
 
@@ -254,6 +278,11 @@ public sealed class CredentialWindow : Window
         Owner                 = Application.Current?.MainWindow is { IsVisible: true } w ? w : null;
         if (Owner is null) WindowStartupLocation = WindowStartupLocation.CenterScreen;
 
+        _realm.ItemsSource       = Enum.GetValues<AuthRealm>().Select(r => new { Realm = r, Text = CredentialRules.Describe(r) }).ToList();
+        _realm.SelectedValuePath = "Realm";
+        _realm.DisplayMemberPath = "Text";
+        _realm.SelectedValue     = credential.Realm;
+
         _name.Text         = credential.Name;
         _user.Text         = credential.Username ?? string.Empty;
         _domain.Text       = credential.Domain   ?? string.Empty;
@@ -273,10 +302,11 @@ public sealed class CredentialWindow : Window
         passwordBox.Children.Add(_plain);
 
         AddRow(grid, 0, "_Name",      _name);
-        AddRow(grid, 1, "_User name", _user);
-        AddRow(grid, 2, "_Domain",    _domain);
-        AddRow(grid, 3, "_Password",  passwordBox);
-        AddRow(grid, 4, "N_otes",     _notes);
+        AddRow(grid, 1, "_Type",      _realm);
+        AddRow(grid, 2, "_User name", _user);
+        AddRow(grid, 3, "_Domain",    _domain);
+        AddRow(grid, 4, _secretLabel, passwordBox);
+        AddRow(grid, 5, "N_otes",     _notes);
 
         var hint = new TextBlock
                    {
@@ -306,6 +336,9 @@ public sealed class CredentialWindow : Window
         root.Children.Add(grid);
         root.Children.Add(new StackPanel { Margin = new Thickness(16, 0, 16, 8), Children = { _message, hint, buttons } });
         Content = root;
+
+        _realm.SelectionChanged += (_, _) => ApplyRealm();
+        ApplyRealm();
 
         _show.Checked   += (_, _) => SetShown(true);
         _show.Unchecked += (_, _) => SetShown(false);

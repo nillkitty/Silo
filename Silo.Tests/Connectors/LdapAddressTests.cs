@@ -1,7 +1,10 @@
 ﻿using System.Text.RegularExpressions;
 using Silo.Connectors.Ldap;
+using Silo.Contracts.ConnectorServices;
 using Silo.Contracts.Core;
 using Silo.Model;
+using Silo.Shell;
+using Silo.ViewModel;
 
 namespace Silo.Tests.Connectors;
 
@@ -97,13 +100,106 @@ public class LdapAddressTests
     [Test]
     public void A_saved_credential_hands_its_user_name_and_password_to_the_sink()
     {
-        var credential = new Credential { Name = "Contoso admin", Username = "bob", Domain = "CONTOSO", Password = "hunter2" };
+        var credential = new Credential { Name = "Contoso admin", Realm = AuthRealm.Domain, Username = "bob", Domain = "CONTOSO", Password = "hunter2" };
         var sink       = new LdapCredentialSink();
 
         credential.Configure(sink);
 
         Assert.That(sink.UserName, Is.EqualTo("CONTOSO\\bob"));
         Assert.That(sink.Password, Is.EqualTo("hunter2"));
+    }
+
+    [Test]
+    public void A_user_name_and_password_credential_signs_in_as_the_name_it_was_given()
+    {
+        var sink = new LdapCredentialSink();
+
+        new Credential { Name = "n", Username = "bob", Domain = "CONTOSO", Password = "hunter2" }.Configure(sink);
+
+        Assert.That(sink.UserName, Is.EqualTo("bob"), "simple authentication: the domain is not part of the name");
+        Assert.That(sink.Password, Is.EqualTo("hunter2"));
+    }
+
+    [TestCase(AuthRealm.DefaultCredential)]
+    [TestCase(AuthRealm.DefaultNetwork)]
+    [TestCase(AuthRealm.Anonymous)]
+    public void The_realms_that_name_nobody_leave_the_sink_signing_in_as_the_current_user(AuthRealm realm)
+    {
+        var sink = new LdapCredentialSink();
+        sink.SetBasicCredential("old", "old");
+
+        new Credential { Name = "n", Realm = realm, Username = "bob", Password = "hunter2" }.Configure(sink);
+
+        Assert.That(sink.UserName, Is.Null);
+        Assert.That(sink.Password, Is.Null);
+    }
+
+    // ---- the connector ---------------------------------------------------------------------------
+
+    [TestCase("adsi", UriSchemeScope.Private)]
+    [TestCase("ldap", UriSchemeScope.WellKnown)]
+    [TestCase("LDAPS", UriSchemeScope.WellKnown)]
+    [TestCase("http", UriSchemeScope.Unknown)]
+    public void The_connector_takes_the_ldap_schemes_and_no_other(string scheme, UriSchemeScope expected)
+    {
+        Assert.That(new LdapConnector().HandlesScheme(scheme), Is.EqualTo(expected));
+    }
+
+    [Test]
+    public void The_connector_checks_an_address_the_way_it_will_read_it()
+    {
+        var connector = new LdapConnector();
+
+        Assert.That(connector.Validate(new Uri("adsi://dc1/DC=contoso,DC=com")), Is.Null);
+        Assert.That(connector.Validate(new Uri("adsi://")), Is.Null, "no host: the current domain");
+        Assert.That(connector.Validate(new Uri("http://dc1/")), Is.Not.Null);
+    }
+
+    [Test]
+    public void The_connector_asks_for_no_credential_by_default()
+    {
+        Assert.That(new LdapConnector().AuthFlags, Is.EqualTo(ConnectorAuthFlags.None));
+    }
+
+    // ---- making a connection ---------------------------------------------------------------------
+
+    [Test]
+    public void Making_a_connection_asks_nothing_of_the_directory()
+    {
+        if (!OperatingSystem.IsWindows()) Assert.Ignore("ADSI is Windows only.");
+
+        var connection = LdapModel.Create(new LdapConnector(), new ConnectionRequest(new Uri("adsi://dc1.contoso.com/DC=contoso,DC=com")));
+        try
+        {
+            Assert.That(connection.State, Is.InstanceOf<LdapState.Disconnected>());
+            Assert.That(connection.ConnectionState, Is.False);
+            Assert.That(connection.Name, Is.EqualTo("dc1.contoso.com"));
+            Assert.That(connection.Uri, Is.EqualTo(new Uri("adsi://dc1.contoso.com/DC=contoso,DC=com")));
+            Assert.That(connection.GetHostname(), Is.EqualTo("dc1.contoso.com"));
+            Assert.That(connection.CurrentOperation, Is.Null);
+
+            // the details of a connection that has not read its directory say so without reading it
+            Assert.That(connection.GetDetails().Select(r => r.Name), Does.Contain("State"));
+        }
+        finally
+        {
+            connection.Entry.Dispose();
+        }
+    }
+
+    // ---- which entries can be opened -------------------------------------------------------------
+
+    [TestCase("organizationalunit", true)]
+    [TestCase("container", true)]
+    [TestCase("domaindns", true)]
+    [TestCase("builtindomain", true)]
+    [TestCase("user", false)]
+    [TestCase("computer", false)]
+    [TestCase("group", false)]
+    [TestCase("object", false)]
+    public void Containers_are_read_when_expanded_and_the_rest_are_leaves(string kind, bool expandable)
+    {
+        Assert.That(LdapModel.HasChildrenOfKind(kind), Is.EqualTo(expandable));
     }
 
     [Test]
@@ -138,9 +234,10 @@ public class LdapAddressTests
     {
         yield return new LdapState.Disconnected();
         yield return new LdapState.Connecting(new Uri("ldap://dc1:389"));
-        yield return new LdapState.Busy("reading", CancellationToken.None);
+        yield return new LdapState.Busy(new LdapState.Connected(), "reading", CancellationToken.None);
         yield return new LdapState.Connected();
         yield return new LdapState.Failed(new InvalidOperationException("no route"));
+        yield return new LdapState.Aborting(new LdapState.Busy(new LdapState.Connected(), "reading", CancellationToken.None));
     }
 
     [Test]
@@ -148,7 +245,7 @@ public class LdapAddressTests
     {
         var keys = States().Select(s => s.IconKey).ToList();
 
-        Assert.That(keys, Is.EqualTo(new[] { "StateDisconnected", "StateConnecting", "StateBusy", "StateConnected", "StateFailed" }));
+        Assert.That(keys, Is.EqualTo(new[] { "StateDisconnected", "StateConnecting", "StateBusy", "StateConnected", "StateFailed", "StateBusy" }));
         Assert.That(IconAttribute.KeyOf(typeof(LdapState)), Is.Null, "the base state is not one of them");
     }
 

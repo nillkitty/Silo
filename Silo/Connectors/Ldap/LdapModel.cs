@@ -1,15 +1,36 @@
-﻿using System.DirectoryServices;
+﻿using System.Diagnostics.CodeAnalysis;
+using System.DirectoryServices;
+using System.Globalization;
+using System.Runtime.InteropServices;
 using Silo.Model;
+using Silo.ViewModel;
 
 namespace Silo.Connectors.Ldap;
 
-public class LdapModel : ModelBase
+public class LdapModel : ModelBase, INodeProvider, INodeDetails
 {
     protected internal const uint BuiltinLocal = 0x00000001; // GROUP_TYPE_BUILTIN_LOCAL_GROUP
     protected internal const uint Global       = 0x00000002; // GROUP_TYPE_ACCOUNT_GROUP
     protected internal const uint DomainLocal  = 0x00000004; // GROUP_TYPE_RESOURCE_GROUP
     protected internal const uint Universal    = 0x00000008; // GROUP_TYPE_UNIVERSAL_GROUP
     protected internal const uint Security     = 0x80000000; // GROUP_TYPE_SECURITY_ENABLED
+
+    // what is asked for when the entries below an entry are read: only what the nodes and the details show
+    private static readonly string[] ChildAttributes =
+    [
+        "name", "objectCategory", "distinguishedName", "groupType", "description",
+        "sAMAccountName", "userPrincipalName", "mail", "whenCreated",
+        "whenChanged"
+    ];
+
+    private static readonly (string Label, string Attribute)[] DetailAttributes =
+    [
+        ("Description", "description"),
+        ("Account name", "sAMAccountName"),
+        ("User principal name", "userPrincipalName"),
+        ("E-mail", "mail"),
+        ("Created", "whenCreated"), ("Changed", "whenChanged")
+    ];
 
     public enum GroupScope
     {
@@ -24,38 +45,65 @@ public class LdapModel : ModelBase
     ///     The name of the object's category (<c>Person</c>, <c>Computer</c>, <c>Organizational-Unit</c>), which is the first
     ///     part of the <c>objectCategory</c> distinguished name without its <c>CN=</c>.
     /// </summary>
-    public string? Category { get; }
+    public string? Category { get; private set; }
+
+    /// <summary>
+    ///     The connection this entry was read through (the root has the connection itself); null for a model made on its
+    ///     own.
+    /// </summary>
+    public virtual LdapConnection? Connection { get; }
 
     public ICredential? Credential { get; set; }
 
-    public string?        DN        { get; }
-    public DirectoryEntry Entry     { get; init; }
-    public int            GroupType { get; }
+    public string?        DN        { get; private set; }
+    public DirectoryEntry Entry     { get; private set; }
+    public int            GroupType { get; private set; }
 
-    /// <summary>
-    ///     The key of the icon (see <c>Resources/NavIcons.xaml</c>) as a relative URI, which is how the Explorer reads one.
-    /// </summary>
-    public Uri Icon { get; }
+    /// <summary>Whether the entry can have entries below it: a container is read when it is expanded, the rest are leaves.</summary>
+    public virtual bool HasChildren => HasChildrenOfKind(Kind);
 
     /// <summary>
     ///     What the entry is, in one lower-case word with no hyphens (<c>user</c>, <c>group</c>,
     ///     <c>organizationalunit</c>); see <see cref="KindOf" />.
     /// </summary>
-    public string Kind { get; }
+    public string Kind { get; private set; }
+
+    /// <summary>The text of the entry's node.</summary>
+    public virtual string Label => Name;
+
+    /// <summary>The entry's node in the Explorer, once it has been made (see <see cref="GetNode" />).</summary>
+    public SiloNode? Node { get; protected set; }
+
+    public string? ObjectCategory { get; private set; }
+
+    /// <summary>The entry's class in the directory schema (<c>user</c>, <c>group</c>, <c>organizationalUnit</c>...).</summary>
+    public string? SchemaClass { get; private set; }
+
+    /// <summary>
+    ///     Whether the entry has been read, so that asking it for an attribute does not go to the directory. Always, but
+    ///     for a connection that has not connected yet.
+    /// </summary>
+    protected virtual bool IsLoaded => true;
+
+    /// <summary>
+    ///     The key of the icon (see <c>Resources/NavIcons.xaml</c>) as a relative URI, which is how the Explorer reads one.
+    /// </summary>
+    public Uri Icon { get; private set; }
 
     /// <summary>
     ///     The entry's name as people write it (<c>Smith, John</c>), not its relative distinguished name (
     ///     <c>CN=Smith\, John</c>).
     /// </summary>
-    public string? Name { get; }
+    public string Name { get; private set; }
 
-    public string? ObjectCategory { get; }
+    public string TypeName { get; private set; }
+    public Uri    Uri      { get; private set; }
 
-    /// <summary>The entry's class in the directory schema (<c>user</c>, <c>group</c>, <c>organizationalUnit</c>...).</summary>
-    public string? SchemaClass { get; }
-
-    public string TypeName { get; }
-    public Uri    Uri      { get; }
+    /// <summary>
+    ///     The directory entry itself, for code that wants the data and not the model (see
+    ///     <see cref="INodeProvider.Data" />).
+    /// </summary>
+    public object? Data => Entry;
 
     /// <summary>
     ///     The <c>ldap://</c> address an <c>adsi://</c> one stands for: the same host, port and distinguished name under the
@@ -168,11 +216,14 @@ public class LdapModel : ModelBase
     }
 
     /// <summary>
-    ///     Opens the directory a request names: its URI (<see cref="ToAdsPath" />; the connector's default, the current
-    ///     domain, when there is none), signed in with the credential in the request's metadata (the Windows user's own when
-    ///     there is none), with the connector's paging, referral and password encoding.
+    ///     Makes the connection a request asks for, without touching the directory: its URI (<see cref="ToAdsPath" />; the
+    ///     connector's default, the current domain, when there is none) and the credential in the request's metadata (the
+    ///     Windows
+    ///     user's own when there is none) are kept for when it connects (<see cref="LdapConnection.Connect" />), which is what
+    ///     binds, finds the default naming context and applies the connector's paging, referral and password encoding, off the
+    ///     calling thread.
     /// </summary>
-    public static LdapConnection Connect(LdapConnector connector, ConnectionRequest? crq)
+    public static LdapConnection Create(LdapConnector connector, ConnectionRequest? crq)
     {
         connector.Required();
         crq ??= new ConnectionRequest(connector.DefaultUri);
@@ -183,25 +234,92 @@ public class LdapModel : ModelBase
         var sink       = new LdapCredentialSink();
         credential?.Configure(sink);
 
-        var    auth = AuthenticationTypes.Secure | (IsSecure(uri) ? AuthenticationTypes.SecureSocketsLayer : AuthenticationTypes.None);
-        // the entry binds as soon as its options are touched, so it has to know who it is by then
-        string path = WithDefaultNamingContext(ToAdsPath(uri), sink.UserName, sink.Password, auth);
+        var auth = AuthenticationTypes.Secure | (IsSecure(uri) ? AuthenticationTypes.SecureSocketsLayer : AuthenticationTypes.None);
+        var bind = new LdapBind(ToAdsPath(uri), sink.UserName, sink.Password, auth);
 
-        var entry = new DirectoryEntry(path, sink.UserName, sink.Password, auth);
+        return new LdapConnection(bind, uri, connector, crq.Metadata ?? [], credential, crq.ParentNode, crq.DisplayName);
+    }
+
+    /// <summary>
+    ///     <see cref="Create" />s the connection and connects it, without blocking the caller. If it cannot connect the
+    ///     connection is
+    ///     discarded and the reason thrown.
+    /// </summary>
+    public static async Task<LdapConnection> ConnectAsync(LdapConnector     connector, ConnectionRequest? crq,
+                                                          CancellationToken cancel = default)
+    {
+        var connection = Create(connector, crq);
         try
         {
-            entry.Options.PageSize         = connector.PageSize ?? 10_000;
-            entry.Options.Referral         = connector.Referral;
-            entry.Options.PasswordEncoding = connector.PasswordEncoding;
-            entry.RefreshCache();
+            await connection.Connect(cancel);
         }
         catch
         {
-            entry.Dispose();
+            connection.Entry.Dispose();
             throw;
         }
 
-        return new LdapConnection(entry, connector, crq.Metadata ?? [], credential);
+        return connection;
+    }
+
+    /// <summary><see cref="WithDefaultNamingContext" /> off the calling thread: it asks the directory.</summary>
+    internal static Task<string> WithDefaultNamingContextAsync(string path, string? userName, string? password, AuthenticationTypes auth,
+                                                               CancellationToken cancel)
+    {
+        return Task.Run(() => WithDefaultNamingContext(path, userName, password, auth), cancel);
+    }
+
+    /// <summary>
+    ///     Whether entries of this kind (see <see cref="KindOf" />) hold other entries: organizational units, containers
+    ///     and the like. A group does not: its members are a list of references, not entries below it.
+    /// </summary>
+    public static bool HasChildrenOfKind(string kind)
+    {
+        return kind is "organizationalunit" or "container" or "builtindomain" or "domaindns" or "domain" or "configuration"
+                    or "lostandfound" or "sitescontainer" or "site" or "subnetcontainer";
+    }
+
+    // the first value of an attribute as text; whenCreated is a date and description can have several values
+    private static string? AttributeText(DirectoryEntry entry, string attribute)
+    {
+        return entry.Properties[attribute] is { Count: > 0 } values ? Convert.ToString(values[0], CultureInfo.CurrentCulture) : null;
+    }
+
+    /// <summary>
+    ///     The entries below this one, as nodes: containers first, then by name. Read off the UI thread, through the
+    ///     connection so it is tracked.
+    /// </summary>
+    internal Task<IReadOnlyList<SiloNode>> LoadChildNodesAsync(CancellationToken cancel)
+    {
+        var connection = Connection ?? throw new InvalidOperationException("The entry was not read through a connection.");
+        return connection.RunAsync($"Reading {Name}", () => ReadChildren(connection, cancel), cancel);
+    }
+
+    private IReadOnlyList<SiloNode> ReadChildren(LdapConnection connection, CancellationToken cancel)
+    {
+        var models = new List<LdapModel>();
+
+        foreach (DirectoryEntry child in Entry.Children)
+        {
+            cancel.ThrowIfCancellationRequested();
+
+            try
+            {
+                child.RefreshCache(ChildAttributes);
+                models.Add(new LdapModel(child, connection) { Credential = Credential });
+            }
+            catch (Exception ex) when (ex is COMException or InvalidOperationException)
+            {
+                // one entry that cannot be read (no right to it, deleted meanwhile) is not a reason to show none of the others
+                Logger.Debug(ex, "Could not read {Child} below {Entry}", child.Path, Entry.Path);
+                child.Dispose();
+            }
+        }
+
+        return models.OrderByDescending(m => m.HasChildren)
+                     .ThenBy(m => m.Name, StringComparer.CurrentCultureIgnoreCase)
+                     .Select(m => m.GetNode()!)
+                     .ToList();
     }
 
     public string GetGroupTypeName()
@@ -321,19 +439,74 @@ public class LdapModel : ModelBase
         }
     }
 
-    public LdapModel(DirectoryEntry entry)
+    /// <summary>Reads what the entry is from the entry (which asks the directory, unless it was loaded already).</summary>
+    /// <param name="entry">The entry the model stands for from now on.</param>
+    /// <param name="keepUri">Keep the URI the model has (the one it was asked for) instead of the entry's own.</param>
+    [MemberNotNull(nameof(Entry), nameof(Name), nameof(Kind), nameof(TypeName), nameof(Icon), nameof(Uri))]
+    protected void Populate(DirectoryEntry entry, bool keepUri = false)
     {
         Entry          = entry.Required();
         ObjectCategory = entry.GetValue<string>("objectCategory");
         Category       = ObjectCategory is null ? null : RdnValue(FirstRdn(ObjectCategory));
         DN             = entry.GetValue<string>("distinguishedName");
         Name           = entry.GetValue<string>("name") ?? RdnValue(entry.Name);
-        Uri            = new Uri(entry.Path, UriKind.RelativeOrAbsolute);
-        GroupType      = entry.GetValue<int>("groupType");
-        SchemaClass    = SchemaClassOf(entry);
-        Kind           = KindOf(SchemaClass, Category);
-        TypeName       = TypeNameOf(Kind, GroupType, Category ?? SchemaClass);
-        Icon           = new Uri(IconKeyOf(Kind), UriKind.Relative);
+        if (!keepUri || Uri is null) Uri = new Uri(entry.Path, UriKind.RelativeOrAbsolute);
+        GroupType   = entry.GetValue<int>("groupType");
+        SchemaClass = SchemaClassOf(entry);
+        Kind        = KindOf(SchemaClass, Category);
+        TypeName    = TypeNameOf(Kind, GroupType, Category ?? SchemaClass);
+        Icon        = new Uri(IconKeyOf(Kind), UriKind.Relative);
+    }
+
+    /// <summary>A model of an entry that is already bound: its properties are read now (which asks the directory).</summary>
+    public LdapModel(DirectoryEntry entry, LdapConnection? connection = null)
+    {
+        Connection = connection;
+        Populate(entry);
+    }
+
+    /// <summary>
+    ///     A model of an entry that has not been opened yet (<paramref name="requested" /> is where it was asked to go): it
+    ///     knows only
+    ///     that, and says what it is once <see cref="Populate" /> has read the entry. Nothing is asked of the directory.
+    /// </summary>
+    protected LdapModel(DirectoryEntry unbound, Uri requested, LdapConnection? connection = null)
+    {
+        Connection = connection;
+        Entry      = unbound.Required();
+        Uri        = requested.Required();
+        Kind       = "domaindns";
+        Name       = requested.Host.Length > 0 ? requested.Host : "Directory";
+        TypeName   = TypeNameOf(Kind, 0);
+        Icon       = new Uri(IconKeyOf(Kind), UriKind.Relative);
+    }
+
+    /// <summary>
+    ///     The rows of the Properties pane: what the entry is and the attributes people look for. Nothing is asked of the
+    ///     directory (they were read with the entry).
+    /// </summary>
+    public virtual IEnumerable<(string Name, string Value)> GetDetails()
+    {
+        yield return ("Type", TypeName);
+        yield return ("Name", Name);
+
+        if (DN is not null) yield return ("Distinguished name", DN);
+        if (SchemaClass is not null) yield return ("Class", SchemaClass);
+        if (Category is not null) yield return ("Category", Category);
+        if (Kind == "group") yield return ("Group type", GetGroupTypeName());
+
+        if (!IsLoaded) yield break; // not read yet: the rows below would bind the entry on whoever asked
+
+        foreach (var (label, attribute) in DetailAttributes)
+            if (AttributeText(Entry, attribute) is { Length: > 0 } value)
+                yield return (label, value);
+    }
+
+    /// <summary>The node for the entry; the entries below it are read when it is expanded.</summary>
+    public virtual SiloNode? GetNode()
+    {
+        Node ??= new LdapNode(this);
+        return Node;
     }
 
     public readonly record struct AdGroupInfo(GroupScope Scope, bool IsSecurityEnabled)
@@ -344,3 +517,13 @@ public class LdapModel : ModelBase
         }
     }
 }
+
+/// <summary>What a connection needs to open its directory when it connects: where, as whom, and how.</summary>
+/// <param name="Path">
+///     The ADSI path (<c>LDAP://host:port/distinguished name</c>), perhaps without a distinguished name
+///     (see <see cref="LdapModel.ToAdsPath" />).
+/// </param>
+/// <param name="UserName">The name to sign in as, domain included; null for the Windows user's own.</param>
+/// <param name="Password">The password.</param>
+/// <param name="Auth">The authentication types, TLS included.</param>
+public sealed record LdapBind(string Path, string? UserName, string? Password, AuthenticationTypes Auth);

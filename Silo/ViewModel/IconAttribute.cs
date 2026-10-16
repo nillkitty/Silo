@@ -1,6 +1,6 @@
 ﻿using System.Reflection;
 
-namespace Silo.Connectors.Ldap;
+namespace Silo.ViewModel;
 
 /// <summary>
 ///     Sets the fallback Icon Key for a given type (model or node)

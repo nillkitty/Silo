@@ -42,6 +42,19 @@ public record Connected(Uri Uri) : SqlState
 }
 
 /// <summary>
+///     The last attempt to connect failed (or the link broke under a read): there is no connection, and why is kept here.
+///     A read that fails on a connection that is still open does not end up here; it only sets
+///     <see cref="SqlConnection.LastError" />.
+/// </summary>
+public record Failed(Exception Error) : SqlState
+{
+    public override string ToString()
+    {
+        return $"Failed: {Error.Message}";
+    }
+}
+
+/// <summary>
 ///     Connected and busy
 /// </summary>
 public record Busy(string Operation, CancellationToken Cancel) : SqlState

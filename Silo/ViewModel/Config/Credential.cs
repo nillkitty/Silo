@@ -46,7 +46,7 @@ public sealed class Credential : ICredential
     /// <summary>
     ///     The domain or realm name the credential is for
     /// </summary>
-    public string Domain { get; set; }
+    public string? Domain { get; set; }
 
     /// <summary>The row in the Silo's <c>Secret</c> table; 0 until it is saved.</summary>
     public int Id { get; set; }
@@ -72,9 +72,11 @@ public sealed class Credential : ICredential
     public string? Username { get; set; }
 
     /// <summary>
-    ///     The target realm of the credential
+    ///     The target realm of the credential: how it is used to sign in (which of the user name, domain and password
+    ///     it uses; see <see cref="Silo.Credentials.CredentialRules.Uses" />). A credential made with a user name and
+    ///     password is <see cref="AuthRealm.Conventional" />, which is also what a credential saved before realms existed is read as.
     /// </summary>
-    public AuthRealm Realm { get; set; }
+    public AuthRealm Realm { get; set; } = AuthRealm.Conventional;
 
     string? IDisplayName.DisplayName => Name;
 
@@ -91,6 +93,17 @@ public sealed class Credential : ICredential
         return Name;
     }
 
+    private NotSupportedException Unsupported(ICredentialSink target)
+    {
+        return new NotSupportedException($"A {Realm} credential cannot be used to sign in to a {target.GetType().Name}.");
+    }
+
+    private void RequireUserAndPassword()
+    {
+        if (Username.Nill()) throw new InvalidCredentialException("'Username' is a required field for this realm.");
+        if (Password.Nill()) throw new InvalidCredentialException("'Password' is a required field for this realm.");
+    }
+
     private void _ConfigureAnonymous(ICredentialSink target)
     {
         switch (target.Required())
@@ -105,57 +118,81 @@ public sealed class Credential : ICredential
         }
     }
 
+    /// <summary>The signed-in Windows user: no name or password is handed over, the sink uses the current security context.</summary>
     private void _ConfigureDefault(ICredentialSink target)
     {
-        throw new NotImplementedException();
+        switch (target.Required())
+        {
+            case SqlConnection sql:
+                sql.SetCredentialFragment("Integrated Security=SSPI;");
+                break;
+            case LdapCredentialSink ldap:
+                ldap.Clear();
+                break;
+            case IUserPasswordSink sink:
+                sink.SetUserPassword(null, null, null);
+                break;
+            // a WebConnection (and a FileConnection) reads the Realm from the credential itself
+        }
     }
 
+    /// <summary>The network credential of the process: the same identity as <see cref="_ConfigureDefault" /> for what signs in here.</summary>
     private void _ConfigureDefaultNet(ICredentialSink target)
     {
-        throw new NotImplementedException();
+        _ConfigureDefault(target);
     }
 
     private void _ConfigureDomain(ICredentialSink target)
     {
-        throw new NotImplementedException();
+        RequireUserAndPassword();
+        switch (target.Required())
+        {
+            case SqlConnection: // a connection string cannot sign in as another Windows account
+                throw Unsupported(target);
+            case IUserPasswordSink sink:
+                sink.SetUserPassword(Username, Password, Domain);
+                break;
+        }
     }
 
     private void _ConfigureBearer(ICredentialSink target)
     {
-        throw new NotImplementedException();
+        throw Unsupported(target.Required());
     }
 
     private void _ConfigureCert(ICredentialSink target)
     {
-        throw new NotImplementedException();
+        throw Unsupported(target.Required());
     }
 
     private void _ConfigureRsaKey(ICredentialSink target)
     {
-        throw new NotImplementedException();
+        throw Unsupported(target.Required());
     }
 
     private void _ConfigureConventional(ICredentialSink target)
     {
-        if (Username.Nill()) throw new InvalidCredentialException("'Username' is a required field for this realm.");
-        if (Password.Nill()) throw new InvalidCredentialException("'Password' is a required field for this realm.");
-        switch (target)
+        RequireUserAndPassword();
+        switch (target.Required())
         {
             case SqlConnection sql:
-                sql.SetCredentialFragment($"User Id={Username}; Password={Password};");
+                // the builder quotes what needs it: a password with a ; in it must not end the setting
+                sql.SetCredentialFragment(new Microsoft.Data.SqlClient.SqlConnectionStringBuilder { UserID = Username, Password = Password }.ConnectionString + ";");
                 break;
             case LdapCredentialSink ldap:
-                ldap.SetBasicCredential(Username, Password);
+                ldap.SetBasicCredential(Username!, Password!);
                 break;
-            case WebConnection web:
+            case IUserPasswordSink sink:
+                sink.SetUserPassword(Username, Password, null);
                 break;
         }
     }
 
     /// <summary>
-    ///     Hands the user name, domain and password to a sink that signs in with them (<see cref="IUserPasswordSink" />);
-    ///     a sink that does not is left alone.
+    ///     Hands what the <see cref="Realm" /> uses (the signed-in user, a user name and password, ...) to the sink; a sink that
+    ///     does not take the realm's kind of credential is left alone, except where it cannot be used at all (<see cref="NotSupportedException" />).
     /// </summary>
+    /// <exception cref="InvalidCredentialException">The realm needs a user name or a password that is not there.</exception>
     public void Configure(ICredentialSink target)
     {
         switch (Realm)
@@ -185,10 +222,8 @@ public sealed class Credential : ICredential
                 _ConfigureAnonymous(target);
                 break;
             default:
-                throw new ArgumentOutOfRangeException();
+                throw new ArgumentOutOfRangeException(nameof(Realm), Realm, "Unknown realm.");
         }
-
-        if (target is IUserPasswordSink sink) sink.SetUserPassword(Username, Password, Domain);
     }
 }
 

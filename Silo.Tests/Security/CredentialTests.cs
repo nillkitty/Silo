@@ -1,6 +1,8 @@
 ﻿using System.Linq;
 using System.Text;
+using Silo.Contracts.Core;
 using Silo.Contracts.Providers.Crypto;
+using System.Security.Authentication;
 using Silo.Credentials;
 using Silo.Crypto;
 using Silo.Model;
@@ -27,6 +29,12 @@ public class CredentialModelTests
     }
 
     [Test]
+    public void A_new_credential_is_a_user_name_and_password_one()
+    {
+        Assert.That(new Credential().Realm, Is.EqualTo(AuthRealm.Conventional));
+    }
+
+    [Test]
     public void A_clone_is_a_separate_object()
     {
         var c = new Credential { Name = "a", Username = "u" };
@@ -41,7 +49,7 @@ public class CredentialRulesTests
 {
     private static readonly (int, string)[] Others = [(1, "Sales server"), (2, "Contoso admin")];
 
-    private static Credential Valid(string name = "New one") => new() { Name = name, Username = "u" };
+    private static Credential Valid(string name = "New one") => new() { Name = name, Username = "u", Password = "p" };
 
     [Test]
     public void A_good_credential_is_accepted()
@@ -81,11 +89,56 @@ public class CredentialRulesTests
     }
 
     [Test]
-    public void It_needs_a_user_name_or_a_password()
+    public void A_user_name_and_password_credential_needs_both()
     {
-        Assert.That(CredentialRules.Check(new Credential { Name = "x" }, Others), Is.Not.Null);
-        Assert.That(CredentialRules.Check(new Credential { Name = "x", Password = "p" }, Others), Is.Null);
-        Assert.That(CredentialRules.Check(new Credential { Name = "x", Username = "u" }, Others), Is.Null);
+        Assert.That(CredentialRules.Check(new Credential { Name = "x" }, Others), Does.Contain("user name"));
+        Assert.That(CredentialRules.Check(new Credential { Name = "x", Password = "p" }, Others), Does.Contain("user name"));
+        Assert.That(CredentialRules.Check(new Credential { Name = "x", Username = "u" }, Others), Does.Contain("password"));
+        Assert.That(CredentialRules.Check(new Credential { Name = "x", Username = "u", Password = "p" }, Others), Is.Null);
+    }
+
+    [Test]
+    public void A_domain_account_needs_a_user_name_and_password_but_not_the_domain()
+    {
+        Assert.That(CredentialRules.Check(new Credential { Name = "x", Realm = AuthRealm.Domain, Username = "u" }, Others), Does.Contain("password"));
+        Assert.That(CredentialRules.Check(new Credential { Name = "x", Realm = AuthRealm.Domain, Username = "u", Password = "p" }, Others), Is.Null);
+    }
+
+    [TestCase(AuthRealm.DefaultCredential)]
+    [TestCase(AuthRealm.DefaultNetwork)]
+    [TestCase(AuthRealm.Anonymous)]
+    public void The_realms_that_sign_in_with_nothing_of_the_credential_need_nothing_but_a_name(AuthRealm realm)
+    {
+        Assert.That(CredentialRules.Check(new Credential { Name = "x", Realm = realm }, Others), Is.Null);
+    }
+
+    [TestCase(AuthRealm.Bearer, "token")]
+    [TestCase(AuthRealm.Certificate, "thumbprint")]
+    [TestCase(AuthRealm.RsaKey, "key")]
+    public void A_token_thumbprint_or_key_is_the_only_thing_those_realms_need(AuthRealm realm, string called)
+    {
+        Assert.That(CredentialRules.Check(new Credential { Name = "x", Realm = realm }, Others), Does.Contain(called));
+        Assert.That(CredentialRules.Check(new Credential { Name = "x", Realm = realm, Password = "s" }, Others), Is.Null);
+    }
+
+    [Test]
+    public void A_realm_that_does_not_exist_is_refused()
+    {
+        Assert.That(CredentialRules.Check(new Credential { Name = "x", Realm = (AuthRealm)99, Username = "u", Password = "p" }, Others), Is.Not.Null);
+    }
+
+    [Test]
+    public void Every_realm_says_what_it_uses_and_has_a_name_for_people()
+    {
+        foreach (var realm in Enum.GetValues<AuthRealm>())
+        {
+            Assert.That(CredentialRules.Describe(realm), Is.Not.Empty, realm.ToString());
+            Assert.That(CredentialRules.SecretLabel(realm), Is.Not.Empty, realm.ToString());
+        }
+
+        Assert.That(CredentialRules.Uses(AuthRealm.Domain), Is.EqualTo(new RealmFields(true, true, true)));
+        Assert.That(CredentialRules.Uses(AuthRealm.Conventional), Is.EqualTo(new RealmFields(true, false, true)));
+        Assert.That(CredentialRules.Uses(AuthRealm.Anonymous), Is.EqualTo(new RealmFields(false, false, false)));
     }
 }
 
@@ -102,6 +155,31 @@ public class CredentialPayloadTests
         Assert.That(back.Domain,   Is.EqualTo(c.Domain));
         Assert.That(back.Password, Is.EqualTo(c.Password));
         Assert.That(back.Notes,    Is.EqualTo(c.Notes));
+    }
+
+    [Test]
+    public void The_realm_round_trips_by_name()
+    {
+        var bytes = CredentialPayload.Write(new Credential { Realm = AuthRealm.Domain, Username = "u" });
+
+        Assert.That(System.Text.Encoding.UTF8.GetString(bytes), Does.Contain("\"realm\":\"Domain\""));
+        Assert.That(CredentialPayload.Read(bytes).ReadRealm(), Is.EqualTo(AuthRealm.Domain));
+    }
+
+    [Test]
+    public void A_credential_saved_before_realms_is_a_user_name_and_password_one()
+    {
+        var back = CredentialPayload.Read(Encoding.UTF8.GetBytes("{\"v\":1,\"user\":\"u\",\"password\":\"p\"}"));
+
+        Assert.That(back.ReadRealm(), Is.EqualTo(AuthRealm.Conventional));
+    }
+
+    [TestCase("")]
+    [TestCase("Telepathy")]
+    [TestCase("99")]
+    public void A_realm_this_version_does_not_know_is_read_as_user_name_and_password(string name)
+    {
+        Assert.That(new CredentialPayload { Realm = name }.ReadRealm(), Is.EqualTo(AuthRealm.Conventional));
     }
 
     [Test]
@@ -157,6 +235,17 @@ public class CredentialServiceTests
         var got = _service.Get(saved.Id)!;
         Assert.That(saved.Id, Is.Not.Zero);
         Assert.That((got.Name, got.Username, got.Domain, got.Password, got.Notes), Is.EqualTo(("Sales", "sa", "D", "hunter2", "n")));
+    }
+
+    [TestCase(AuthRealm.Conventional)]
+    [TestCase(AuthRealm.Domain)]
+    [TestCase(AuthRealm.Anonymous)]
+    [TestCase(AuthRealm.Bearer)]
+    public void The_realm_is_saved_with_the_credential(AuthRealm realm)
+    {
+        var saved = _service.Save(new Credential { Name = "R", Realm = realm, Username = "u", Password = "p" });
+
+        Assert.That(_service.Get(saved.Id)!.Realm, Is.EqualTo(realm));
     }
 
     [Test]
@@ -226,8 +315,8 @@ public class CredentialServiceTests
     {
         Save("Sales");
 
-        Assert.That(_service.Validate(new Credential { Name = "Sales", Username = "u" }), Does.Contain("already"));
-        Assert.That(_service.Validate(new Credential { Name = "Other", Username = "u" }), Is.Null);
+        Assert.That(_service.Validate(new Credential { Name = "Sales", Username = "u", Password = "p" }), Does.Contain("already"));
+        Assert.That(_service.Validate(new Credential { Name = "Other", Username = "u", Password = "p" }), Is.Null);
     }
 
     [Test]
@@ -307,5 +396,78 @@ public class CredentialServiceTests
 
         using var fresh = new SiloEncryption(_store, [new ScramblingProtector("scramble-a", 0x5A), other], "scramble-a");
         Assert.That(new CredentialService(_store, fresh).Find("Sales")!.Password, Is.EqualTo("p"));
+    }
+}
+
+
+public class CredentialConfigureTests
+{
+    private sealed class Sink : IUserPasswordSink
+    {
+        public int     Calls;
+        public string? User, Password, Domain;
+
+        public void SetUserPassword(string? userName, string? password, string? domain)
+        {
+            Calls++;
+            (User, Password, Domain) = (userName, password, domain);
+        }
+
+        public void ConfigureFrom(ICredential credential) => credential.Configure(this);
+    }
+
+    [Test]
+    public void A_user_name_and_password_credential_hands_over_both_and_leaves_the_domain_out()
+    {
+        var sink = new Sink();
+
+        new Credential { Username = "bob", Password = "hunter2", Domain = "CONTOSO" }.Configure(sink);
+
+        Assert.That((sink.User, sink.Password, sink.Domain), Is.EqualTo(("bob", "hunter2", (string?)null)));
+    }
+
+    [Test]
+    public void A_domain_account_hands_over_its_domain_too()
+    {
+        var sink = new Sink();
+
+        new Credential { Realm = AuthRealm.Domain, Username = "bob", Password = "hunter2", Domain = "CONTOSO" }.Configure(sink);
+
+        Assert.That((sink.User, sink.Password, sink.Domain), Is.EqualTo(("bob", "hunter2", "CONTOSO")));
+    }
+
+    [TestCase(AuthRealm.DefaultCredential)]
+    [TestCase(AuthRealm.DefaultNetwork)]
+    public void The_signed_in_user_hands_over_nothing_whatever_the_credential_holds(AuthRealm realm)
+    {
+        var sink = new Sink();
+
+        new Credential { Realm = realm, Username = "bob", Password = "hunter2" }.Configure(sink);
+
+        Assert.That((sink.Calls, sink.User, sink.Password), Is.EqualTo((1, (string?)null, (string?)null)));
+    }
+
+    [Test]
+    public void A_realm_that_needs_a_user_name_or_password_says_which_is_missing()
+    {
+        var sink = new Sink();
+
+        Assert.Throws<InvalidCredentialException>(() => new Credential { Username = "bob" }.Configure(sink));
+        Assert.Throws<InvalidCredentialException>(() => new Credential { Password = "p" }.Configure(sink));
+        Assert.That(sink.Calls, Is.Zero);
+    }
+
+    [TestCase(AuthRealm.Bearer)]
+    [TestCase(AuthRealm.Certificate)]
+    [TestCase(AuthRealm.RsaKey)]
+    public void A_realm_no_sink_can_use_yet_is_refused_and_not_ignored(AuthRealm realm)
+    {
+        Assert.Throws<NotSupportedException>(() => new Credential { Realm = realm, Password = "s" }.Configure(new Sink()));
+    }
+
+    [Test]
+    public void An_unknown_realm_is_an_error()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() => new Credential { Realm = (AuthRealm)99 }.Configure(new Sink()));
     }
 }

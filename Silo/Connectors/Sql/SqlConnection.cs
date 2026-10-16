@@ -44,12 +44,16 @@ public class SqlConnection(IConnector owner, Uri uri, ConnectionRequest rq) : Sq
 
     private          string?                  _authDescription;
     private          string?                  _credConfig;
+    private volatile string?                  _currentOperation; // what OperationAsync is doing right now, by name
     private          Db.SqlConnection?        _db;
     private          string?                  _loginName;
     private volatile CancellationTokenSource? _operation; // the connect or read in progress, for Disconnect to cancel
     private          string?                  _serverName;
 
-    /// <summary>Why the last attempt to connect failed; null after one succeeded.</summary>
+    /// <summary>What the connection is doing at the moment ("Connect", "Listing databases", ...); null when it is idle.</summary>
+    public string? CurrentOperation => _currentOperation;
+
+    /// <summary>Why the last attempt to connect or read failed; null after a connect succeeded.</summary>
     public Exception? LastError { get; private set; }
 
     public SqlState State { get; private set; } = new Disconnected();
@@ -79,58 +83,119 @@ public class SqlConnection(IConnector owner, Uri uri, ConnectionRequest rq) : Sq
     // ---- connecting ----------------------------------------------------------------------------
 
     // with the gate held
-    private async Task ConnectCoreAsync(CancellationToken cancel)
+    private Task ConnectCoreAsync(CancellationToken cancel)
     {
+        return OperationAsync("Connect", async ct =>
+                                         {
+                                             await OpenAsync(ct);
+                                             return true;
+                                         }, cancel);
+    }
+
+    /// <summary>
+    ///     Runs <paramref name="action" /> as the connection's current operation, the way <c>LdapConnection.Operation</c>
+    ///     does: while it runs the state says what it is (<see cref="Connecting" /> when there is no connection yet,
+    ///     <see cref="Busy" />
+    ///     with the operation's name when there is), after it the connection is <see cref="Connected" />, and if it throws the
+    ///     state records why.
+    ///     A read that fails while the link is still up leaves the connection <see cref="Connected" /> (the reason is in
+    ///     <see cref="LastError" />); a connect that fails, or a link that broke, is <see cref="Failed" />; a cancelled
+    ///     operation is not a failure.
+    ///     With the gate held.
+    /// </summary>
+    private async Task<T> OperationAsync<T>(string operation, Func<CancellationToken, Task<T>> action, CancellationToken cancel,
+                                            bool   throwErrors = true)
+    {
+        bool wasConnected = State.IsConnected && _db is not null;
+
+        State             = wasConnected ? new Busy(operation, cancel) : new Connecting(SqlSettings.HostPort(Uri), cancel);
+        _currentOperation = operation;
+
         try
         {
-            var credential = Metadata.OfType<Credential>().FirstOrDefault();
-            var attempts   = SqlSettings.Attempts(Uri, credential?.Username, credential?.Password, AuthFlags, WinFlags);
+            var result = await action(cancel);
 
-            State = new Connecting(SqlSettings.HostPort(Uri), cancel);
-
-            for (int i = 0; i < attempts.Count; i++)
+            // unless the link broke meanwhile
+            if (State is Busy or Connecting) State = new Connected(SqlNames.SafeUri(Uri));
+            return result;
+        }
+        catch (OperationCanceledException) when (cancel.IsCancellationRequested)
+        {
+            // somebody stopped it (Disconnect, closing): not a failure
+            if (wasConnected)
             {
-                cancel.ThrowIfCancellationRequested();
-
-                var attempt = attempts[i];
-                var db      = new Db.SqlConnection(attempt.ConnectionString);
-                try
-                {
-                    await db.OpenAsync(cancel);
-                }
-                catch (Db.SqlException ex) when (i < attempts.Count - 1 && SqlSettings.IsAuthFailure(ex.Number))
-                {
-                    Log.Information("{Attempt} was refused by {Server} ({Message}); trying the next way to sign in", attempt,
-                                    SqlSettings.HostPort(Uri), ex.Message);
-                    await db.DisposeAsync();
-                    continue;
-                }
-                catch
-                {
-                    await db.DisposeAsync();
-                    throw;
-                }
-
-                _db              =  db;
-                db.StateChange   += OnDbStateChange;
-                _authDescription =  attempt.Description;
-                ServerVersion    =  db.ServerVersion;
-                await ReadIdentityAsync(db, cancel);
-
-                LastError = null;
-                State     = new Connected(SqlNames.SafeUri(Uri));
-                return;
+                if (State is Busy) State = new Connected(SqlNames.SafeUri(Uri));
+            }
+            else
+            {
+                await DropAsync();
+                State = new Disconnected();
             }
 
-            throw new InvalidOperationException("There was no way to sign in."); // AuthOrder never returns none
+            throw;
         }
         catch (Exception ex)
         {
-            await DropAsync();
-            State = new Disconnected();
-            if (ex is not OperationCanceledException) LastError = ex;
-            throw;
+            LastError = ex;
+            if (wasConnected && _db?.State == DbState.Open)
+            {
+                if (State is Busy) State = new Connected(SqlNames.SafeUri(Uri));
+            }
+            else
+            {
+                await DropAsync();
+                State = new Failed(ex);
+            }
+
+            if (throwErrors) throw;
+            return default!;
         }
+        finally
+        {
+            _currentOperation = null;
+        }
+    }
+
+    // signs in, trying the ways AuthOrder allows in turn; the state is the caller's (see OperationAsync)
+    private async Task OpenAsync(CancellationToken cancel)
+    {
+        var credential = Metadata.OfType<Credential>().FirstOrDefault();
+        var attempts   = SqlSettings.Attempts(Uri, _credConfig, AuthFlags, WinFlags);
+
+        for (int i = 0; i < attempts.Count; i++)
+        {
+            cancel.ThrowIfCancellationRequested();
+
+            var attempt = attempts[i];
+            var db      = new Db.SqlConnection(attempt.ConnectionString);
+            try
+            {
+                await db.OpenAsync(cancel);
+            }
+            catch (Db.SqlException ex) when (i < attempts.Count - 1 && SqlSettings.IsAuthFailure(ex.Number))
+            {
+                Log.Information("{Attempt} was refused by {Server} ({Message}); trying the next way to sign in", attempt,
+                                SqlSettings.HostPort(Uri), ex.Message);
+                await db.DisposeAsync();
+                continue;
+            }
+            catch
+            {
+                await db.DisposeAsync();
+                throw;
+            }
+
+            _db              =  db;
+            db.StateChange   += OnDbStateChange;
+            _authDescription =  attempt.Description;
+            ServerVersion    =  db.ServerVersion;
+            await ReadIdentityAsync(db, cancel);
+
+            LastError = null;
+            return;
+        }
+
+        throw new InvalidOperationException("There was no way to sign in."); // AuthOrder never returns none
     }
 
     // who the server says we are, for the Properties pane; failing to ask is not a failure to connect
@@ -180,8 +245,9 @@ public class SqlConnection(IConnector owner, Uri uri, ConnectionRequest rq) : Sq
 
     /// <summary>
     ///     Runs a read on the connection, one at a time with the others and with connecting, opening the connection first if
-    ///     it is closed.
-    ///     While it runs the state is <see cref="Busy" />.
+    ///     it is closed. It is the connection's current operation while it runs (see <see cref="OperationAsync{T}" />): the
+    ///     state is
+    ///     <see cref="Busy" /> and <see cref="CurrentOperation" /> is its name.
     /// </summary>
     private async Task<T> RunAsync<T>(string operation, Func<Db.SqlConnection, CancellationToken, Task<T>> work, CancellationToken cancel)
     {
@@ -193,16 +259,7 @@ public class SqlConnection(IConnector owner, Uri uri, ConnectionRequest rq) : Sq
             if (_db is null || !State.IsConnected) await ConnectCoreAsync(linked.Token);
 
             var db = _db ?? throw new InvalidOperationException("The connection is closed.");
-            State = new Busy(operation, linked.Token);
-            try
-            {
-                return await work(db, linked.Token);
-            }
-            finally
-            {
-                // unless the link broke meanwhile
-                if (State is Busy) State = new Connected(SqlNames.SafeUri(Uri));
-            }
+            return await OperationAsync(operation, ct => work(db, ct), linked.Token);
         }
         finally
         {
@@ -222,6 +279,8 @@ public class SqlConnection(IConnector owner, Uri uri, ConnectionRequest rq) : Sq
         yield return ("Server", _serverName ?? SqlSettings.DataSource(Uri));
         yield return ("State", StateText());
 
+        if (_currentOperation is { } doing) yield return ("Doing", doing);
+
         if (ServerVersion is not null) yield return ("Version", ServerVersion);
         if (_loginName is not null) yield return ("Signed in as", _loginName);
         if (_authDescription is not null) yield return ("Authentication", _authDescription);
@@ -236,6 +295,7 @@ public class SqlConnection(IConnector owner, Uri uri, ConnectionRequest rq) : Sq
                    Connected    => "Connected",
                    Connecting c => c.ToString(),
                    Busy b       => b.ToString(),
+                   Failed f     => f.ToString(),
                    _            => "Not connected"
                };
     }

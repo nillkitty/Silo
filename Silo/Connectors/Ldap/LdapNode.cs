@@ -7,13 +7,16 @@ public record LdapNode : SiloNode
 {
     public LdapModel Model { get; init; }
 
-    public LdapNode(LdapModel model) : base(model)
+    public LdapNode(LdapModel model, int? expand = null) : base(model, expand)
     {
         Model    = model;
-        Text     = model.Name;
+        Text     = model.Label;
         Icon     = model.Icon;
         TypeName = model.TypeName;
         Uri      = model.Uri;
+
+        // a container reads what is in it when it is expanded
+        if (model.HasChildren) ChildLoader = model.LoadChildNodesAsync;
     }
 }
 

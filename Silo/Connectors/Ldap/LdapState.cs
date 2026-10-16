@@ -1,4 +1,5 @@
 ﻿using Silo.Contracts.ConnectorServices;
+using Silo.ViewModel;
 
 namespace Silo.Connectors.Ldap;
 
@@ -40,6 +41,8 @@ public abstract record LdapState(string DisplayName) : IDisplayName
     [Icon("StateFailed")]
     public record Failed(Exception Exception) : LdapState($"Failed: {Exception.Message}");
 
+    // winding down the operation it was busy with: the busy icon
+    [Icon("StateBusy")]
     public record Aborting(Busy Inner) : LdapState("Aborting Operation")
     {
         public override string ToString()

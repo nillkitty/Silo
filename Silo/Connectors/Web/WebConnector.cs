@@ -63,7 +63,7 @@ public class WebConnection : ICredentialSink
     public void ConfigureFrom(ICredential credential)
     {
         Credential                   = credential;
-        UseDefaultCredentials        = credential?.IsDefault        ?? false;
-        UseDefaultNetworkCredentials = credential?.IsDefaultNetwork ?? false;
+        UseDefaultCredentials        = credential?.Realm == Silo.Model.AuthRealm.DefaultCredential;
+        UseDefaultNetworkCredentials = credential?.Realm == Silo.Model.AuthRealm.DefaultNetwork;
     }
 }
