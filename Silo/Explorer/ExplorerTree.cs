@@ -24,6 +24,9 @@ public static class ExplorerTree
         var roots = new List<ExplorerNode> { BuildLocal(silo) };
         if (BuildDiagrams(silo) is { } diagrams) roots.Add(diagrams);
         roots.AddRange(BuildConnections(silo));
+
+        // whatever connections, tools and documents contribute through INodeProvider / ConnectContext
+        roots.AddRange(ProvidedNodes.For(silo));
         return roots;
     }
 
@@ -181,6 +184,11 @@ public static class ExplorerTree
         foreach (var connection in silo.Connections.ToList())
         {
             var c = connection;
+
+            // a connection that put its own node in the tree (INodeProvider, or ConnectContext.CreateNode) is shown by that node
+            if (c is INodeProvider provider && silo.Nodes.Provides(provider)) continue;
+            if (c.Node is { } own && silo.Nodes.Contains(own)) continue;
+
             string name = c.Connector.DisplayName;
             string? host = null;
             try

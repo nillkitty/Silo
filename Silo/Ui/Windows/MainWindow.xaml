@@ -127,7 +127,7 @@
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
         <ui:MenuBar Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="2" />
-        <ToolBar Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2" />
+        <ui:ToolBar x:Name="MainToolBar" Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2" />
         <!--
             Was a Telerik RadNavigationView. A plain TreeView doesn't have that control's
             collapsible-pane display modes (AutoChangeDisplayMode/IsPaneOpen/DisplayMode)

@@ -66,10 +66,39 @@ public sealed class ExplorerNode : INotifyPropertyChanged, IOverridableNode
     /// <summary>The right-click menu.</summary>
     public Func<IEnumerable<ExplorerAction>>? Actions { get; init; }
 
+    /// <summary>
+    ///     The commands the node's model offers (<see cref="ICommandProvider" />): they join <see cref="Actions" /> in the Node menu
+    ///     and the right-click menu, and show as toolbar buttons while the node is selected.
+    /// </summary>
+    public ICommandProvider? Commands { get; init; }
+
+    /// <summary>
+    ///     Called when the node is expanded, for a node whose children are read on demand (a folder's contents): starts the
+    ///     load, whose result reaches the tree as a change of the node's source (see <see cref="ProvidedNodes" />).
+    /// </summary>
+    public Func<Task>? LoadChildren { get; init; }
+
     public bool IsExpanded
     {
         get => _isExpanded;
-        set => Set(ref _isExpanded, value);
+        set
+        {
+            if (Set(ref _isExpanded, value) && value) StartLoadingChildren();
+        }
+    }
+
+    private async void StartLoadingChildren()
+    {
+        if (LoadChildren is not { } load) return;
+
+        try
+        {
+            await load();
+        }
+        catch (Exception ex)
+        {
+            Serilog.Log.Warning(ex, "Loading the children of the Explorer node {Key} failed", Key);
+        }
     }
 
     public bool IsSelected
@@ -192,11 +221,12 @@ public sealed class ExplorerNode : INotifyPropertyChanged, IOverridableNode
         return Application.Current?.TryFindResource(key) as Geometry;
     }
 
-    private void Set(ref bool field, bool value, [CallerMemberName] string? name = null)
+    private bool Set(ref bool field, bool value, [CallerMemberName] string? name = null)
     {
-        if (field == value) return;
+        if (field == value) return false;
         field = value;
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+        return true;
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;

@@ -51,6 +51,12 @@ public sealed class DocumentTabs
 
     private Entry? _preview;
 
+    /// <summary>A document's content was put in a tab (a new tab, or the preview tab taking it over).</summary>
+    public event EventHandler<UIElement>? ContentOpened;
+
+    /// <summary>A tab's content went away (closed, replaced as a preview, or closed from code). Raised once per <see cref="ContentOpened" />.</summary>
+    public event EventHandler<UIElement>? ContentReleased;
+
     public DocumentTabs(DockingManager manager)
     {
         _manager = manager;
@@ -77,12 +83,24 @@ public sealed class DocumentTabs
         public Action? Unhook { get; set; }
 
         public bool Pinned { get; set; }
+
+        /// <summary>ContentOpened was raised for the current content and ContentReleased has not been yet.</summary>
+        public bool Announced { get; set; }
     }
 
     /// <summary>The keys of the open tabs.</summary>
     public IReadOnlyList<string> Keys => _entries.Keys.ToList();
 
     public bool Has(string key) => _entries.ContainsKey(key);
+
+    /// <summary>Whether the preview tab (the single italic tab that clicks reuse) is open.</summary>
+    public bool HasPreview => _preview is not null;
+
+    /// <summary>Closes the preview tab, if there is one.</summary>
+    public void ClosePreview()
+    {
+        if (_preview is { } preview) Close(preview.Key);
+    }
 
     /// <summary>The content of the selected tab of the document pane (the one being looked at), or null.</summary>
     public UIElement? SelectedContent => FindPane(_manager.Layout?.RootPanel)?.SelectedContent?.Content as UIElement;
@@ -229,6 +247,21 @@ public sealed class DocumentTabs
         {
             e.Unhook = null;
         }
+
+        e.Announced = true;
+        RaiseDocumentEvent(ContentOpened, content);
+    }
+
+    private void RaiseDocumentEvent(EventHandler<UIElement>? handler, UIElement content)
+    {
+        try
+        {
+            handler?.Invoke(this, content);
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "A document tab listener failed");
+        }
     }
 
     private void Pin(Entry e)
@@ -251,10 +284,16 @@ public sealed class DocumentTabs
     }
 
     /// <summary>Runs the closed callback and drops the event hooks; the entry itself stays registered.</summary>
-    private static void Release(Entry e)
+    private void Release(Entry e)
     {
         e.Unhook?.Invoke();
         e.Unhook = null;
+
+        if (e.Announced && e.Content is { } announced)
+        {
+            e.Announced = false;
+            RaiseDocumentEvent(ContentReleased, announced);
+        }
 
         if (e.Content is { } content && e.Closed is { } closed)
             try

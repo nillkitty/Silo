@@ -62,18 +62,21 @@ public class FileConnector : ConnectorBase, IUriConnector, IConnectorUi, IAsyncC
 
         string path = uri.LocalPath;
         var info = await Task.Run(() => Probe(path), CancellationToken.None).WaitAsync(cancel);
+
+        // thrown here, not on the pool thread: an exception that leaves a Task.Run thread unhandled makes the debugger stop
+        // as "user-unhandled" even though the dialog catches it
+        if (info is null) throw new FileNotFoundException($"\"{path}\" was not found, or is not reachable.", path);
+
         return FileConnection.FromFsi(this, info, crq);
     }
 
-    /// <summary>Looks for the folder or file (may block for as long as the file system takes to answer).</summary>
-    private static FileSystemInfo Probe(string path)
+    /// <summary>Looks for the folder or file (may block for as long as the file system takes to answer); null if it is not there.</summary>
+    private static FileSystemInfo? Probe(string path)
     {
         if (Directory.Exists(path)) return new DirectoryInfo(path);
 
         var file = new FileInfo(path);
-        if (file.Exists) return file;
-
-        throw new FileNotFoundException($"\"{path}\" was not found, or is not reachable.", path);
+        return file.Exists ? file : null;
     }
 
     private static bool IsOnLocalDrive(string path)

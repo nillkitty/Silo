@@ -9,6 +9,7 @@ using Silo.Design;
 using Silo.Drawio;
 using Silo.Model;
 using Silo.Tabular;
+using Silo.Toolbar;
 
 namespace Silo.Explorer;
 
@@ -64,7 +65,10 @@ public sealed class ExplorerView : UserControl
         Loaded += (_, _) => Refresh(false);
 
         if (App.Instance is { } app)
+        {
             app.ActiveSiloChanged += (_, _) => QueueRefresh();
+            app.Nodes.Changed     += OnNodesChanged; // the tools' nodes
+        }
         TableEditors.Changed += (_, _) => QueueRefresh();
         DiagramEvents.Changed += (_, _) => QueueRefresh();
         NodeOverrides.Changed += (_, _) =>
@@ -74,6 +78,9 @@ public sealed class ExplorerView : UserControl
                                  };
         Refresh(true);
     }
+
+    /// <summary>The node selected in the tree now, or null.</summary>
+    public ExplorerNode? SelectedNode => _tree.SelectedItem as ExplorerNode;
 
     /// <summary>A node was selected (null: the selection went away).</summary>
     public event EventHandler<ExplorerNode?>? NodeSelected;
@@ -136,6 +143,9 @@ public sealed class ExplorerView : UserControl
 
     private void OnConnectionsChanged(object? sender, NotifyCollectionChangedEventArgs e) => QueueRefresh();
 
+    // nodes can be contributed from any thread (a connection initializing in the background, say)
+    private void OnNodesChanged(object? sender, EventArgs e) => Dispatcher.BeginInvoke(new Action(QueueRefresh));
+
     /// <summary>Rebuilds the tree from the active Silo, keeping what is expanded and selected. Does nothing if nothing visible changed.</summary>
     public void Refresh(bool force)
     {
@@ -143,8 +153,17 @@ public sealed class ExplorerView : UserControl
 
         if (!ReferenceEquals(silo, _silo))
         {
-            if (_silo is not null) _silo.Connections.CollectionChanged -= OnConnectionsChanged;
-            if (silo is not null) silo.Connections.CollectionChanged += OnConnectionsChanged;
+            if (_silo is not null)
+            {
+                _silo.Connections.CollectionChanged -= OnConnectionsChanged;
+                _silo.Nodes.Changed                 -= OnNodesChanged;
+            }
+
+            if (silo is not null)
+            {
+                silo.Connections.CollectionChanged += OnConnectionsChanged;
+                silo.Nodes.Changed                 += OnNodesChanged;
+            }
             force            = true;
             _lastSelectedKey = null;
         }
@@ -279,22 +298,15 @@ public sealed class ExplorerView : UserControl
         var menu = _tree.ContextMenu!;
         menu.Items.Clear();
 
-        IEnumerable<ExplorerAction> actions = [];
+        // what the node's model offers (ICommandProvider), then its built-in actions: the same list as the Node menu and the toolbar
         try
         {
-            actions = (_tree.SelectedItem as ExplorerNode)?.Actions?.Invoke() ?? [];
+            foreach (var entry in CommandMenu.Items(NodeCommandHub.CommandsFor(_tree.SelectedItem as ExplorerNode)))
+                menu.Items.Add(entry);
         }
         catch (Exception ex)
         {
             Serilog.Log.Warning(ex, "Building an Explorer menu failed");
-        }
-
-        foreach (var a in actions)
-        {
-            var item = new MenuItem { Header = a.Header };
-            var run  = a.Run;
-            item.Click += (_, _) => run();
-            menu.Items.Add(item);
         }
 
         if (menu.Items.Count == 0) e.Handled = true; // nothing to offer: no menu at all

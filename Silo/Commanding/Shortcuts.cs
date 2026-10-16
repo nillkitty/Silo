@@ -36,24 +36,4 @@ public static class Shortcuts
     {
         target.InputBindings.Add(new KeyBinding(new LateBoundCommand(command), key, modifiers));
     }
-
-    /// <summary>Forwards to whatever command <c>resolve</c> returns at the moment it is asked; disabled when it returns null.</summary>
-    private sealed class LateBoundCommand(Func<ICommand?> resolve) : ICommand
-    {
-        public bool CanExecute(object? parameter)
-        {
-            return resolve() is { } c && c.CanExecute(parameter);
-        }
-
-        public void Execute(object? parameter)
-        {
-            if (resolve() is { } c && c.CanExecute(parameter)) c.Execute(parameter);
-        }
-
-        public event EventHandler? CanExecuteChanged
-        {
-            add => CommandManager.RequerySuggested += value;
-            remove => CommandManager.RequerySuggested -= value;
-        }
-    }
 }

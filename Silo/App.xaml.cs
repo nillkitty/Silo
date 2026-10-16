@@ -178,6 +178,12 @@ public partial class App : Application, IContainerHost
     }
 
     /// <summary>
+    ///     The Explorer nodes that belong to the app rather than to a Silo: the ones tools contribute
+    ///     (see <see cref="INodeProvider" />). A Silo's own are in <see cref="OpenSilo.Nodes" />.
+    /// </summary>
+    public NodeHost Nodes { get; } = new();
+
+    /// <summary>
     ///     Raised when the active Silo has changed
     /// </summary>
     public event EventHandler? ActiveSiloChanged;
@@ -285,6 +291,7 @@ public partial class App : Application, IContainerHost
         _ = Task.Run(SiloArchive.SweepOrphans);
 
         base.OnStartup(e);
+        RegisterToolNodes();
 
         // Later launches hand their documents to the stock instance through a named pipe.
         if (Launch.ServeRequests) SingleInstance.StartServer(HandleLaunchRequest);
@@ -296,6 +303,24 @@ public partial class App : Application, IContainerHost
                                    DispatcherPriority.ApplicationIdle);
         else if (Launch.Mode == LaunchMode.Stock && SiloFileSettings.Instance.ReopenLastSilo)
             Dispatcher.BeginInvoke(new Action(async () => await ReopenLastSiloAsync()), DispatcherPriority.ApplicationIdle);
+    }
+
+    /// <summary>
+    ///     Asks every registered tool that is an <see cref="INodeProvider" /> for the node it adds to the Explorer. Done once,
+    ///     at startup: tools belong to the app, not to a Silo.
+    /// </summary>
+    private void RegisterToolNodes()
+    {
+        try
+        {
+            foreach (var tool in Resolve<IEnumerable<ITool>>() ?? [])
+                if (tool is INodeProvider provider)
+                    Nodes.Add(provider);
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Collecting the tools' Explorer nodes failed");
+        }
     }
 
     /// <summary>

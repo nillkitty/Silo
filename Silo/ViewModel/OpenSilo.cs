@@ -1,14 +1,17 @@
 ﻿using System.Collections.ObjectModel;
+using System.Collections.Specialized;
 using System.IO;
 using Microsoft.Win32;
 using Serilog;
-using Silo.Contracts.Providers.Data;
+using Silo.Connectors;
+using Silo.DbModel.Sqlite;
 using Silo.Extensions;
 using Silo.Hosting;
 using Silo.Remote;
 using Silo.Settings;
 using Silo.Ui.Windows;
 using Silo.Ui.Windows.Connecting;
+using Silo.ViewModel;
 using Telefrag.DI;
 
 namespace Silo.Model;
@@ -46,27 +49,34 @@ public class OpenSilo : ModelBase
     /// </summary>
     public bool IsDirty { get; private set; }
 
-    public        bool                           IsOpensSolo => UserContext.IsSoloSilo;
-    public        bool                           IsOwner     => UserContext.IsOwner;
-    public        bool                           IsReadable  => UserContext.IsReadable;
+    public bool IsOpensSolo => UserContext.IsSoloSilo;
+    public bool IsOwner     => UserContext.IsOwner;
+    public bool IsReadable  => UserContext.IsReadable;
 
     /// <summary>
     ///     True when this Silo runs in a process of its own (Solo mode): it carries .NET assemblies, was opened with
     ///     <c>/P</c>, or the person marked it Solo.
     /// </summary>
-    public        bool                           IsSolo      { get; private set; }
-
-    /// <summary>The URL this Silo is synced with, if it was opened from one (<see cref="OpenRemoteAsync" />).</summary>
-    public        Uri?                           RemoteUri   { get; private set; }
+    public bool IsSolo { get; private set; }
 
     /// <summary>True when the last save reached this computer but could not be uploaded to <see cref="RemoteUri" />.</summary>
-    public        bool                           IsUnsynced  => Data is ISiloFile { IsUnsynced: true };
+    public bool IsUnsynced => Data is ISiloFile { IsUnsynced: true };
 
-    public        bool                           IsWritable  => UserContext.IsWritable;
-    public        OpenSiloMeta                   Meta        { get; private set; } = new();
-    public        string?                        Name        => FileInfo?.Name;
-    public static OpenSilo                       OnlySilo    => OpenSilos is [OpenSilo os] ? os : null;
-    public static ObservableCollection<OpenSilo> OpenSilos   { get; } = [];
+    public bool         IsWritable => UserContext.IsWritable;
+    public OpenSiloMeta Meta       { get; private set; } = new();
+    public string?      Name       => FileInfo?.Name;
+
+    /// <summary>
+    ///     The nodes this Silo's connections and documents contribute to the Explorer (see <see cref="INodeProvider" />).
+    ///     It is also the <see cref="INavManager" /> given to connections when they are initialized.
+    /// </summary>
+    public NodeHost Nodes { get; } = new();
+
+    public static OpenSilo                       OnlySilo  => OpenSilos is [OpenSilo os] ? os : null;
+    public static ObservableCollection<OpenSilo> OpenSilos { get; } = [];
+
+    /// <summary>The URL this Silo is synced with, if it was opened from one (<see cref="OpenRemoteAsync" />).</summary>
+    public Uri? RemoteUri { get; private set; }
 
     /// <summary>
     ///     Work to run before the document is written (and before it is closed): a tool with changes it has not handed to
@@ -145,12 +155,12 @@ public class OpenSilo : ModelBase
     /// </summary>
     private static void WarnAboutProgramFiles(string path)
     {
-        var programs = Silo.DbModel.Sqlite.SiloContentScan.FindProgramFiles(path);
+        var programs = SiloContentScan.FindProgramFiles(path);
         if (programs.Count == 0)
             return;
 
         Log.Warning("'{Path}' contains program files that this version of Silo does not load: {Files}", path, string.Join(", ", programs));
-        MessageBox.Show(Silo.DbModel.Sqlite.SiloContentScan.WarningText(programs), AppIdentity.AppName, MessageBoxButton.OK, MessageBoxImage.Warning);
+        MessageBox.Show(SiloContentScan.WarningText(programs), AppIdentity.AppName, MessageBoxButton.OK, MessageBoxImage.Warning);
     }
 
     /// <summary>
@@ -201,8 +211,8 @@ public class OpenSilo : ModelBase
         {
             file.ConflictResolver = App.Resolve<ISaveConflictResolver>();
             IsSolo                = file.IsSolo || App.Instance!.Launch.Mode == LaunchMode.Solo;
-            file.Saved += (_, e) => Log.Information("Silo '{Name}' saved: #{Seq} at {Utc:O} ({Format}, {Size} bytes, sha256 {Hash})", Name, e.Sequence,
-                                                    e.SavedUtc, e.Format, e.SizeBytes, e.Hash);
+            file.Saved += (_, e) => Log.Information("Silo '{Name}' saved: #{Seq} at {Utc:O} ({Format}, {Size} bytes, sha256 {Hash})", Name,
+                                                    e.Sequence, e.SavedUtc, e.Format, e.SizeBytes, e.Hash);
         }
 
         OpenSilos.Add(this);
@@ -289,7 +299,8 @@ public class OpenSilo : ModelBase
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             Logger.Error(ex, "Converting {path} failed", FilePath);
-            MessageBox.Show($"The Silo could not be converted:\n{ex.Message}", AppIdentity.AppName, MessageBoxButton.OK, MessageBoxImage.Error);
+            MessageBox.Show($"The Silo could not be converted:\n{ex.Message}", AppIdentity.AppName, MessageBoxButton.OK,
+                            MessageBoxImage.Error);
         }
     }
 
@@ -419,6 +430,7 @@ public class OpenSilo : ModelBase
     public IConnection AddConnection(ConnectionResult result)
     {
         Connections.Add(result.Connection);
+        _ = InitConnectionAsync(result.Connection, ConnectReason.UserCreate);
 
         if (Data is IConnectionStore store)
             try
@@ -433,6 +445,44 @@ public class OpenSilo : ModelBase
         return result.Connection;
     }
 
+    /// <summary>
+    ///     Initializes a connection that was just added: lets it create nodes through the <see cref="ConnectContext" />, then
+    ///     puts the node it provides as an <see cref="INodeProvider" /> (if it is one) in the Explorer. A failure is logged
+    ///     and shown in the status bar; the connection stays in the Silo.
+    /// </summary>
+    private async Task InitConnectionAsync(IConnection connection, ConnectReason reason)
+    {
+        try
+        {
+            await connection.InitAsync(new ConnectContext(reason, Nodes));
+
+            if (connection is INodeProvider provider)
+            {
+                // a connection that already created its node through the context has nothing more to add
+                if (connection.Node is { } own && Nodes.Contains(own))
+                    return;
+
+                Nodes.Add(provider);
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Initializing the connection {name} failed", connection.DisplayText ?? connection.Connector.DisplayName);
+            App.Status($"The connection could not be initialized: {ex.Message}");
+        }
+    }
+
+    private void OnConnectionsChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        if (e.OldItems is null) return;
+
+        // a connection that leaves the Silo takes its nodes out of the Explorer
+        foreach (var old in e.OldItems.OfType<IConnection>())
+        {
+            if (old is INodeProvider provider && Nodes.Remove(provider)) continue;
+            Nodes.RemoveNode(old.Node);
+        }
+    }
 
     public void ExportAs(string content, string filter, string? defaultFilename)
     {
@@ -462,6 +512,11 @@ public class OpenSilo : ModelBase
             return false;
 
         return await Data.ShutdownAsync();
+    }
+
+    public OpenSilo()
+    {
+        Connections.CollectionChanged += OnConnectionsChanged;
     }
 }
 

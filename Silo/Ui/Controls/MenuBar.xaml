@@ -182,12 +182,27 @@
         <MenuItem x:Name="ViewExplorer" Header="_Explorer" IsCheckable="True" Click="ViewPane_Click" />
         <MenuItem x:Name="ViewProperties" Header="_Properties" IsCheckable="True" Click="ViewPane_Click" />
         <MenuItem x:Name="ViewToolbox" Header="_Toolbox" IsCheckable="True" Click="ViewPane_Click" />
+        <MenuItem x:Name="ViewSelectedItem" Header="Selected _Item" IsCheckable="True" Click="ViewPane_Click"
+                  ToolTip="The view of the item selected in the Explorer (the italic preview tab; picking something in the navigation flyout replaces it)" />
+        <Separator />
+        <!-- The toolbar below the menu bar: shown or hidden here, customised, put back as it was. -->
+        <MenuItem x:Name="ViewToolbar" Header="Tool_bar" IsCheckable="True" Click="ViewToolbar_Click"
+                  ToolTip="Show or hide the toolbar below the menu bar" />
+        <MenuItem Header="Customi_ze Toolbar..." Click="CustomizeToolbar_Click"
+                  ToolTip="Add, remove, reorder, rename and re-icon the toolbar's buttons" />
+        <MenuItem Header="Reset T_oolbar" Click="ResetToolbar_Click"
+                  ToolTip="Put the toolbar's buttons back as a new installation has them, and show it" />
         <Separator />
         <MenuItem Header="Reset _Window Layout" Click="ResetLayout_Click"
                   ToolTip="Put the panes back where a new window has them and forget the remembered window sizes" />
         <!-- Tables popped out into their own windows are listed here (filled in ViewMenu_SubmenuOpened). -->
         <Separator x:Name="ViewWindowsSeparator" Visibility="Collapsed" />
     </MenuItem>
+    <!--
+        The commands of the node selected in the Explorer (filled in each time the menu opens, NodeMenu_SubmenuOpened); the
+        same list is in the Explorer's right-click menu and on the toolbar. Disabled while the selected node offers none.
+    -->
+    <MenuItem x:Name="NodeMenu" Header="_Node" IsEnabled="False" SubmenuOpened="NodeMenu_SubmenuOpened" />
     <MenuItem Header="_Run">
 
     </MenuItem>

@@ -16,6 +16,7 @@ using Silo.Remote;
 using Silo.Settings;
 using Silo.Tabular;
 using Silo.Theming;
+using Silo.Toolbar;
 using Silo.Tools;
 using Silo.Ui.Documents;
 using Silo.Ui.Windows;
@@ -68,6 +69,9 @@ public partial class MainWindow : Window, IWindowLayout
     /// <summary>The document tabs in the middle of the window (tables, navigation views...).</summary>
     public DocumentTabs Documents { get; private set; } = null!;
 
+    /// <summary>Where each open document's node (a document that is an <see cref="INodeProvider" />) was put, so closing the tab takes it out of the same place.</summary>
+    private readonly Dictionary<INodeProvider, Silo.ViewModel.NodeHost> _documentNodes = new(ReferenceEqualityComparer.Instance);
+
     private ExplorerView   _explorer   = null!;
     private PropertiesView _properties = null!;
 
@@ -77,13 +81,19 @@ public partial class MainWindow : Window, IWindowLayout
 
         // Explorer on the left, Properties on the right, documents between them (see the DockHost layout in the XAML)
         Documents   = new DocumentTabs(DockHost);
+        Documents.ContentOpened   += OnDocumentContentOpened;
+        Documents.ContentReleased += OnDocumentContentReleased;
         _explorer   = new ExplorerView();
         _properties = new PropertiesView();
         ExplorerPane.Content   = _explorer;
         PropertiesPane.Content = _properties;
         _explorer.NodeSelected         += OnExplorerSelected;
         _explorer.NodeOpened           += OnExplorerOpened;
-        _explorer.SelectedNodeRefreshed += (_, node) => _properties.Show(node);
+        _explorer.SelectedNodeRefreshed += (_, node) =>
+                                           {
+                                               _properties.Show(node);
+                                               NodeCommandHub.SetCurrent(node); // the tree was rebuilt: the selected node is a new object
+                                           };
         App.SiloClosing                += OnSiloClosing;
 
         NavTree.ItemsSource       = _topRoots;
@@ -659,20 +669,50 @@ public partial class MainWindow : Window, IWindowLayout
     // --- the Explorer tree and the Properties pane -----------------------------------------------
 
     /// <summary>A click (or arrow key) in the Explorer: the details go to Properties and the node's view, if any, to the preview tab.</summary>
+    /// <summary>A document opened in a tab: if it is an <see cref="INodeProvider" /> its node joins the Explorer, under the active Silo.</summary>
+    private void OnDocumentContentOpened(object? sender, UIElement content)
+    {
+        if (content is not INodeProvider provider) return;
+
+        var host = App.ActiveSilo?.Nodes ?? App.Nodes;
+        if (host.Add(provider) is not null) _documentNodes[provider] = host;
+    }
+
+    private void OnDocumentContentReleased(object? sender, UIElement content)
+    {
+        if (content is not INodeProvider provider) return;
+
+        if (_documentNodes.Remove(provider, out var host)) host.Remove(provider);
+    }
+
     private void OnExplorerSelected(object? sender, ExplorerNode? node)
     {
         _properties.Show(node);
-        if (node is { DocKey: { } key, Open: { } open })
-            Documents.Open(key, node.Header, open, node.Closed, false);
+        NodeCommandHub.SetCurrent(node); // the Node menu, the toolbar's node buttons and the right-click menu follow the selection
+        if (node is not null) ShowNodeView(node, false);
+    }
+
+    /// <summary>
+    ///     Shows the view of an Explorer node in a document tab (the preview tab, or a permanent one when
+    ///     <paramref name="pin" />): the node's own view if it has one, otherwise a generic one made from what the node
+    ///     says about itself. Selecting something in the navigation flyout previews in the same tab and so replaces it.
+    /// </summary>
+    private void ShowNodeView(ExplorerNode node, bool pin)
+    {
+        string key  = node.DocKey ?? "node:" + node.Key;
+        var    open = node.Open ?? (() => NodeViews.Build(node));
+        Documents.Open(key, node.Header, open, node.Closed, pin);
     }
 
     /// <summary>A double-click (or Enter) in the Explorer keeps the node's view open as a permanent tab.</summary>
     private void OnExplorerOpened(object? sender, ExplorerNode node)
     {
-        if (node is { DocKey: { } key, Open: { } open })
-            Documents.Open(key, node.Header, open, node.Closed, true);
+        if (node.DocKey is not null && node.Open is not null)
+            ShowNodeView(node, true);
+        else if (node.Activate is { } activate)
+            activate();
         else
-            node.Activate?.Invoke();
+            ShowNodeView(node, true);
     }
 
     /// <summary>A Silo is about to close: its table tabs go first (saving what they hold).</summary>
@@ -705,6 +745,25 @@ public partial class MainWindow : Window, IWindowLayout
 
     /// <summary>Whether the Toolbox pane is showing (closed or hidden panes are not).</summary>
     public bool IsToolboxOpen => IsOpen(ToolboxPane);
+
+    /// <summary>Whether the preview tab (the one that shows the selected Explorer item) is open.</summary>
+    public bool IsSelectedItemOpen => Documents.HasPreview;
+
+    /// <summary>
+    ///     Shows or closes the preview tab. Showing it previews the item now selected in the Explorer; with nothing selected
+    ///     there is nothing to show.
+    /// </summary>
+    public void SetSelectedItemOpen(bool open)
+    {
+        if (!open)
+        {
+            Documents.ClosePreview();
+            return;
+        }
+
+        if (_explorer.SelectedNode is { } node) ShowNodeView(node, false);
+        else App.Status("Select something in the Explorer to see it here");
+    }
 
     public void SetExplorerOpen(bool open) => SetOpen(ExplorerPane, open, AnchorableShowStrategy.Left);
 

@@ -37,29 +37,9 @@ public sealed class PropertiesView : UserControl
 
         if (rows.Count == 0) return;
 
-        var grid = new Grid { Margin = new Thickness(0, 10, 0, 0) };
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        for (int i = 0; i < rows.Count; i++)
-        {
-            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-            var name  = Muted(rows[i].Name);
-            name.Margin = new Thickness(0, 2, 12, 2);
-            var value = new TextBlock { Text = rows[i].Value, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 2, 0, 2) };
-            Grid.SetRow(name, i);
-            Grid.SetRow(value, i);
-            Grid.SetColumn(value, 1);
-            grid.Children.Add(name);
-            grid.Children.Add(value);
-        }
-
+        var grid = NodeViews.DetailsGrid(rows, new Thickness(0, 10, 0, 0));
         _body.Children.Add(grid);
     }
 
-    private static TextBlock Muted(string text)
-    {
-        var t = new TextBlock { Text = text, TextWrapping = TextWrapping.Wrap };
-        t.SetResourceReference(TextBlock.ForegroundProperty, "Theme.TextMuted");
-        return t;
-    }
+    private static TextBlock Muted(string text) => NodeViews.Muted(text);
 }
