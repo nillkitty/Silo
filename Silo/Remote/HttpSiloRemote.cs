@@ -5,6 +5,7 @@ using System.Net.Http.Headers;
 using Serilog;
 using Silo.Contracts.Providers.Data;
 using Silo.DbModel.Sqlite;
+using Telefrag.DI;
 
 namespace Silo.Remote;
 
@@ -19,6 +20,7 @@ namespace Silo.Remote;
 ///     compares the validators. Either way a change by someone else surfaces as <see cref="RemoteConflictException" />.
 ///     Authentication is Windows integrated authentication only for now (no stored credentials).
 /// </remarks>
+[Transient(typeof(ISiloRemote))]
 public sealed class HttpSiloRemote : ISiloRemote
 {
     private static readonly HttpClient Client = CreateClient();

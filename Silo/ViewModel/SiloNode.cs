@@ -25,21 +25,22 @@ public record SiloNode
     public bool ChildrenLoaded { get; private set; }
 
     /// <summary>
-    ///     The model behind the node, and exactly the object the node was made with: the Explorer looks on it for the item's
-    ///     details, view and menu (<c>INodeDetails</c>, <c>INodeViewProvider</c>, <c>ICommandProvider</c>, and the
-    ///     <c>IActionProvider&lt;T&gt;</c>s of its type). For a node made for an <see cref="INodeProvider" /> that is the provider
-    ///     itself, not the provider's <see cref="INodeProvider.Data" /> (see <see cref="Data" />).
-    /// </summary>
-    public object DataContext { get; protected init; }
-
-    /// <summary>
     ///     The raw thing the node stands for: the <see cref="INodeProvider.Data" /> of its provider (a <c>FileSystemInfo</c>,
     ///     say), or the <see cref="DataContext" /> itself when that is not a provider.
     /// </summary>
     public object? Data => DataContext is INodeProvider provider ? provider.Data : DataContext;
 
-    public int?   Expand      { get; protected set; }
-    public Uri?   Icon        { get; protected init; }
+    /// <summary>
+    ///     The model behind the node, and exactly the object the node was made with: the Explorer looks on it for the item's
+    ///     details, view and menu (<c>INodeDetails</c>, <c>INodeViewProvider</c>, <c>ICommandProvider</c>, and the
+    ///     <c>IActionProvider&lt;T&gt;</c>s of its type). For a node made for an <see cref="INodeProvider" /> that is the
+    ///     provider
+    ///     itself, not the provider's <see cref="INodeProvider.Data" /> (see <see cref="Data" />).
+    /// </summary>
+    public object DataContext { get; protected init; }
+
+    public int? Expand { get; protected set; }
+    public Uri? Icon   { get; protected init; }
 
     public bool IsExpanded
     {
@@ -53,17 +54,17 @@ public record SiloNode
         }
     }
 
-    public bool IsSelected { get; set; }
+    public virtual bool IsSelected { get; set; }
 
-    public bool IsVisible => Expand > 0;
+    public virtual bool IsVisible => Expand > 0;
 
     /// <summary>Why the last <see cref="ChildLoader" /> run failed (an unreadable folder, say), else null.</summary>
-    public string? LoadError { get; private set; }
+    public virtual string? LoadError { get; protected set; }
 
-    public object? Parent   { get; protected set; }
-    public string? Text     { get; protected init; }
-    public string? TypeName { get; protected init; }
-    public Uri     Uri      { get; protected init; }
+    public virtual object? Parent   { get; protected set; }
+    public virtual string? Text     { get; protected init; }
+    public virtual string? TypeName { get; protected init; }
+    public virtual Uri     Uri      { get; protected init; }
 
     /// <summary>
     ///     Runs the <see cref="ChildLoader" /> once and adds what it returns to <see cref="Children" />. Calling it again
@@ -135,7 +136,10 @@ public record SiloNode
     // provider's Data would hide the provider from the Explorer. Every constructor makes DataContext the object it is given;
     // read a provider's raw data through Data.
 
-    /// <summary>A node whose <see cref="DataContext" /> is <paramref name="dataContext" />, whatever its type (a provider included).</summary>
+    /// <summary>
+    ///     A node whose <see cref="DataContext" /> is <paramref name="dataContext" />, whatever its type (a provider
+    ///     included).
+    /// </summary>
     public SiloNode(object dataContext, int? expand = null) : this(dataContext, null, null, null, expand)
     {
     }

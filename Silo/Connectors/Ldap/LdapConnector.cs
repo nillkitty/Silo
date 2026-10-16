@@ -1,20 +1,17 @@
 ﻿using System.DirectoryServices;
 using Silo.Contracts.ConnectorServices;
+using Telefrag.DI;
 
 namespace Silo.Connectors.Ldap;
 
 /// <summary>
-///     Connects to directories (Active Directory and other LDAP servers) through ADSI: <c>adsi://</c> and <c>ldap://</c> are the same,
+///     Connects to directories (Active Directory and other LDAP servers) through ADSI: <c>adsi://</c> and <c>ldap://</c>
+///     are the same,
 ///     <c>ldaps://</c> is over TLS; no host means the current domain.
 /// </summary>
+[Singleton(typeof(IConnector))]
 public class LdapConnector : ConnectorBase, IAuthenticatable, IUriConnector
 {
-    /// <summary>
-    ///     How credentials are used: none are needed (the signed-in Windows user is who the connection signs in as when it was
-    ///     given none).
-    /// </summary>
-    public ConnectorAuthFlags AuthFlags { get; set; } = ConnectorAuthFlags.None;
-
     public TimeSpan ConnectionStateThreshold { get; set; } = TimeSpan.FromMinutes(5);
     public Uri      DefaultUri               => new("adsi://", UriKind.Absolute);
 
@@ -23,9 +20,20 @@ public class LdapConnector : ConnectorBase, IAuthenticatable, IUriConnector
     public PasswordEncodingMethod PasswordEncoding { get; set; } = PasswordEncodingMethod.PasswordEncodingSsl;
     public ReferralChasingOption  Referral         { get; set; } = ReferralChasingOption.Subordinate;
 
+    /// <summary>
+    ///     How credentials are used: none are needed (the signed-in Windows user is who the connection signs in as when it was
+    ///     given none).
+    /// </summary>
+    public ConnectorAuthFlags AuthFlags { get; set; } = ConnectorAuthFlags.None;
+
     protected override IConnection OnCreateConnection(ConnectionRequest crq)
     {
         return LdapModel.Create(this, crq);
+    }
+
+    public override Type GetStateType()
+    {
+        return typeof(LdapState);
     }
 
 
@@ -50,10 +58,5 @@ public class LdapConnector : ConnectorBase, IAuthenticatable, IUriConnector
         {
             return ex.Message;
         }
-    }
-
-    public override Type GetStateType()
-    {
-        return typeof(LdapState);
     }
 }

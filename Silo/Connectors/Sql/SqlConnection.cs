@@ -159,8 +159,11 @@ public class SqlConnection(IConnector owner, Uri uri, ConnectionRequest rq) : Sq
     // signs in, trying the ways AuthOrder allows in turn; the state is the caller's (see OperationAsync)
     private async Task OpenAsync(CancellationToken cancel)
     {
-        var credential = Metadata.OfType<Credential>().FirstOrDefault();
-        var attempts   = SqlSettings.Attempts(Uri, _credConfig, AuthFlags, WinFlags);
+        // the credential tells this connection how it signs in (see ConfigureFrom); with none, the URI's user and Windows are tried
+        _credConfig = null;
+        Metadata.OfType<ICredential>().FirstOrDefault()?.Configure(this);
+
+        var attempts = SqlSettings.Attempts(Uri, _credConfig, AuthFlags, WinFlags);
 
         for (int i = 0; i < attempts.Count; i++)
         {
@@ -472,9 +475,10 @@ public class SqlConnection(IConnector owner, Uri uri, ConnectionRequest rq) : Sq
         return r.IsDBNull(column) ? 0 : Convert.ToInt32(r.GetValue(column));
     }
 
-    internal void SetCredentialFragment(string s)
+    /// <summary>Takes the connection string settings that sign in as the credential (see <see cref="SqlSettings.Attempts" />).</summary>
+    internal void SetCredentialFragment(string fragment)
     {
-        _credConfig = s;
+        _credConfig = fragment;
     }
 
     public void InitProvider(IReceiver<Container> receiver)
@@ -595,7 +599,6 @@ public class SqlConnection(IConnector owner, Uri uri, ConnectionRequest rq) : Sq
 
     public void ConfigureFrom(ICredential credential)
     {
-        if (credential is null)
-            _credConfig = "";
+        credential.Required().Configure(this);
     }
 }

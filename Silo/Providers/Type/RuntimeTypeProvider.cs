@@ -3,10 +3,10 @@ using System.Collections.Concurrent;
 using System.Data;
 using System.Dynamic;
 using System.IO;
-using System.Text.RegularExpressions;
-using System.Linq;
+using System.Numerics;
 using System.Reflection;
 using System.Runtime.CompilerServices;
+using System.Text.RegularExpressions;
 using Silo.Contracts.Providers.Data.Shape;
 using Telefrag.DI;
 
@@ -19,29 +19,6 @@ namespace Silo.Providers;
 public class RuntimeTypeProvider : ITypeProvider
 {
     public string? DisplayName => "Runtime Types";
-
-    public void InitProvider()
-    {
-    }
-
-    public IType? GetType(string name, TypeLookup? context)
-    {
-        // Only attempt if the prefix is clr:
-        if (!context.Prefix.Is("clr"))
-            return null;
-
-        name.Required();
-        string? currentNs = context?.CurrentNamespace is null ? null : GetClrNamespace(context.CurrentNamespace, false);
-
-        // locate a .net type given three possbilities for the value of 'name'
-        // 1.  "global::System.Collections.Generic.List<System.String>" -- fully qualified
-        // 2.  "System.String" -- mostly qualified
-        // 3.  "Collections.Generic.List<String>" (and currentNs is 'System') -- partially qualified
-        // 4.  "String" (and currentNs is 'System') -- unqualified
-
-        throw new NotImplementedException();
-    }
-
 
     public static string? GetClrNamespace(Uri uriNamespace, bool throwErrors)
     {
@@ -60,15 +37,44 @@ public class RuntimeTypeProvider : ITypeProvider
         return new Uri($"clr-namespace:{Uri.EscapeDataString(nsName.Trim())}", UriKind.Absolute);
     }
 
-    public IType? GetType(Type runtimeType)
+    /// <summary>
+    ///     Finds the runtime type a <c>clr:</c> reference names, in the loaded assemblies. The name may be fully qualified
+    ///     (<c>System.Collections.Generic.List</c>), partly (<c>Collections.Generic.List</c> from inside <c>clr-namespace:System</c>)
+    ///     or just a name (<c>String</c> from inside <c>clr-namespace:System</c>); see <see cref="IReflectionProvider.FindType" />.
+    /// </summary>
+    public IType? Lookup(TypeLookup lookup)
     {
-        runtimeType.Required();
-        return new RuntimeType(runtimeType);
+        lookup.Required();
+        if (!lookup.Prefix.Is("clr") || lookup.Name.Nill()) return null;
+
+        // a namespace that is not a clr-namespace says nothing about where to look
+        string? currentNs = lookup.CurrentNamespace is null ? null : GetClrNamespace(lookup.CurrentNamespace, false);
+
+        var type = App.Require<IReflectionProvider>().FindType(lookup.Name.Trim(), currentNs);
+        return type is null ? null : new RuntimeType(type);
+    }
+
+    public IType? Lookup(Type type)
+    {
+        return new RuntimeType(type.Required());
     }
 }
 
 public class RuntimeType(Type clrType) : IType
 {
+    private const string UriScheme = "clr-namespace";
+
+    private static readonly ConcurrentDictionary<string, Type?> TypeCache = new(StringComparer.Ordinal);
+
+    /// <summary>Framework structs that hold one atomic value, so are scalars rather than columnar.</summary>
+    private static readonly HashSet<Type> ScalarStructs =
+    [
+        typeof(decimal), typeof(DateTime), typeof(DateTimeOffset), typeof(TimeSpan),
+        typeof(Guid), typeof(DateOnly), typeof(TimeOnly),
+        typeof(Half), typeof(Int128), typeof(UInt128), typeof(BigInteger),
+        typeof(Complex)
+    ];
+
     public Type Value { get; } = clrType.Required();
 
     public DataKind Kind => GetKind(Value);
@@ -80,20 +86,19 @@ public class RuntimeType(Type clrType) : IType
     public DataShape Shape     => GetShape(Value);
     public Uri       Uri       => UriFromType(Value);
 
-    private const string UriScheme = "clr-namespace";
-
-    private static readonly ConcurrentDictionary<string, Type?> TypeCache = new(StringComparer.Ordinal);
-
     /// <summary>
     ///     Builds the URI of a runtime type:
     ///     <c>clr-namespace:&lt;namespace&gt;.&lt;type&gt;/&lt;type arguments...&gt;</c>.
     /// </summary>
     /// <remarks>
     ///     <para>
-    ///         <c>&lt;namespace&gt;.&lt;type&gt;</c> is the type's CLR full name <i>without</i> its type arguments, so it keeps the arity
-    ///         marker of a generic (<c>List`1</c>) and uses <c>+</c> for nested types. Type arguments follow, one path segment each;
+    ///         <c>&lt;namespace&gt;.&lt;type&gt;</c> is the type's CLR full name <i>without</i> its type arguments, so it
+    ///         keeps the arity
+    ///         marker of a generic (<c>List`1</c>) and uses <c>+</c> for nested types. Type arguments follow, one path segment
+    ///         each;
     ///         an argument that is itself generic puts its own arguments in parentheses. An array adds its rank to the name
-    ///         (<c>[]</c>, <c>[,]</c>, <c>[*]</c>, inner array first). Every name and rank is percent-encoded, so only <c>/ ( )</c>
+    ///         (<c>[]</c>, <c>[,]</c>, <c>[*]</c>, inner array first). Every name and rank is percent-encoded, so only
+    ///         <c>/ ( )</c>
     ///         are structure. Examples (shown decoded):
     ///     </para>
     ///     <code>
@@ -149,7 +154,7 @@ public class RuntimeType(Type clrType) : IType
             return true;
         }
         catch (Exception ex) when (ex is FormatException or TypeLoadException or NotSupportedException or ArgumentException
-                                       or InvalidOperationException)
+                                      or InvalidOperationException)
         {
             error = ex;
             return false;
@@ -191,29 +196,171 @@ public class RuntimeType(Type clrType) : IType
     private static Type? FindType(string fullName)
     {
         return TypeCache.GetOrAdd(fullName, static name =>
+                                            {
+                                                if (Type.GetType(name, false) is { } t) return t;
+
+                                                foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
+                                                    try
+                                                    {
+                                                        if (asm.GetType(name, false) is { } found) return found;
+                                                    }
+                                                    catch (Exception ex) when (ex is FileNotFoundException or FileLoadException
+                                                                                                           or NotSupportedException)
+                                                    {
+                                                        // an assembly that cannot be inspected cannot hold the type
+                                                    }
+
+                                                return null;
+                                            });
+    }
+
+    public static DataShape GetShape(Type value)
+    {
+        var ca = value.Required().GetCustomAttributes(true);
+        foreach (var a in ca)
         {
-            if (Type.GetType(name, false) is { } t) return t;
+            if (a is not Attribute aa) continue;
+            if (aa is DataShapeAttribute dsa) return dsa.Shape;
+        }
 
-            foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
-            {
-                try
-                {
-                    if (asm.GetType(name, false) is { } found) return found;
-                }
-                catch (Exception ex) when (ex is FileNotFoundException or FileLoadException or NotSupportedException)
-                {
-                    // an assembly that cannot be inspected cannot hold the type
-                }
-            }
+        if (value.IsAssignableTo(typeof(IDynamicMetaObjectProvider)))
+            return DataShape.Dynamic;
 
-            return null;
-        });
+        var tr = GetTraits(value, ca);
+
+        if (tr.IsMultiTabular) return DataShape.Multitabular;
+        if (tr.IsTabular) return DataShape.Tabular;
+        if (tr.IsColumnar) return DataShape.Columnar;
+        if (tr.IsLinear) return DataShape.Linear;
+        if (tr.IsScalar) return DataShape.Scalar;
+        if (tr.IsEnumerable) return DataShape.Container;
+        return DataShape.Object;
+    }
+
+    public static bool IsScalar(Type t)
+    {
+        return GetTraits(t.Required()).IsScalar;
+    }
+
+    public static bool IsColumnar(Type t)
+    {
+        return GetTraits(t.Required()).IsColumnar;
+    }
+
+    public static bool IsLinear(Type t)
+    {
+        return GetTraits(t.Required()).IsLinear;
+    }
+
+    public static bool IsTabular(Type t)
+    {
+        return GetTraits(t.Required()).IsTabular;
+    }
+
+    public static bool IsMultiTabular(Type t)
+    {
+        return GetTraits(t.Required()).IsMultiTabular;
+    }
+
+    public static bool IsEnumerable(Type t)
+    {
+        return GetTraits(t.Required()).IsEnumerable;
+    }
+
+    public static TypeTraits GetTraits(Type value, object[]? ca = null)
+    {
+        ca ??= value.Required().GetCustomAttributes(true);
+
+        // int? is shaped like int
+        var core = Nullable.GetUnderlyingType(value) ?? value;
+
+        bool Implements(Type genericDefinition)
+        {
+            return (core.IsGenericType && core.GetGenericTypeDefinition() == genericDefinition) || core.GetInterfaces()
+                                                                                                       .Any(x => x.IsGenericType &&
+                                                                                                                 x.GetGenericTypeDefinition() ==
+                                                                                                                 genericDefinition);
+        }
+
+        // Scalar: one atomic value -- primitives, enums, strings and the framework's atomic structs (not structs in general).
+        bool s = core.IsPrimitive || core.IsEnum || core == typeof(string) || ScalarStructs.Contains(core);
+
+        // Columnar: a fixed set of named or positional values -- tuples and structs (including KeyValuePair).
+        bool c = !s && (typeof(ITuple).IsAssignableFrom(core) || core.IsStruct());
+
+        // Tabular: a table, or an array with more than one dimension. MultiTabular: a set of tables.
+        // (Only the type itself or a subtype counts -- not a base type such as object or IListSource.)
+        bool t = core.IsAssignableTo(typeof(DataTable)) || (core.IsArray && core.GetArrayRank() > 1);
+        bool m = core.IsAssignableTo(typeof(DataSet));
+
+        // Linear: a vector or list. string is excluded even though it is IEnumerable<char>.
+        bool l = !s && !t && !m && ((core.IsArray && core.GetArrayRank() == 1) || typeof(IList).IsAssignableFrom(core) ||
+                                    Implements(typeof(IList<>))                || Implements(typeof(IReadOnlyList<>)));
+
+        // Enumerable: anything that can be iterated (this covers IEnumerable<T> too, as it extends IEnumerable).
+        bool e = core != typeof(string) && typeof(IEnumerable).IsAssignableFrom(core);
+
+        return new TypeTraits
+               {
+                   IsStruct                 = value.IsStruct(),
+                   IsRecordClass            = value.IsRecordClass(),
+                   IsRecordStruct           = value.IsRecordStruct(),
+                   IsVisible                = value.IsVisible,
+                   IsValueType              = value.IsValueType,
+                   IsAbstract               = value.IsAbstract,
+                   IsArray                  = value.IsArray,
+                   IsByRef                  = value.IsByRef,
+                   IsVariableBoundArray     = value.IsVariableBoundArray,
+                   IsClass                  = value.IsClass,
+                   IsConstructedGenericType = value.IsConstructedGenericType,
+                   IsContextful             = value.IsContextful,
+                   IsExplicitLayout         = value.IsExplicitLayout,
+                   IsImport                 = value.IsImport,
+                   IsCOMObject              = value.IsCOMObject,
+                   IsPrimitive              = value.IsPrimitive,
+                   IsInterface              = value.IsInterface,
+                   IsNested                 = value.IsNested,
+                   IsEnum                   = value.IsEnum,
+                   IsNotPublic              = value.IsNotPublic,
+                   IsPointer                = value.IsPointer,
+                   IsSpecialName            = value.IsSpecialName,
+                   IsGenericTypeDefinition  = value.IsGenericTypeDefinition,
+                   IsSealed                 = value.IsSealed,
+                   IsColumnar               = c,
+                   IsLinear                 = l,
+                   IsTabular                = t,
+                   IsEnumerable             = e,
+                   IsMultiTabular           = m,
+                   IsScalar                 = s
+               };
+    }
+
+    public static DataKind GetKind(Type value)
+    {
+        value.Required();
+
+        // A type with unbound type arguments (List<>, or List<T> seen from inside generic code) is not usable until they are
+        // supplied, whatever else it is -- so this comes first.
+        if (value.ContainsGenericParameters)
+            return DataKind.Open;
+
+        // DynamicObject, ExpandoObject and anything else that binds its members at run time.
+        if (value.IsAssignableTo(typeof(IDynamicMetaObjectProvider)))
+            return DataKind.Dynamic;
+
+        if (value.IsAssignableTo(typeof(ISyntax)))
+            return DataKind.Syntax;
+
+        // CLR types are typed by name. DataKind.Structural is never produced here: IStructuralEquatable (which arrays and
+        // tuples implement) is about comparing values structurally, not about duck-typed definitions.
+        return DataKind.Nominal;
     }
 
     /// <summary>Recursive-descent reader for the path grammar described at <see cref="UriFromType" />.</summary>
     private sealed class TypeUriParser(string path)
     {
-        private int _pos;
+        private static readonly Regex RankPattern = new(@"\[[,*]*\]", RegexOptions.Compiled);
+        private                 int   _pos;
 
         public Type ParseTopLevel()
         {
@@ -282,7 +429,7 @@ public class RuntimeType(Type clrType) : IType
             }
 
             string name = head[..end];
-            var type = FindType(name) ?? throw new TypeLoadException($"The type '{name}' was not found in any loaded assembly.");
+            var    type = FindType(name) ?? throw new TypeLoadException($"The type '{name}' was not found in any loaded assembly.");
 
             if (args.Count > 0)
             {
@@ -300,156 +447,6 @@ public class RuntimeType(Type clrType) : IType
 
             return type;
         }
-
-        private static readonly Regex RankPattern = new(@"\[[,*]*\]", RegexOptions.Compiled);
-    }
-
-    public static DataShape GetShape(Type value)
-    {
-        var ca = value.Required().GetCustomAttributes(true);
-        foreach (var a in ca)
-        {
-            if (a is not Attribute aa) continue;
-            if (aa is DataShapeAttribute dsa) return dsa.Shape;
-        }
-
-        if (value.IsAssignableTo(typeof(IDynamicMetaObjectProvider)))
-            return DataShape.Dynamic;
-
-        var tr = GetTraits(value, ca);
-
-        if (tr.IsMultiTabular) return DataShape.Multitabular;
-        if (tr.IsTabular) return DataShape.Tabular;
-        if (tr.IsColumnar) return DataShape.Columnar;
-        if (tr.IsLinear) return DataShape.Linear;
-        if (tr.IsScalar) return DataShape.Scalar;
-        if (tr.IsEnumerable) return DataShape.Container;
-        return DataShape.Object;
-    }
-
-    public static bool IsScalar(Type t)
-    {
-        return GetTraits(t.Required()).IsScalar;
-    }
-
-    public static bool IsColumnar(Type t)
-    {
-        return GetTraits(t.Required()).IsColumnar;
-    }
-
-    public static bool IsLinear(Type t)
-    {
-        return GetTraits(t.Required()).IsLinear;
-    }
-
-    public static bool IsTabular(Type t)
-    {
-        return GetTraits(t.Required()).IsTabular;
-    }
-
-    public static bool IsMultiTabular(Type t)
-    {
-        return GetTraits(t.Required()).IsMultiTabular;
-    }
-
-    public static bool IsEnumerable(Type t)
-    {
-        return GetTraits(t.Required()).IsEnumerable;
-    }
-
-    public static TypeTraits GetTraits(Type value, object[]? ca = null)
-    {
-        ca ??= value.Required().GetCustomAttributes(true);
-
-        // int? is shaped like int
-        var core = Nullable.GetUnderlyingType(value) ?? value;
-
-        bool Implements(Type genericDefinition)
-        {
-            return (core.IsGenericType && core.GetGenericTypeDefinition() == genericDefinition) ||
-                   core.GetInterfaces().Any(x => x.IsGenericType && x.GetGenericTypeDefinition() == genericDefinition);
-        }
-
-        // Scalar: one atomic value -- primitives, enums, strings and the framework's atomic structs (not structs in general).
-        bool s = core.IsPrimitive || core.IsEnum || core == typeof(string) || ScalarStructs.Contains(core);
-
-        // Columnar: a fixed set of named or positional values -- tuples and structs (including KeyValuePair).
-        bool c = !s && (typeof(ITuple).IsAssignableFrom(core) || core.IsStruct());
-
-        // Tabular: a table, or an array with more than one dimension. MultiTabular: a set of tables.
-        // (Only the type itself or a subtype counts -- not a base type such as object or IListSource.)
-        bool t = core.IsAssignableTo(typeof(DataTable)) || (core.IsArray && core.GetArrayRank() > 1);
-        bool m = core.IsAssignableTo(typeof(DataSet));
-
-        // Linear: a vector or list. string is excluded even though it is IEnumerable<char>.
-        bool l = !s && !t && !m &&
-                 ((core.IsArray && core.GetArrayRank() == 1) ||
-                  typeof(IList).IsAssignableFrom(core) || Implements(typeof(IList<>)) || Implements(typeof(IReadOnlyList<>)));
-
-        // Enumerable: anything that can be iterated (this covers IEnumerable<T> too, as it extends IEnumerable).
-        bool e = core != typeof(string) && typeof(IEnumerable).IsAssignableFrom(core);
-
-        return new TypeTraits
-               {
-                   IsStruct                 = value.IsStruct(),
-                   IsRecordClass            = value.IsRecordClass(),
-                   IsRecordStruct           = value.IsRecordStruct(),
-                   IsVisible                = value.IsVisible,
-                   IsValueType              = value.IsValueType,
-                   IsAbstract               = value.IsAbstract,
-                   IsArray                  = value.IsArray,
-                   IsByRef                  = value.IsByRef,
-                   IsVariableBoundArray     = value.IsVariableBoundArray,
-                   IsClass                  = value.IsClass,
-                   IsConstructedGenericType = value.IsConstructedGenericType,
-                   IsContextful             = value.IsContextful,
-                   IsExplicitLayout         = value.IsExplicitLayout,
-                   IsImport                 = value.IsImport,
-                   IsCOMObject              = value.IsCOMObject,
-                   IsPrimitive              = value.IsPrimitive,
-                   IsInterface              = value.IsInterface,
-                   IsNested                 = value.IsNested,
-                   IsEnum                   = value.IsEnum,
-                   IsNotPublic              = value.IsNotPublic,
-                   IsPointer                = value.IsPointer,
-                   IsSpecialName            = value.IsSpecialName,
-                   IsGenericTypeDefinition  = value.IsGenericTypeDefinition,
-                   IsSealed                 = value.IsSealed,
-                   IsColumnar               = c,
-                   IsLinear                 = l,
-                   IsTabular                = t,
-                   IsEnumerable             = e,
-                   IsMultiTabular           = m,
-                   IsScalar                 = s
-               };
-    }
-
-    /// <summary>Framework structs that hold one atomic value, so are scalars rather than columnar.</summary>
-    private static readonly HashSet<Type> ScalarStructs =
-    [
-        typeof(decimal), typeof(DateTime), typeof(DateTimeOffset), typeof(TimeSpan), typeof(Guid), typeof(DateOnly), typeof(TimeOnly),
-        typeof(Half), typeof(Int128), typeof(UInt128), typeof(System.Numerics.BigInteger), typeof(System.Numerics.Complex)
-    ];
-
-    public static DataKind GetKind(Type value)
-    {
-        value.Required();
-
-        // A type with unbound type arguments (List<>, or List<T> seen from inside generic code) is not usable until they are
-        // supplied, whatever else it is -- so this comes first.
-        if (value.ContainsGenericParameters)
-            return DataKind.Open;
-
-        // DynamicObject, ExpandoObject and anything else that binds its members at run time.
-        if (value.IsAssignableTo(typeof(IDynamicMetaObjectProvider)))
-            return DataKind.Dynamic;
-
-        if (value.IsAssignableTo(typeof(ISyntax)))
-            return DataKind.Syntax;
-
-        // CLR types are typed by name. DataKind.Structural is never produced here: IStructuralEquatable (which arrays and
-        // tuples implement) is about comparing values structurally, not about duck-typed definitions.
-        return DataKind.Nominal;
     }
 }
 

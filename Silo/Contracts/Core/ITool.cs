@@ -6,6 +6,7 @@ namespace Silo.Contracts.Core;
 /// <summary>
 ///     A "Tool" registered with the app which appears in the Tools menu.
 /// </summary>
+[RequireRegistration]
 public interface ITool
 {
     /// <summary>

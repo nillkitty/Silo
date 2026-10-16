@@ -1,5 +1,4 @@
-﻿using Silo.Contracts.Providers.Reflection;
+﻿namespace Silo.Contracts.Core;
 
-namespace Silo.Contracts.Core;
-
+[RequireRegistration]
 public interface IScriptProvider : IFileFormat, ILaunchable;

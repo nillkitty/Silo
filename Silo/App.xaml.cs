@@ -18,8 +18,8 @@ using Silo.Model;
 using Silo.Settings;
 using Silo.Theming;
 using Silo.Ui;
-using Silo.Ui.Windows;
 using Silo.UI;
+using Silo.Ui.Windows;
 using Silo.ViewModel;
 using Telefrag.DI;
 using Telefrag.Exceptions;
@@ -73,6 +73,8 @@ public partial class App : Application, IContainerHost
     /// </summary>
     public LaunchPlan Launch { get; init; } = new(LaunchMode.Stock, null, false);
 
+    public static IConnection? LocalConnection { get; } = new LocalConnection();
+
     /// <summary>
     ///     In-memory cache of logs
     /// </summary>
@@ -82,6 +84,12 @@ public partial class App : Application, IContainerHost
     ///     File -> New Silo
     /// </summary>
     public static AppCommand NewSiloCommand => new NewSiloCommand();
+
+    /// <summary>
+    ///     The Explorer nodes that belong to the app rather than to a Silo: the ones tools contribute
+    ///     (see <see cref="INodeProvider" />). A Silo's own are in <see cref="OpenSilo.Nodes" />.
+    /// </summary>
+    public NodeHost Nodes { get; } = new();
 
     /// <summary>
     ///     File -> Open Silo
@@ -177,12 +185,6 @@ public partial class App : Application, IContainerHost
 
         return true;
     }
-
-    /// <summary>
-    ///     The Explorer nodes that belong to the app rather than to a Silo: the ones tools contribute
-    ///     (see <see cref="INodeProvider" />). A Silo's own are in <see cref="OpenSilo.Nodes" />.
-    /// </summary>
-    public NodeHost Nodes { get; } = new();
 
     /// <summary>
     ///     Raised when the active Silo has changed
@@ -538,9 +540,12 @@ public partial class App : Application, IContainerHost
             dispatcher.Invoke(() => AlertDialog.Show(message, title));
     }
 
-    /// <summary>Like <see cref="Alert(string, string?)" /> for an exception: <paramref name="what" /> (what was being done), then the exception's message.</summary>
+    /// <summary>
+    ///     Like <see cref="Alert(string, string?)" /> for an exception: <paramref name="what" /> (what was being done),
+    ///     then the exception's message.
+    /// </summary>
     public static void Alert(Exception ex, string what)
     {
-        Alert($"{what}\n\n{ex.Message}", null);
+        Alert($"{what}\n\n{ex.Message}");
     }
 }

@@ -25,15 +25,19 @@ public sealed class SqlAttempt
     /// <summary>What it is, for messages: "Windows authentication", "SQL login 'sa'".</summary>
     public string Description { get; }
 
+    /// <summary>How it signs in.</summary>
+    public SqlAuthMethod Method { get; }
+
     public override string ToString()
     {
         return Description;
     }
 
-    public SqlAttempt(string connectionString, string description)
+    public SqlAttempt(string connectionString, string description, SqlAuthMethod method = SqlAuthMethod.Credential)
     {
         ConnectionString = connectionString;
         Description      = description;
+        Method           = method;
     }
 }
 
@@ -194,20 +198,60 @@ public static class SqlSettings
     }
 
     /// <summary>
-    ///     The connection strings to try, with a description of each. The credential is the one given, else the one in the
-    ///     URI.
+    ///     The connection strings to try, with a description of each, in the order <see cref="AuthOrder" /> gives. The
+    ///     credential is the <paramref name="credentialFragment" /> if there is one (the connection settings that a
+    ///     <c>Credential</c> hands over: <c>User ID=sa;Password=...;</c>, or <c>Integrated Security=SSPI;</c>), else the user and
+    ///     password written in the URI. Two ways that come to the same connection string are tried once.
     /// </summary>
-    /// <exception cref="InvalidOperationException">There is no way to sign in (see <see cref="AuthOrder" />).</exception>
-    public static IReadOnlyList<SqlAttempt> Attempts(Uri uri, string? credConfig, ConnectorAuthFlags auth, WinAuthFlags win)
+    /// <exception cref="InvalidOperationException">There is no way to sign in (see <see cref="AuthOrder" />), or the fragment is not connection string settings.</exception>
+    public static IReadOnlyList<SqlAttempt> Attempts(Uri uri, string? credentialFragment, ConnectorAuthFlags auth, WinAuthFlags win)
     {
+        string? fragment = string.IsNullOrWhiteSpace(credentialFragment) ? null : credentialFragment;
+        var     fromUri  = fragment is null ? CredentialFromUri(uri) : null;
+
         var attempts = new List<SqlAttempt>();
-
-
-        var builder = Common(uri);
-        if (credConfig != null)
-            attempts.Add(new SqlAttempt($"{builder.ConnectionString};{credConfig}", "Using assigned credential"));
-        attempts.Add(new SqlAttempt($"{builder.ConnectionString}", "Without a credential"));
+        foreach (var method in AuthOrder(fragment is not null || fromUri is not null, auth, win))
+        {
+            var attempt = method == SqlAuthMethod.Windows ? WindowsAttempt(uri) : CredentialAttempt(uri, fragment, fromUri);
+            if (attempts.All(a => a.ConnectionString != attempt.ConnectionString)) attempts.Add(attempt);
+        }
 
         return attempts;
+    }
+
+    private static SqlAttempt WindowsAttempt(Uri uri)
+    {
+        var builder = Common(uri);
+        builder.IntegratedSecurity = true;
+        return new SqlAttempt(builder.ConnectionString, "Windows authentication", SqlAuthMethod.Windows);
+    }
+
+    private static SqlAttempt CredentialAttempt(Uri uri, string? fragment, (string User, string? Password)? fromUri)
+    {
+        var builder = Common(uri);
+
+        if (fragment is not null)
+        {
+            // the settings are parsed, not pasted in, so that a quoted password with a ; in it stays one setting
+            try
+            {
+                builder = new Db.SqlConnectionStringBuilder($"{builder.ConnectionString};{fragment}");
+            }
+            catch (ArgumentException ex)
+            {
+                throw new InvalidOperationException("The credential's settings are not valid in a connection string.", ex);
+            }
+        }
+        else if (fromUri is { } uriCredential)
+        {
+            builder.UserID = uriCredential.User;
+            if (uriCredential.Password is not null) builder.Password = uriCredential.Password;
+        }
+
+        if (builder.IntegratedSecurity)
+            return new SqlAttempt(builder.ConnectionString, "Windows authentication", SqlAuthMethod.Windows);
+
+        string description = builder.UserID.Length > 0 ? $"SQL login '{builder.UserID}'" : "the assigned credential";
+        return new SqlAttempt(builder.ConnectionString, description);
     }
 }

@@ -74,9 +74,85 @@ public class WmiLocationTests
     }
 
     [Test]
-    public void Another_computer_is_refused_not_ignored()
+    public void Another_computer_is_named_by_the_host()
     {
-        Assert.Throws<NotSupportedException>(() => Parse("wmi://server42/Win32_Service"));
+        var location = Parse("wmi://server42/Win32_Service");
+
+        Assert.That(location.Host, Is.EqualTo("server42"));
+        Assert.That(location,      Is.Not.EqualTo(new WmiClass(@"root\cimv2", "Win32_Service")), "the same class on another computer is another location");
+        Assert.That(location,      Is.EqualTo(new WmiClass(@"root\cimv2", "Win32_Service") { Host = "server42" }));
+    }
+
+    [Test]
+    public void The_fragment_lists_the_properties_to_read()
+    {
+        var location = Parse("wmi:///Win32_Service#Name,%20State");
+
+        Assert.That(location.PropertiesToLoad, Is.EqualTo(new[] { "Name", "State" }));
+        Assert.That(location,                  Is.Not.EqualTo(new WmiClass(@"root\cimv2", "Win32_Service")), "reading fewer properties is another location");
+        Assert.That(Parse("wmi:///Win32_Service#").PropertiesToLoad, Is.Empty);
+    }
+
+    [Test]
+    public void A_query_after_q_is_run_in_the_namespace_and_comes_back_as_text()
+    {
+        var location = WmiLocation.FromUri(new Uri("wmi:///Citrix/?q=SELECT%20*%20FROM%20ICA_Client%20WHERE%20Name%3D%27a%27"), out string? wql);
+
+        Assert.That(location, Is.EqualTo(new WmiRoot(@"root\Citrix")));
+        Assert.That(wql,      Is.EqualTo("SELECT * FROM ICA_Client WHERE Name='a'"));
+        Assert.That(WmiLocation.FromUri(new Uri("wmi:///Win32_Service"), out string? none), Is.TypeOf<WmiClass>());
+        Assert.That(none, Is.Null);
+    }
+
+    [TestCase("wmi:///")]
+    [TestCase("wmi:///root/")]
+    [TestCase("wmi:///Citrix/Client/")]
+    [TestCase("wmi:///Win32_Service")]
+    [TestCase("wmi:///root/Win32_Foo")]
+    [TestCase("wmi:///Win32_Service#Name,State")]
+    [TestCase("wmi:///Win32_ComputerSystem/@")]
+    [TestCase("wmi:///Citrix/Client/ICA/ICA_Client/@")]
+    [TestCase("wmi:///ROOT/SecurityCenter2/AntiVirusProduct")]
+    [TestCase("wmi://server42/Citrix/Client/ICA/ICA_Client/@")]
+    public void A_location_is_written_as_the_uri_it_was_read_from(string text)
+    {
+        var location = Parse(text);
+
+        Assert.That(location.ToUri().OriginalString, Is.EqualTo(text));
+        Assert.That(Parse(location.ToUri().OriginalString), Is.EqualTo(location));
+    }
+
+    [Test]
+    public void A_key_that_holds_odd_characters_survives_being_written()
+    {
+        foreach (string text in new[] { @"wmi:///Win32_Volume?name=C:\", "wmi:///Win32_Share?Name=a%3Db%26c" })
+        {
+            var location = Parse(text);
+
+            Assert.That(Parse(location.ToUri().OriginalString), Is.EqualTo(location), text);
+        }
+    }
+
+    [Test]
+    public void A_query_is_written_for_the_namespace_whatever_the_location_was()
+    {
+        var uri = Parse("wmi:///Win32_Service").ToUri("SELECT * FROM Win32_Service");
+
+        var back = WmiLocation.FromUri(uri, out string? wql);
+        Assert.That(back, Is.EqualTo(new WmiRoot(@"root\cimv2")));
+        Assert.That(wql,  Is.EqualTo("SELECT * FROM Win32_Service"));
+    }
+
+    [Test]
+    public void Each_kind_of_location_has_a_name_a_type_and_an_icon()
+    {
+        Assert.That(Parse("wmi:///Citrix/Client/").Label,        Is.EqualTo("Client"));
+        Assert.That(Parse("wmi:///Win32_Service").Label,         Is.EqualTo("Win32_Service"));
+        Assert.That(Parse(@"wmi:///Win32_Volume?name=C:\").Label, Is.EqualTo(@"Win32_Volume (name=C:\)"));
+        Assert.That(Parse("wmi:///").TypeName,                   Is.EqualTo("WMI Namespace"));
+        Assert.That(Parse("wmi:///Win32_Service").TypeName,      Is.EqualTo("WMI Class"));
+        Assert.That(Parse("wmi:///Win32_Service/@").TypeName,    Is.EqualTo("WMI Instance"));
+        Assert.That(Parse("wmi:///").Icon.OriginalString,        Is.EqualTo("Folder17"));
     }
 
     [Test]
@@ -85,7 +161,11 @@ public class WmiLocationTests
         Assert.Throws<NotSupportedException>(() => Parse("http://localhost/Win32_Service"));
     }
 
-    [TestCase("wmi:///Win32_OperatingSystem/@#Caption", Description = "a fragment is not used")]
+    [TestCase("wmi:///#Caption", Description = "properties without a class")]
+    [TestCase("wmi:///Citrix/#Caption", Description = "properties without a class")]
+    [TestCase("wmi:///Win32_Service#bad%20name", Description = "a property name has no spaces")]
+    [TestCase("wmi:///Win32_Service?q=SELECT%201", Description = "a query goes with a namespace, not a class")]
+    [TestCase("wmi:///Win32_Service/@?q=SELECT%201", Description = "'@' and a WQL query")]
     [TestCase("wmi:///@", Description = "no class")]
     [TestCase("wmi:///Win32_Volume?name", Description = "a key needs a value")]
     [TestCase("wmi:///Win32_Volume?=C", Description = "a key needs a property")]

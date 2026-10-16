@@ -5,7 +5,7 @@ namespace Silo.Model;
 /// <summary>
 /// Metadata associated with a Silo
 /// </summary>
-public class OpenSiloMeta : ModelBase
+public class OpenSiloMeta() : ModelBase(App.LocalConnection)
 {
     public Version? VersionCreated { get; set; } = System.Reflection.Assembly.GetExecutingAssembly().GetName()?.Version;
 

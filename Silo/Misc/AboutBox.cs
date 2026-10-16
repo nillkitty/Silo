@@ -73,7 +73,7 @@ public static class AboutBox
                    };
         }
 
-        public AboutModel()
+        public AboutModel() : base(App.LocalConnection)
         {
             StackPanel p = new();
             p.Children.Add(MainSection);

@@ -26,7 +26,7 @@ public class LdapConnection : LdapModel, IConnection, ICommandProvider
     private volatile CancellationTokenSource? _current; // what runs now, for Disconnect to cancel
 
     private volatile bool _bound; // the entry has been opened and read at least once
-    private          LdapBind _bind;
+    private readonly LdapBind _bind;
 
     /// <summary>Makes the connection; nothing is asked of the directory until <see cref="Connect" /> (see <see cref="LdapModel.Create" />).</summary>
     public LdapConnection(LdapBind bind, Uri requested, IConnector connector, List<object> metadata, ICredential? credential = null,
@@ -202,13 +202,6 @@ public class LdapConnection : LdapModel, IConnection, ICommandProvider
         {
             return false;
         }
-    }
-
-    public void SetBasicCredential(string username, string password)
-    {
-        Entry.Username = username;
-        Entry.Password = password;
-        _bind          = _bind with { UserName = username, Password = password };
     }
 
     // ---- IConnection -----------------------------------------------------------------------------

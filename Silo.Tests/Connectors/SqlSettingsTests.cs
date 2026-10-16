@@ -139,26 +139,50 @@ public class SqlSettingsTests
     [Test]
     public void A_windows_attempt_uses_integrated_security_and_no_user()
     {
-        var attempts = SqlSettings.Attempts(Server, null, null, ConnectorAuthFlags.None, SqlSettings.DefaultWinAuth);
+        var attempts = SqlSettings.Attempts(Server, null, ConnectorAuthFlags.None, SqlSettings.DefaultWinAuth);
 
         var one = Parse(attempts.Single());
-        Assert.That(one.IntegratedSecurity, Is.True);
-        Assert.That(one.UserID,             Is.Empty);
-        Assert.That(one.DataSource,         Is.EqualTo("db.example.com,1444"));
-        Assert.That(one.InitialCatalog,     Is.EqualTo("Sales"));
+        Assert.That(attempts.Single().Method, Is.EqualTo(SqlAuthMethod.Windows));
+        Assert.That(one.IntegratedSecurity,   Is.True);
+        Assert.That(one.UserID,               Is.Empty);
+        Assert.That(one.DataSource,           Is.EqualTo("db.example.com,1444"));
+        Assert.That(one.InitialCatalog,       Is.EqualTo("Sales"));
     }
 
     [Test]
     public void A_credential_attempt_carries_the_user_and_password()
     {
-        var attempts = SqlSettings.Attempts(Server, "sa", "s3cret", ConnectorAuthFlags.None, SqlSettings.DefaultWinAuth);
+        var attempts = SqlSettings.Attempts(Server, "User ID=sa;Password=s3cret;", ConnectorAuthFlags.None, SqlSettings.DefaultWinAuth);
 
         Assert.That(attempts.Select(a => a.Method), Is.EqualTo(new[] { SqlAuthMethod.Credential, SqlAuthMethod.Windows }));
         var first = Parse(attempts[0]);
         Assert.That(first.IntegratedSecurity, Is.False);
         Assert.That(first.UserID,             Is.EqualTo("sa"));
         Assert.That(first.Password,           Is.EqualTo("s3cret"));
+        Assert.That(first.InitialCatalog,     Is.EqualTo("Sales"), "the settings of the URI are kept");
         Assert.That(Parse(attempts[1]).Password, Is.Empty, "the Windows attempt carries no password");
+    }
+
+    [Test]
+    public void A_password_with_a_semicolon_or_a_quote_stays_one_setting()
+    {
+        const string password = "p;w\"d'x=y";
+        string fragment = new SqlConnectionStringBuilder { UserID = "sa", Password = password }.ConnectionString + ";";
+
+        var attempt = SqlSettings.Attempts(Server, fragment, ConnectorAuthFlags.None, WinAuthFlags.None).Single();
+
+        Assert.That(Parse(attempt).Password, Is.EqualTo(password));
+        Assert.That(Parse(attempt).UserID,   Is.EqualTo("sa"));
+    }
+
+    [Test]
+    public void A_credential_that_says_integrated_security_is_the_windows_attempt_and_is_not_tried_twice()
+    {
+        var attempts = SqlSettings.Attempts(Server, "Integrated Security=SSPI;", ConnectorAuthFlags.None, SqlSettings.DefaultWinAuth);
+
+        Assert.That(attempts, Has.Count.EqualTo(1));
+        Assert.That(attempts[0].Method,                  Is.EqualTo(SqlAuthMethod.Windows));
+        Assert.That(Parse(attempts[0]).IntegratedSecurity, Is.True);
     }
 
     [Test]
@@ -166,21 +190,36 @@ public class SqlSettingsTests
     {
         var uri = new Uri("sqlserver://uriuser:uripass@h/Sales");
 
-        var fromUri = SqlSettings.Attempts(uri, null, null, ConnectorAuthFlags.None, WinAuthFlags.None).Single();
-        var given   = SqlSettings.Attempts(uri, "given", "pw", ConnectorAuthFlags.None, WinAuthFlags.None).Single();
+        var fromUri = SqlSettings.Attempts(uri, null,                         ConnectorAuthFlags.None, WinAuthFlags.None).Single();
+        var given   = SqlSettings.Attempts(uri, "User ID=given;Password=pw;", ConnectorAuthFlags.None, WinAuthFlags.None).Single();
 
-        Assert.That(Parse(fromUri).UserID, Is.EqualTo("uriuser"));
-        Assert.That(Parse(given).UserID,   Is.EqualTo("given"));
+        Assert.That(Parse(fromUri).UserID,   Is.EqualTo("uriuser"));
+        Assert.That(Parse(fromUri).Password, Is.EqualTo("uripass"));
+        Assert.That(Parse(given).UserID,     Is.EqualTo("given"));
+        Assert.That(Parse(given).Password,   Is.EqualTo("pw"));
+    }
+
+    [Test]
+    public void A_required_credential_is_found_in_the_uri_too()
+    {
+        Assert.DoesNotThrow(() => SqlSettings.Attempts(new Uri("sqlserver://u:p@h"), null, ConnectorAuthFlags.RequireCredential, WinAuthFlags.None));
+        Assert.Throws<InvalidOperationException>(() => SqlSettings.Attempts(Server, null, ConnectorAuthFlags.RequireCredential, WinAuthFlags.None));
+    }
+
+    [Test]
+    public void Settings_that_are_not_connection_string_settings_are_refused()
+    {
+        Assert.Throws<InvalidOperationException>(() => SqlSettings.Attempts(Server, "this is not a setting", ConnectorAuthFlags.None, WinAuthFlags.None));
     }
 
     [Test]
     public void An_attempt_never_shows_its_password_when_written_out()
     {
-        var attempt = SqlSettings.Attempts(Server, "sa", "s3cret", ConnectorAuthFlags.None, WinAuthFlags.None).Single();
+        var attempt = SqlSettings.Attempts(Server, "User ID=sa;Password=s3cret;", ConnectorAuthFlags.None, WinAuthFlags.None).Single();
 
-        Assert.That(attempt.ToString(),    Does.Not.Contain("s3cret"));
-        Assert.That(attempt.Description,   Is.EqualTo("SQL login 'sa'"));
-        Assert.That($"{attempt}",          Does.Not.Contain("s3cret"));
+        Assert.That(attempt.ToString(),  Does.Not.Contain("s3cret"));
+        Assert.That(attempt.Description, Is.EqualTo("SQL login 'sa'"));
+        Assert.That($"{attempt}",        Does.Not.Contain("s3cret"));
     }
 
     // ---- which errors mean "try another way" ----------------------------------------------------

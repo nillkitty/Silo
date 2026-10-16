@@ -25,10 +25,16 @@ public abstract class VirtualRoot : IConnector, IConnection
 
     public Container Components { get; }
 
-    public VirtualRoot()
+    /// <param name="requiresSilo">
+    ///     True (the default) for a root that is made for a Silo: asks for the active one (and says so when there is none).
+    ///     False for one that belongs to the app (<see cref="LocalConnection" />): it is made before any Silo is open.
+    /// </param>
+    protected VirtualRoot(bool requiresSilo = true)
     {
-        var s = App.RequireActiveSilo();
-        Components = s.Components.CreateChildContainer(GetType().FullName);
+        var silo = requiresSilo ? App.RequireActiveSilo() : App.Instance?.ActiveSilo;
+        Components = silo is null
+                         ? new Container(GetType().FullName)
+                         : silo.Components.CreateChildContainer(GetType().FullName);
     }
 
     public string? GetHostname()

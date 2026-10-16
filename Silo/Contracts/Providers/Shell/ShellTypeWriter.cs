@@ -20,7 +20,7 @@ public class ShellTypeWriter : ContextBase
 
     public ShellTypeWriter(string progId, ShellConfigurationScope scope)
     {
-        ShellPaths = App.Require<IShellPaths>();
+        ShellPaths = new ShellPaths(scope); // the scope decides which hive the paths are in
         ProgId     = progId.Required();
         if (ProgId.RegexMatches(@"^[a-zA-Z][a-zA-Z0-9]+\:$"))
         {
@@ -36,11 +36,9 @@ public class ShellTypeWriter : ContextBase
         }
         else
         {
-            throw new NotSupportedException($"The 'type' (value provided = " + $"{progId}) must either be of the format " +
-                                            $"'.<extension>' or '<scheme>:''");
+            throw new NotSupportedException($"The type '{progId}' must be either an extension ('.xlsx') or a scheme ('https:').");
         }
 
-        Logger.Debug("d");
         Key = ShellPaths.ClassesRoot.OpenOrCreate();
         if (Key is null)
             throw new InvalidOperationException("Could not obtain a writable handle to registry key the Classes root.");

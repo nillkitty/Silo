@@ -2,6 +2,7 @@
 
 namespace Silo.Contracts.Connectors;
 
+[RequireRegistration]
 public interface IConnector
 {
     /// <summary>

@@ -3,11 +3,16 @@ namespace Silo.Contracts.Core;
 /// <summary>
 ///     Hands things to the operating system's shell, as double-clicking them in Windows Explorer would. A failure (nothing
 ///     is associated with the file type, the file is gone, access denied) is reported to the person with
-///     <c>App.Alert</c> and logged; it is not thrown. A person who cancels the "Run as administrator" prompt is not an error.
+///     <c>App.Alert</c> and logged; it is not thrown. A person who cancels the "Run as administrator" prompt is not an
+///     error.
 /// </summary>
+[RequireRegistration]
 public interface IShellExecute
 {
-    /// <summary>Opens a file with the program Windows has for its type, a folder in Windows Explorer, or a program (or URL) by running it.</summary>
+    /// <summary>
+    ///     Opens a file with the program Windows has for its type, a folder in Windows Explorer, or a program (or URL) by
+    ///     running it.
+    /// </summary>
     Task ShellExecute(string path);
 
     /// <summary>
@@ -18,11 +23,15 @@ public interface IShellExecute
 
     /// <summary>
     ///     Opens a shell object by its id: a known folder (Downloads, Documents... see the <c>FOLDERID_</c> constants) opens
-    ///     as that folder, and any other id as a shell namespace object (<c>shell:::{id}</c> -- the Control Panel, This PC...).
+    ///     as that folder, and any other id as a shell namespace object (<c>shell:::{id}</c> -- the Control Panel, This
+    ///     PC...).
     /// </summary>
     Task ShellExecute(Guid shellObject);
 
-    /// <summary>Shows <paramref name="path" /> in a Windows Explorer window: a folder is opened, anything else is selected in its folder.</summary>
+    /// <summary>
+    ///     Shows <paramref name="path" /> in a Windows Explorer window: a folder is opened, anything else is selected in
+    ///     its folder.
+    /// </summary>
     Task Reveal(string path);
 
     /// <summary>Starts a program (a terminal, say) without going through file associations.</summary>

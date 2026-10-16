@@ -7,7 +7,6 @@ using Silo.Connectors;
 using Silo.Credentials;
 using Silo.Crypto;
 using Silo.DbModel.Sqlite;
-using Silo.Extensions;
 using Silo.Hosting;
 using Silo.Remote;
 using Silo.Settings;
@@ -25,6 +24,9 @@ namespace Silo.Model;
 /// </summary>
 public partial class OpenSilo : ModelBase
 {
+    private CredentialService? _credentials;
+    private SiloEncryption?    _encryption;
+
     [Toggle("silo.alwaysExpand",
             "Whether the Silo should expand to a directory even when using compact" + " format (which is a single bytestream)", false)]
     public bool AlwaysExpandToDirectory { get; set; }
@@ -47,23 +49,23 @@ public partial class OpenSilo : ModelBase
     /// </summary>
     public ObservableCollection<IConnection> Connections { get; } = [];
 
-    public IDatabaseProvider Data       { get; private set; }
+    /// <summary>The saved credentials of this Silo; null when its storage cannot keep secrets.</summary>
+    public CredentialService? Credentials => Data is ISecretStore store ? _credentials ??= new CredentialService(store, Encryption) : null;
 
-    private CredentialService? _credentials;
-    private SiloEncryption?    _encryption;
+    public IDatabaseProvider Data { get; private set; }
 
-    /// <summary>How this Silo keeps its secrets: sealed with a data key that a pluggable protector (the Windows account by default) has locked.</summary>
+    /// <summary>
+    ///     How this Silo keeps its secrets: sealed with a data key that a pluggable protector (the Windows account by
+    ///     default) has locked.
+    /// </summary>
     /// <exception cref="NotSupportedException">The Silo's storage cannot keep secrets.</exception>
     public ISiloEncryption Encryption => _encryption ??= Data is ISecretStore store
                                                              ? new SiloEncryption(store, SecretProtectors.Available())
                                                              : throw new NotSupportedException("This Silo's storage cannot keep secrets.");
 
-    /// <summary>The saved credentials of this Silo; null when its storage cannot keep secrets.</summary>
-    public CredentialService? Credentials => Data is ISecretStore store ? _credentials ??= new CredentialService(store, Encryption) : null;
-
-    public SiloFile?         File       { get; private set; }
-    public FileInfo?         FileInfo   => File is { } f ? new FileInfo(f.FilePath) : null;
-    public string?           FilePath   => FileInfo?.FullName;
+    public SiloFile? File     { get; private set; }
+    public FileInfo? FileInfo => File is { } f ? new FileInfo(f.FilePath) : null;
+    public string?   FilePath => FileInfo?.FullName;
 
     [Toggle("silo.foregroundReconnect", "Whether to force all (re)connections to happen synchronously", false)]
     public bool ForegroundReconnect { get; set; }
@@ -121,8 +123,8 @@ public partial class OpenSilo : ModelBase
     /// <summary>The URL this Silo is synced with, if it was opened from one (<see cref="OpenRemoteAsync" />).</summary>
     public Uri? RemoteUri { get; private set; }
 
-    [Toggle("silo.reopenMe",
-            "Whether the app should re-open this Silo if launched with no other document, " + "and this Silo is local", true)]
+    [Toggle("silo.reopenMe", "Whether the app should re-open this Silo if launched with no other document, " + "and this Silo is local",
+            true)]
     public bool ReopenMe { get; set; } = true;
 
     /// <summary>
@@ -529,7 +531,10 @@ public partial class OpenSilo : ModelBase
     /// <summary>
     ///     <see cref="InitConnectionAsync" /> without the error handling: throws when the connection cannot be initialized.
     /// </summary>
-    /// <param name="inBackground">Run the connector's <c>InitAsync</c> on a worker thread, so a connector that does its work synchronously cannot hold the UI up.</param>
+    /// <param name="inBackground">
+    ///     Run the connector's <c>InitAsync</c> on a worker thread, so a connector that does its work
+    ///     synchronously cannot hold the UI up.
+    /// </param>
     private async Task InitConnectionCoreAsync(IConnection connection, ConnectReason reason, bool inBackground)
     {
         var context = new ConnectContext(reason, Nodes);
@@ -590,7 +595,7 @@ public partial class OpenSilo : ModelBase
         return await Data.ShutdownAsync();
     }
 
-    public OpenSilo()
+    public OpenSilo() : base(App.LocalConnection)
     {
         Connections.CollectionChanged += OnConnectionsChanged;
     }

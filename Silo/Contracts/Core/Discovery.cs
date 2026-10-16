@@ -5,6 +5,7 @@
 ///     <typeparamref name="TComponent" />
 /// </summary>
 /// <typeparam name="TComponent">The type of component being sought</typeparam>
+[RequireRegistration]
 public interface IDiscovery<TComponent>
 {
     string                                   DisplayName { get; }

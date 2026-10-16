@@ -5,7 +5,7 @@ namespace Silo.Connectors;
 /// <summary>
 ///     ViewModel for a silo's preferences
 /// </summary>
-public class Preferences(OpenSilo s) : ModelBase
+public class Preferences(OpenSilo s) : ModelBase(App.LocalConnection)
 {
     public TypeSelection DefaultConnector    { get; set; } = TypeSelection.Prompt<IConnector>();
     public TypeSelection DefaultDetailer     { get; set; } = TypeSelection.Prompt<IDetailer>();

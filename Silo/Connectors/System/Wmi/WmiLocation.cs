@@ -9,57 +9,91 @@ public abstract record WmiLocation(string Namespace)
     /// <summary>The namespace of a URI that names none.</summary>
     public const string DefaultNamespace = @"root\cimv2";
 
+    /// <summary>The <see cref="Host" /> of this computer.</summary>
+    public const string LocalHost = ".";
+
     // WMI names: letters, digits and underscores, not starting with a digit (system classes start with two underscores)
     private static readonly Regex ClassName = new("^[A-Za-z_][A-Za-z0-9_]*$", RegexOptions.Compiled);
 
     // namespace segments are a little freer
-    private static readonly Regex  NamespaceSegment = new("^[A-Za-z0-9_-]+$", RegexOptions.Compiled);
-    public                  string Host { get; set; }
-    public                  Uri?   Icon { get; }
+    private static readonly Regex NamespaceSegment = new("^[A-Za-z0-9_-]+$", RegexOptions.Compiled);
 
-    public List<string> PropertiesToLoad { get; } = [];
-    public string?      TypeName         { get; }
+    /// <summary>The computer to ask: <c>.</c> (<see cref="LocalHost" />) for this one, else its name.</summary>
+    public string Host { get; init; } = LocalHost;
+
+    /// <summary>The properties to read (the URI's fragment); none means all of them.</summary>
+    public IReadOnlyList<string> PropertiesToLoad { get; init; } = [];
+
+    /// <summary>What to call this kind of thing in the Explorer.</summary>
+    public abstract string TypeName { get; }
+
+    /// <summary>What to call this one in the Explorer: the last namespace name, the class, or the class and its key.</summary>
+    public abstract string Label { get; }
+
+    /// <summary>The key of this kind of thing's icon in the icon dictionary, as a relative URI.</summary>
+    public abstract Uri Icon { get; }
+
+    // a record compares its properties one by one, which would compare the list of properties by reference
+    public virtual bool Equals(WmiLocation? other)
+    {
+        return other is not null && EqualityContract == other.EqualityContract && Namespace == other.Namespace && Host == other.Host &&
+               PropertiesToLoad.SequenceEqual(other.PropertiesToLoad);
+    }
+
+    public override int GetHashCode()
+    {
+        var hash = new HashCode();
+        hash.Add(EqualityContract);
+        hash.Add(Namespace);
+        hash.Add(Host);
+        foreach (string property in PropertiesToLoad) hash.Add(property);
+        return hash.ToHashCode();
+    }
 
     /// <summary>
-    ///     Reads a <c>wmi:</c> URI. The path is, in order: the namespace segments (none: <c>root\cimv2</c>), one class
-    ///     segment, and
-    ///     optionally <c>@</c>; the class is the last segment (before the <c>@</c>), and a path that ends in a slash is a
-    ///     namespace with no class. The namespace is written without its leading <c>root</c>, which is added unless it is
-    ///     there
-    ///     (<c>Citrix/Client/ICA</c> is <c>root\Citrix\Client\ICA</c>; <c>root/cimv2</c> is left alone). A key is either
-    ///     <c>@</c>
-    ///     (the class's only instance) or a query of <c>property=value</c> (the instance whose <c>property</c> is <c>value</c>
-    ///     );
-    ///     nothing else is allowed in a query and a fragment is not used.
+    ///     Reads a <c>wmi:</c> URI. The host is the computer to ask (none, <c>.</c> or <c>localhost</c>: this one). The path is,
+    ///     in order: the namespace segments (none: <c>root\cimv2</c>), one class segment, and optionally <c>@</c>; the class is
+    ///     the last segment (before the <c>@</c>), and a path that ends in a slash is a namespace with no class. The namespace is
+    ///     written without its leading <c>root</c>, which is added unless it is there (<c>Citrix/Client/ICA</c> is
+    ///     <c>root\Citrix\Client\ICA</c>; <c>root/cimv2</c> is left alone). A key is either <c>@</c> (the class's only instance)
+    ///     or a query of <c>property=value</c> (the instance whose <c>property</c> is <c>value</c>); the one exception is
+    ///     <c>q=</c>, which is a WQL query to run in a namespace (see <see cref="FromUri(Uri, out string?)" />). The fragment is
+    ///     the comma-separated names of the properties to read (<see cref="PropertiesToLoad" />).
     /// </summary>
     /// <remarks>
     ///     <code>
     /// wmi:///                                  root\cimv2                            (WmiRoot)
     /// wmi:///Citrix/Client/                    root\Citrix\Client                     (WmiRoot)
     /// wmi:///Win32_Service                     root\cimv2, Win32_Service             (WmiClass)
+    /// wmi:///Win32_Service#Name,State          ... reading only Name and State
     /// wmi:///Win32_ComputerSystem/@            root\cimv2, Win32_ComputerSystem=@    (WmiPath)
     /// wmi:///Citrix/Client/ICA/ICA_Client/@    root\Citrix\Client\ICA, ICA_Client=@   (WmiPath)
     /// wmi:///Win32_Volume?name=C:\             root\cimv2, Win32_Volume.name="C:\"   (WmiPath)
+    /// wmi://server42/Win32_Service             the same, on server42
     ///     </code>
-    ///     A <see cref="WmiLocation" /> has no machine name yet, so a host other than this computer is refused rather than
-    ///     dropped, as <c>RegistryUriProvider</c> does.
     /// </remarks>
-    /// <exception cref="NotSupportedException">The scheme is not <c>wmi</c>, or the host is another computer.</exception>
+    /// <exception cref="NotSupportedException">The scheme is not <c>wmi</c>.</exception>
     /// <exception cref="UriFormatException">The rest of the URI is not what is described above.</exception>
     public static WmiLocation FromUri(Uri uri)
+    {
+        return FromUri(uri, out _);
+    }
+
+    /// <summary>
+    ///     As <see cref="FromUri(Uri)" />, and also says the WQL query the URI carries (<c>wmi:///Citrix/?q=SELECT * FROM X</c>),
+    ///     or null when it carries none. A query is run in a namespace, so a URI with one names a <see cref="WmiRoot" /> and no
+    ///     class.
+    /// </summary>
+    public static WmiLocation FromUri(Uri uri, out string? wql)
     {
         uri.Required();
         if (!uri.Scheme.Is("wmi"))
             throw new NotSupportedException("WmiLocation only supports wmi: URIs");
 
-        string host                = uri.Host.Trim();
-        if (host.Length == 0) host = ".";
-        if (!IsLocalHost(host))
-            throw new
-                NotSupportedException($"WMI on another computer (host '{host}') is not supported yet -- a WmiLocation has no field for a machine name.");
+        string host = uri.Host.Trim();
+        if (host.Length == 0 || IsLocalHost(host)) host = LocalHost;
 
-        if (uri.Fragment.Length > 1)
-            throw new UriFormatException($"WMI URI '{uri}' has a fragment, which is not used (a key is '@' or ?property=value).");
+        IReadOnlyList<string> properties = ParseProperties(uri);
 
         var segments = uri.AbsolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries).Select(Uri.UnescapeDataString).ToList();
 
@@ -67,21 +101,29 @@ public abstract record WmiLocation(string Namespace)
         bool namespaceOnly = !singleton         && segments.Count > 0 && uri.AbsolutePath.EndsWith('/');
         if (singleton) segments.RemoveAt(segments.Count - 1);
 
-        (string Property, string Value)? query = ParseQuery(uri);
-        if (singleton && query is not null)
-            throw new UriFormatException($"WMI URI '{uri}' has both '@' and a query; use one of them to say which instance.");
+        (string Property, string Value)? key = ParseQuery(uri);
 
-        if (namespaceOnly)
+        wql = null;
+        if (key is { } k && k.Property.Equals("q", StringComparison.OrdinalIgnoreCase))
         {
-            if (query is not null) throw new UriFormatException($"WMI URI '{uri}' has a key but no class.");
-            return new WmiRoot(NamespaceOf(segments, uri));
+            wql = k.Value;
+            key = null;
+
+            if (singleton || segments.Count > 0 && !namespaceOnly)
+                throw new UriFormatException($"WMI URI '{uri}' has a WQL query (q=) and a class; a query is run in a namespace (end the path with '/').");
+
+            return new WmiRoot(NamespaceOf(segments, uri)) { Host = host, PropertiesToLoad = properties };
         }
 
-        if (segments.Count == 0)
+        if (singleton && key is not null)
+            throw new UriFormatException($"WMI URI '{uri}' has both '@' and a query; use one of them to say which instance.");
+
+        if (namespaceOnly || segments.Count == 0)
         {
             if (singleton) throw new UriFormatException($"WMI URI '{uri}' has '@' but no class.");
-            if (query is not null) throw new UriFormatException($"WMI URI '{uri}' has a key but no class.");
-            return new WmiRoot(DefaultNamespace);
+            if (key is not null) throw new UriFormatException($"WMI URI '{uri}' has a key but no class.");
+            if (properties.Count > 0) throw new UriFormatException($"WMI URI '{uri}' has properties but no class.");
+            return new WmiRoot(NamespaceOf(segments, uri)) { Host = host };
         }
 
         string className = segments[^1];
@@ -90,9 +132,9 @@ public abstract record WmiLocation(string Namespace)
 
         string ns = NamespaceOf(segments.Take(segments.Count - 1).ToList(), uri);
 
-        if (singleton) return new WmiPath(ns,      new WmiHop(className, "@"));
-        if (query is { } q) return new WmiPath(ns, new WmiHop(className, q.Value, q.Property));
-        return new WmiClass(ns, className);
+        if (singleton) return new WmiPath(ns, new WmiHop(className, "@")) { Host = host, PropertiesToLoad = properties };
+        if (key is { } q) return new WmiPath(ns, new WmiHop(className, q.Value, q.Property)) { Host = host, PropertiesToLoad = properties };
+        return new WmiClass(ns, className) { Host = host, PropertiesToLoad = properties };
     }
 
     // this computer, however it is written
@@ -133,32 +175,102 @@ public abstract record WmiLocation(string Namespace)
         return (property, text[(eq + 1)..]);
     }
 
+    // #Name,State
+    private static IReadOnlyList<string> ParseProperties(Uri uri)
+    {
+        if (uri.Fragment.Length <= 1) return [];
+
+        var names = Uri.UnescapeDataString(uri.Fragment[1..]).Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        foreach (string name in names)
+            if (!ClassName.IsMatch(name))
+                throw new UriFormatException($"'{name}' is not a WMI property name in the fragment of '{uri}' (letters, digits and underscores).");
+
+        return names;
+    }
+
     public Uri ToUri(WmiQuery wmiQuery)
     {
         return ToUri(wmiQuery.Required().Query);
     }
 
-    public Uri ToUri(string? query = null)
+    /// <summary>
+    ///     The URI that <see cref="FromUri(Uri)" /> reads back as this location (the same one, but for the case of a leading
+    ///     <c>root</c>). With a <paramref name="wql" /> query it is the URI of the query: a query is run in a namespace, so the
+    ///     class and key of this location are left out.
+    /// </summary>
+    /// <exception cref="NotSupportedException">The location cannot be written as a URI (a <see cref="WmiPath" /> of other than one hop with a key).</exception>
+    public Uri ToUri(string? wql = null)
     {
-        string? path = Namespace.Replace('\\', '/').TrimStart('/');
-        if (path.ToLower().StartsWith("root/"))
-            path = path?[5..];
-        if (this is WmiClass cl) path = $"{path}/{cl.ClassName.Trim()}";
-        var ub                        = new UriBuilder("wmi");
-        ub.Host     = Host;
-        ub.Path     = path;
-        ub.Query    = query is string q ? $"?q={q}" : "";
-        ub.Fragment = string.Join(',', PropertiesToLoad);
-        return ub.Uri;
+        // the namespace segments, written without their leading root, and none at all for the default namespace
+        var segments = Namespace.Split('\\', StringSplitOptions.RemoveEmptyEntries).ToList();
+        if (Namespace == DefaultNamespace) segments.Clear();
+        else if (segments.Count > 1 && segments[0] == "root") segments.RemoveAt(0);
+
+        var path  = new StringBuilder("/");
+        string query = string.Empty;
+        foreach (string segment in segments) path.Append(Uri.EscapeDataString(segment)).Append('/');
+
+        bool isRoot = wql is not null || this is WmiRoot;
+        if (!isRoot)
+            switch (this)
+            {
+                case WmiClass c:
+                    path.Append(Uri.EscapeDataString(c.ClassName));
+                    break;
+                case WmiPath { Hops: [var hop] }:
+                    path.Append(Uri.EscapeDataString(hop.ClassName));
+                    if (hop.Key == "@") path.Append("/@");
+                    else if (hop.KeyProperty is { } property) query = "?" + property + "=" + Uri.EscapeDataString(hop.Key);
+                    else throw new NotSupportedException($"The key '{hop.Key}' of {hop.ClassName} has no property name, so it has no URI.");
+                    break;
+                default:
+                    throw new NotSupportedException($"{GetType().Name} cannot be written as a URI.");
+            }
+
+        if (wql is not null) query = "?q=" + Uri.EscapeDataString(wql);
+
+        string fragment = PropertiesToLoad.Count > 0 && (wql is not null || this is not WmiRoot) ? "#" + string.Join(',', PropertiesToLoad) : string.Empty;
+
+        return new Uri($"wmi://{(Host == LocalHost ? string.Empty : Host)}{path}{query}{fragment}", UriKind.Absolute);
     }
 }
 
 public record WmiHop(string ClassName, string Key, string? KeyProperty = null);
 
-public record WmiClass(string Namespace, string ClassName) : WmiLocation(Namespace)
+/// <summary>A namespace, to look for classes in.</summary>
+public record WmiRoot(string Namespace) : WmiLocation(Namespace)
 {
+    public override string TypeName => "WMI Namespace";
+    public override string Label    => Namespace.Split('\\', StringSplitOptions.RemoveEmptyEntries).LastOrDefault() ?? Namespace;
+    public override Uri    Icon     => new("Folder17", UriKind.Relative);
 }
 
-public record WmiPath(string Namespace, params WmiHop[] Hops) : WmiLocation(Namespace);
+/// <summary>A class, to look for instances of.</summary>
+public record WmiClass(string Namespace, string ClassName) : WmiLocation(Namespace)
+{
+    public override string TypeName => "WMI Class";
+    public override string Label    => ClassName;
+    public override Uri    Icon     => new("Cube", UriKind.Relative);
+}
 
-public record WmiRoot(string Namespace) : WmiLocation(Namespace);
+/// <summary>An instance of a class.</summary>
+public record WmiPath(string Namespace, params WmiHop[] Hops) : WmiLocation(Namespace)
+{
+    public override string TypeName => "WMI Instance";
+    public override string Label    => Hops.LastOrDefault() is { } hop ? hop.KeyProperty is null ? hop.ClassName : $"{hop.ClassName} ({hop.KeyProperty}={hop.Key})" : Namespace;
+    public override Uri    Icon     => new("Record", UriKind.Relative);
+
+    // the hops are an array, which a record compares by reference
+    public virtual bool Equals(WmiPath? other)
+    {
+        return base.Equals(other) && other is not null && Hops.SequenceEqual(other.Hops);
+    }
+
+    public override int GetHashCode()
+    {
+        var hash = new HashCode();
+        hash.Add(base.GetHashCode());
+        foreach (var hop in Hops) hash.Add(hop);
+        return hash.ToHashCode();
+    }
+}

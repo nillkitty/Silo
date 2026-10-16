@@ -1,4 +1,5 @@
-﻿using Silo.Extensions;
+﻿using System.Net.Http;
+using Silo.Model;
 using Silo.Ui.Windows.Connecting;
 using Telefrag.DI;
 
@@ -10,11 +11,12 @@ namespace Silo.Connectors.Web;
 ///     <c>HEAD</c> request.
 /// </summary>
 [Singleton(typeof(IUriProvider))]
+[Singleton(typeof(IConnector))]
 public class WebConnector : IConnector, IUriProvider, IUriConnector, IConnectorUi
 {
-    public ConnectorSetupFlags Flags     { get; }
-    public Exception?          LastError { get; }
-    public List<object>        Metadata  { get; }
+    public ConnectorSetupFlags Flags     { get; } = ConnectorSetupFlags.AlwaysRequiresConfig | ConnectorSetupFlags.IgnoreIcmpVisibility;
+    public Exception?          LastError { get; protected set; }
+    public List<object>        Metadata  { get; } = [];
 
     public string? Description => "Web sites and web services (http and https)";
 
@@ -25,12 +27,16 @@ public class WebConnector : IConnector, IUriProvider, IUriConnector, IConnectorU
 
     public IConnection CreateConnection(ConnectionRequest crq)
     {
-        throw new NotImplementedException();
+        var target = crq.RequestedUri ?? throw new DestinationRequiredException("WebConnector requires a destination URI");
+        if (HandlesScheme(target.Scheme) == default)
+            throw new NotSupportedException($"WebConnector cannot handle URI scheme '{target.Scheme}'");
+
+        return new WebConnection(this, target, crq);
     }
 
     public Type GetStateType()
     {
-        throw new NotImplementedException();
+        return typeof(IConnectionState);
     }
 
     public IConnectorSetup CreateSetup(ConnectorSetupContext context)
@@ -54,16 +60,30 @@ public class WebConnector : IConnector, IUriProvider, IUriConnector, IConnectorU
     }
 }
 
-public class WebConnection : ICredentialSink
+/// <summary>
+///     Thrown when a destination URI is required and was not provided.
+/// </summary>
+public class DestinationRequiredException(string msg, Exception? innerEx = null) : Exception(msg, innerEx);
+
+public class WebConnection : ConnectionBase<HttpClient>, ICredentialSink
 {
-    public ICredential? Credential                   { get; private set; }
-    public bool         UseDefaultCredentials        { get; private set; }
-    public bool         UseDefaultNetworkCredentials { get; private set; }
+    public    ICredential?       Credential                   { get; private set; }
+    public    bool               UseDefaultCredentials        { get; private set; }
+    public    bool               UseDefaultNetworkCredentials { get; private set; }
+    protected IHttpClientFactory ClientFactory                { get; }
+
+    public WebConnection(WebConnector connector, Uri target, ConnectionRequest? crq = null) : base(connector)
+    {
+        Destination       = new Destination(target.Required());
+        ConnectionRequest = crq;
+        ClientFactory     = App.Require<IHttpClientFactory>();
+        Data              = ClientFactory.CreateClient(NodeUri?.ToString() ?? UniqueId.ToString());
+    }
 
     public void ConfigureFrom(ICredential credential)
     {
         Credential                   = credential;
-        UseDefaultCredentials        = credential?.Realm == Silo.Model.AuthRealm.DefaultCredential;
-        UseDefaultNetworkCredentials = credential?.Realm == Silo.Model.AuthRealm.DefaultNetwork;
+        UseDefaultCredentials        = credential?.Realm == AuthRealm.DefaultCredential;
+        UseDefaultNetworkCredentials = credential?.Realm == AuthRealm.DefaultNetwork;
     }
 }

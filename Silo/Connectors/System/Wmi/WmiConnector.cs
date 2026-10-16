@@ -5,25 +5,59 @@ using Telefrag.DI;
 
 namespace Silo.Connectors.System;
 
-public class WmiConnector : ConnectorBase
+/// <summary>
+///     Connects to WMI: <c>wmi:///[namespace/]Class[/@]</c> (see <see cref="WmiLocation.FromUri(Uri)" />), on this
+///     computer or
+///     another one (<c>wmi://server42/...</c>).
+/// </summary>
+[Singleton(typeof(IConnector))]
+public class WmiConnector : ConnectorBase, IUriConnector
 {
     protected override IConnection OnCreateConnection(ConnectionRequest crq)
     {
-        return WmiConnection.Connect(this, crq);
+        return WmiConnection.Create(this, crq);
     }
 
     public override Type GetStateType()
     {
         return typeof(WmiState);
     }
+
+    public UriSchemeScope HandlesScheme(string scheme)
+    {
+        return scheme.Is("wmi") ? UriSchemeScope.Private : UriSchemeScope.Unknown;
+    }
+
+    public string? Validate(Uri uri)
+    {
+        try
+        {
+            WmiLocation.FromUri(uri);
+            return null;
+        }
+        catch (Exception ex) when (ex is NotSupportedException or UriFormatException)
+        {
+            return ex.Message;
+        }
+    }
 }
 
+/// <summary>
+///     A connection to WMI on this computer or another one. WMI is not held open (there is no link to make or lose, as
+///     with the
+///     registry), so it is connectionless: it adds its root to the Explorer and is gone when that is removed. What is
+///     below the root is not read yet.
+/// </summary>
 public class WmiConnection : WmiModel, IConnection
 {
-    public WmiConnector Connector       { get; }
-    public bool?        ConnectionState => State is WmiState.Ok;
+    private readonly SiloNode? _parent;
 
-    public bool         IsInTree { get; set; }
+    public new WmiConnector Connector { get; }
+
+    /// <summary>Connectionless: there is no link to be up or down.</summary>
+    public bool? ConnectionState => null;
+
+    public bool         IsInTree => Node?.IsVisible ?? false;
     public List<object> Metadata { get; }
 
     public SiloNode?       Node             { get; }
@@ -32,58 +66,70 @@ public class WmiConnection : WmiModel, IConnection
     public string?         TempConfig       { get; }
     IConnector IConnection.Connector        => Connector;
 
-    public Container Components { get; } = App.Instance!.Components.CreateChildContainer($"wmi:{Guid.NewGuid()}");
+    public Container Components { get; } = new($"wmi:{Guid.NewGuid()}");
 
-    public static IConnection Connect(WmiConnector connector, ConnectionRequest crq)
+    public static IConnection Create(WmiConnector connector, ConnectionRequest crq)
     {
         WmiLocation l = WmiLocation.FromUri(crq.RequestedUri ?? new Uri("wmi:///", UriKind.Absolute));
-        return new WmiConnection(connector, l, crq.Metadata, crq.SerializedState);
+        return new WmiConnection(connector, l, crq.Metadata, crq.SerializedState, crq.ParentNode);
     }
 
-    public WmiConnection(WmiConnector connector, WmiLocation location, List<object> metaData, string? serialState) : base(null, location)
+    public WmiConnection(WmiConnector connector, WmiLocation location, List<object> metaData, string? serialState, SiloNode? parent = null)
+        : base(null, location)
     {
         Connector        = connector.Required();
         Metadata         = metaData ?? [];
         Location         = location.Required();
         PersistentConfig = serialState;
-        State            = new WmiState.Pending();
+        State            = new WmiState.Pending("Browsing WMI is not available yet");
+        _parent          = parent;
 
         Node = new WmiNode(this);
     }
 
+    /// <summary>The computer WMI is on: <c>.</c> for this one.</summary>
     public string? GetHostname()
     {
-        throw new NotImplementedException();
+        return Location.Host is { Length: > 0 } host ? host : ".";
     }
 
+    /// <summary>Connectionless: always there.</summary>
     public Task<bool> Connect(CancellationToken cancel = default)
     {
-        throw new NotImplementedException();
+        return Task.FromResult(true);
     }
 
+    /// <summary>Connectionless: nothing to close.</summary>
     public Task<bool> Disconnect()
     {
-        throw new NotImplementedException();
+        return Task.FromResult(false);
     }
 
+    /// <summary>Takes the connection's root out of the Explorer.</summary>
     public Task<bool> Remove()
     {
-        throw new NotImplementedException();
+        return Task.FromResult(Node?.Remove() ?? true);
     }
 
     public Window? BuildWindow()
     {
-        throw new NotImplementedException();
+        return null;
     }
 
+    /// <summary>Puts the connection's root in the Explorer (once).</summary>
     public Task InitAsync(ConnectContext context)
     {
-        throw new NotImplementedException();
+        context.Required();
+
+        if (Node is { } node && !IsInTree)
+            context.NavigationManager.AddNode(node, _parent);
+
+        return Task.CompletedTask;
     }
 
     public void InitProvider(IReceiver<Container> receiver)
     {
-        throw new NotImplementedException();
+        receiver.Required().Receiver(Components);
     }
 }
 
@@ -104,12 +150,14 @@ public record WmiNode : SiloNode
         this.Model = Model;
         if (Model is WmiQuery q)
         {
+            Text     = q.Query;
             Uri      = Location.ToUri(q);
             TypeName = "Query";
             Icon     = null; //claude: query icon
             return;
         }
 
+        Text     = Location.Label;
         Uri      = Location.ToUri();
         TypeName = Location.TypeName;
         Icon     = Location.Icon;
@@ -123,11 +171,11 @@ public class WmiQuery(WmiConnection connection, WmiLocation location, string wql
 
 public class WmiModel : ModelBase
 {
-    public WmiConnection Connection { get; set; }
+    public new WmiConnection Connection { get; set; }
 
     public WmiLocation Location { get; set; }
 
-    public WmiModel(WmiConnection? c, WmiLocation l)
+    public WmiModel(WmiConnection? c, WmiLocation l) : base(c)
     {
         Location   = l.Required();
         Connection = this is WmiConnection wc ? wc : c!.Required();
@@ -138,7 +186,7 @@ public abstract record WmiState(string DisplayName) : IDisplayName
 {
     public record Ok() : WmiState("OK");
 
-    public record Fail(Exception Exception) : WmiState($"Failed:  {Exception.Message}");
+    public record Fail(Exception Exception) : WmiState($"Failed: {Exception.Message}");
 
     public record Pending(string? Message = null) : WmiState(Message ?? "Pending");
 }

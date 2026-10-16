@@ -1,7 +1,5 @@
 using System.Security.Principal;
-
 using Microsoft.Win32;
-
 using Silo.Connectors.System;
 
 namespace Silo.Shell;
@@ -32,27 +30,15 @@ public class ShellPaths : IShellPaths
     public const string NewProfileHiveKey = "SiloDefaultProfile";
 
     /// <summary>Well-known SID of NT SERVICE\TrustedInstaller.</summary>
-    private static readonly SecurityIdentifier _trustedInstaller =
-        new("S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464");
+    private static readonly SecurityIdentifier _trustedInstaller = new("S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464");
 
     public RegistryPath            AllowedExtensions      { get; }
-    public RegistryPath            RegisteredApplications { get; }
-    public RegistryPath            SettingsRoot           { get; }
     public RegistryPath            ClassesRoot            { get; }
     public RegistryPath            NamespaceRoot          { get; }
+    public RegistryPath            RegisteredApplications { get; }
     public ShellConfigurationScope Scope                  { get; }
+    public RegistryPath            SettingsRoot           { get; }
     public RegistryPath            ShellRoot              { get; }
-
-    public ShellPaths(ShellConfigurationScope scope)
-    {
-        Scope                  = scope;
-        ShellRoot              = _key(@"Software\Microsoft\Windows\CurrentVersion\Shell");
-        ClassesRoot            = _key(@"Software\Classes");
-        RegisteredApplications = _key(@"Software\RegisteredApplications");
-        SettingsRoot           = _key(@"Software\Microsoft\Windows\CurrentVersion\Explorer");
-        NamespaceRoot          = _key(@"Software\Microsoft\Windows\CurrentVersion\Explorer");
-        AllowedExtensions      = _key(@"Software\Microsoft\Windows\CurrentVersion\Shell Extensions\Approved");
-    }
 
     /// <summary>
     ///     Builds the <see cref="RegistryPath" /> for <paramref name="path" /> (a key path below the
@@ -67,14 +53,15 @@ public class ShellPaths : IShellPaths
         // doesn't change where the keys live.
         (RegistryHive hive, string fullPath) = Scope switch
                                                {
-                                                   ShellConfigurationScope.Current          => (_currentHive(), path),
-                                                   ShellConfigurationScope.User             => (RegistryHive.CurrentUser, path),
-                                                   ShellConfigurationScope.NewProfiles      => (RegistryHive.Users, $@"{NewProfileHiveKey}\{path}"),
-                                                   ShellConfigurationScope.System           => (RegistryHive.LocalMachine, path),
+                                                   ShellConfigurationScope.Current => (_currentHive(), path),
+                                                   ShellConfigurationScope.User    => (RegistryHive.CurrentUser, path),
+                                                   ShellConfigurationScope.NewProfiles => (RegistryHive.Users,
+                                                                                           $@"{NewProfileHiveKey}\{path}"),
+                                                   ShellConfigurationScope.System => (RegistryHive.LocalMachine, path),
                                                    ShellConfigurationScope.HighestAvailable => (_highestHive(), path),
-                                                   ShellConfigurationScope.TattooUser       => (RegistryHive.CurrentUser, path),
-                                                   ShellConfigurationScope.TattooSystem     => (RegistryHive.LocalMachine, path),
-                                                   _                                        => throw new ArgumentOutOfRangeException(nameof(Scope), Scope, null)
+                                                   ShellConfigurationScope.TattooUser => (RegistryHive.CurrentUser, path),
+                                                   ShellConfigurationScope.TattooSystem => (RegistryHive.LocalMachine, path),
+                                                   _ => throw new ArgumentOutOfRangeException(nameof(Scope), Scope, null)
                                                };
 
         return new RegistryPath(hive, fullPath, null);
@@ -88,13 +75,12 @@ public class ShellPaths : IShellPaths
     /// </summary>
     private static RegistryHive _currentHive()
     {
-        using var identity = WindowsIdentity.GetCurrent();
+        using var identity  = WindowsIdentity.GetCurrent();
         var       principal = new WindowsPrincipal(identity);
 
-        bool systemContext = identity.IsSystem                                                             ||
-                             principal.IsInRole(_trustedInstaller)                                         ||
+        bool systemContext = identity.IsSystem || principal.IsInRole(_trustedInstaller) ||
                              principal.IsInRole(new SecurityIdentifier(WellKnownSidType.ServiceSid, null)) ||
-                             principal.IsInRole(new SecurityIdentifier(WellKnownSidType.BatchSid, null));
+                             principal.IsInRole(new SecurityIdentifier(WellKnownSidType.BatchSid,   null));
 
         return systemContext ? RegistryHive.LocalMachine : RegistryHive.CurrentUser;
     }
@@ -109,6 +95,17 @@ public class ShellPaths : IShellPaths
         return new WindowsPrincipal(identity).IsInRole(WindowsBuiltInRole.Administrator)
                    ? RegistryHive.LocalMachine
                    : RegistryHive.CurrentUser;
+    }
+
+    public ShellPaths(ShellConfigurationScope scope)
+    {
+        Scope                  = scope;
+        ShellRoot              = _key(@"Software\Microsoft\Windows\CurrentVersion\Shell");
+        ClassesRoot            = _key(@"Software\Classes");
+        RegisteredApplications = _key(@"Software\RegisteredApplications");
+        SettingsRoot           = _key(@"Software\Microsoft\Windows\CurrentVersion\Explorer");
+        NamespaceRoot          = _key(@"Software\Microsoft\Windows\CurrentVersion\Explorer");
+        AllowedExtensions      = _key(@"Software\Microsoft\Windows\CurrentVersion\Shell Extensions\Approved");
     }
 }
 

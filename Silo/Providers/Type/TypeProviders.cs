@@ -4,46 +4,98 @@ using Telefrag.DI;
 
 namespace Silo.Providers;
 
-public record TypeLookup(Uri CurrentNamespace, string Prefix, string Name);
-
 [Singleton(typeof(ITypeProvider))]
 public class SyntaxTypeProvider : ITypeProvider
 {
     public string? DisplayName => "Syntaxes";
+
+    public IType? Lookup(TypeLookup lookup)
+    {
+        return null; // not written yet: knows no types
+    }
+
+    public IType? Lookup(Type type)
+    {
+        return null; // not written yet: knows no types
+    }
 }
 
 [Singleton(typeof(ITypeProvider))]
 public class EnumTypeProvider : ITypeProvider
 {
     public string? DisplayName => "Enums";
+
+    public IType? Lookup(TypeLookup lookup)
+    {
+        return null; // not written yet: knows no types
+    }
+
+    public IType? Lookup(Type type)
+    {
+        return null; // not written yet: knows no types
+    }
 }
 
 [Singleton(typeof(ITypeProvider))]
 public class MetaverseTypeProvider : ITypeProvider
 {
     public string? DisplayName => "Metaverse Types";
+
+    public IType? Lookup(TypeLookup lookup)
+    {
+        return null; // not written yet: knows no types
+    }
+
+    public IType? Lookup(Type type)
+    {
+        return null; // not written yet: knows no types
+    }
 }
 
 [Singleton(typeof(ITypeProvider))]
 public class UnitTypeProvider : ITypeProvider
 {
     public string? DisplayName => "Unit Types";
+
+    public IType? Lookup(TypeLookup lookup)
+    {
+        return null; // not written yet: knows no types
+    }
+
+    public IType? Lookup(Type type)
+    {
+        return null; // not written yet: knows no types
+    }
 }
 
 public class WorldTypeProvider(World w) : ITypeProvider
 {
     public World   World       { get; } = w.Required();
     public string? DisplayName => $"World - {World.DisplayName}";
+
+    public IType? Lookup(TypeLookup lookup)
+    {
+        return null; // not written yet: knows no types
+    }
+
+    public IType? Lookup(Type type)
+    {
+        return null; // not written yet: knows no types
+    }
 }
 
 [Singleton(typeof(ITypeProvider))]
 public class PersonaTypeProvider : ITypeProvider
 {
     public string? DisplayName => "Personal Types";
-}
 
-[Singleton(typeof(ITypeProvider))]
-public class DynamicTypeProvider : ITypeProvider
-{
-    public string? DisplayName => "Dynamic Types";
+    public IType? Lookup(TypeLookup lookup)
+    {
+        return null; // not written yet: knows no types
+    }
+
+    public IType? Lookup(Type type)
+    {
+        return null; // not written yet: knows no types
+    }
 }

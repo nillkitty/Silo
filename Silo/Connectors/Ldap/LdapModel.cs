@@ -51,7 +51,7 @@ public class LdapModel : ModelBase, INodeProvider, INodeDetails
     ///     The connection this entry was read through (the root has the connection itself); null for a model made on its
     ///     own.
     /// </summary>
-    public virtual LdapConnection? Connection { get; }
+    public new virtual LdapConnection? Connection { get; }
 
     public ICredential? Credential { get; set; }
 
@@ -458,10 +458,14 @@ public class LdapModel : ModelBase, INodeProvider, INodeDetails
         Icon        = new Uri(IconKeyOf(Kind), UriKind.Relative);
     }
 
-    /// <summary>A model of an entry that is already bound: its properties are read now (which asks the directory).</summary>
-    public LdapModel(DirectoryEntry entry, LdapConnection? connection = null)
+    /// <summary>
+    ///     A model of an entry that is already bound: its properties are read now (which asks the directory). With no
+    ///     <paramref name="connection" /> it belongs to the app's local connection (<see cref="App.LocalConnection" />), as
+    ///     a model of anything that was not read through a connection does; <see cref="Connection" /> stays null.
+    /// </summary>
+    public LdapModel(DirectoryEntry entry, LdapConnection? connection = null) : base(connection ?? App.LocalConnection)
     {
-        Connection = connection;
+        Connection = this is LdapConnection cn ? cn : connection;
         Populate(entry);
     }
 
@@ -470,7 +474,7 @@ public class LdapModel : ModelBase, INodeProvider, INodeDetails
     ///     knows only
     ///     that, and says what it is once <see cref="Populate" /> has read the entry. Nothing is asked of the directory.
     /// </summary>
-    protected LdapModel(DirectoryEntry unbound, Uri requested, LdapConnection? connection = null)
+    protected LdapModel(DirectoryEntry unbound, Uri requested, LdapConnection? connection = null) : base(connection)
     {
         Connection = connection;
         Entry      = unbound.Required();

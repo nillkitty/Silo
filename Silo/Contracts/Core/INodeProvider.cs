@@ -2,6 +2,39 @@
 
 namespace Silo.Contracts.Core;
 
+public interface ILocatable
+{
+    Uri? GetUri(UriContext context);
+}
+
+public enum UriContext
+{
+    /// <summary>
+    ///     Gets any URI associated with this object
+    /// </summary>
+    Any,
+
+    /// <summary>
+    ///     Gets only public, well-known URIs
+    /// </summary>
+    Public,
+
+    /// <summary>
+    ///     Prefer private internal URIs
+    /// </summary>
+    Private,
+
+    /// <summary>
+    ///     Get the URI associated with a specific node in the navigation tree/explorer
+    /// </summary>
+    Node,
+
+    /// <summary>
+    ///     Gets a URI that can be used on the system to navigate to this object via deep linking
+    /// </summary>
+    Navigation
+}
+
 /// <summary>
 ///     A connection, tool, or document which provides a node to the Silo navigation tree.
 /// </summary>

@@ -4,7 +4,7 @@ namespace Silo.Model.Sync;
 
 public class MvItem : ModelBase<MvObj>
 {
-    public MvItem()
+    public MvItem() : base(App.LocalConnection)
     {
     }
 }
