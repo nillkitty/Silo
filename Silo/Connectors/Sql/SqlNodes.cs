@@ -133,6 +133,41 @@ public static class SqlNames
     }
 
     /// <summary>
+    ///     The product's name for the version a server reports (<c>ServerVersion</c>, like <c>16.00.4135</c>): <c>2022</c>,
+    ///     <c>2008 R2</c>... A version this does not know is returned as it was given; nothing (null or blank) gives an empty
+    ///     string.
+    /// </summary>
+    /// <remarks>
+    ///     Azure SQL reports a number of its own (12.x) and cannot be told apart from SQL Server 2014 by the version alone.
+    /// </remarks>
+    public static string ProductVersion(string? serverVersion)
+    {
+        if (string.IsNullOrWhiteSpace(serverVersion)) return string.Empty;
+
+        string   text  = serverVersion.Trim();
+        string[] parts = text.Split('.');
+        if (!int.TryParse(parts[0], out int major)) return text;
+
+        int minor = parts.Length > 1 && int.TryParse(parts[1], out int m) ? m : 0;
+
+        return major switch
+               {
+                   8                 => "2000",
+                   9                 => "2005",
+                   10 when minor >= 50 => "2008 R2",
+                   10                => "2008",
+                   11                => "2012",
+                   12                => "2014",
+                   13                => "2016",
+                   14                => "2017",
+                   15                => "2019",
+                   16                => "2022",
+                   17                => "2025",
+                   _                 => text
+               };
+    }
+
+    /// <summary>
     ///     A column's type as it is written in a table definition: <c>nvarchar(50)</c>, <c>decimal(18,2)</c>,
     ///     <c>varchar(max)</c>, <c>int</c>.
     /// </summary>

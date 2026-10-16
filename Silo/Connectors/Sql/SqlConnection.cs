@@ -30,7 +30,7 @@ public class SqlServerModel(Uri uri, ConnectionRequest rq) : SqlBase
 ///     background does not touch the
 ///     server until something needs it.
 /// </remarks>
-public class SqlConnection(IConnector owner, Uri uri, ConnectionRequest rq) : SqlServerModel(uri, rq), IConnection
+public class SqlConnection(IConnector owner, Uri uri, ConnectionRequest rq) : SqlServerModel(uri, rq), IConnection, ICredentialSink
 {
     private const int QueryTimeoutSeconds = 60;
 
@@ -43,17 +43,20 @@ public class SqlConnection(IConnector owner, Uri uri, ConnectionRequest rq) : Sq
     private readonly SiloNode?               _parent  = rq?.ParentNode;
 
     private          string?                  _authDescription;
+    private          string?                  _credConfig;
     private          Db.SqlConnection?        _db;
     private          string?                  _loginName;
     private volatile CancellationTokenSource? _operation; // the connect or read in progress, for Disconnect to cancel
     private          string?                  _serverName;
-    private          string?                  _serverVersion;
 
     /// <summary>Why the last attempt to connect failed; null after one succeeded.</summary>
     public Exception? LastError { get; private set; }
 
     public SqlState State { get; private set; } = new Disconnected();
     public Uri      Uri   { get; }              = uri.Required();
+
+    /// <summary>The version the server reported when this connected (<c>16.00.4135</c>); null until it has.</summary>
+    internal string? ServerVersion { get; private set; }
 
     private ConnectorAuthFlags AuthFlags => (Connector as IAuthenticatable)?.AuthFlags ?? ConnectorAuthFlags.None;
 
@@ -111,7 +114,7 @@ public class SqlConnection(IConnector owner, Uri uri, ConnectionRequest rq) : Sq
                 _db              =  db;
                 db.StateChange   += OnDbStateChange;
                 _authDescription =  attempt.Description;
-                _serverVersion   =  db.ServerVersion;
+                ServerVersion    =  db.ServerVersion;
                 await ReadIdentityAsync(db, cancel);
 
                 LastError = null;
@@ -219,7 +222,7 @@ public class SqlConnection(IConnector owner, Uri uri, ConnectionRequest rq) : Sq
         yield return ("Server", _serverName ?? SqlSettings.DataSource(Uri));
         yield return ("State", StateText());
 
-        if (_serverVersion is not null) yield return ("Version", _serverVersion);
+        if (ServerVersion is not null) yield return ("Version", ServerVersion);
         if (_loginName is not null) yield return ("Signed in as", _loginName);
         if (_authDescription is not null) yield return ("Authentication", _authDescription);
         if (SqlSettings.Database(Uri) is { } initial) yield return ("Initial database", initial);
@@ -409,6 +412,11 @@ public class SqlConnection(IConnector owner, Uri uri, ConnectionRequest rq) : Sq
         return r.IsDBNull(column) ? 0 : Convert.ToInt32(r.GetValue(column));
     }
 
+    internal void SetCredentialFragment(string s)
+    {
+        _credConfig = s;
+    }
+
     public void InitProvider(IReceiver<Container> receiver)
     {
         receiver.Required().Receiver(Components);
@@ -523,5 +531,11 @@ public class SqlConnection(IConnector owner, Uri uri, ConnectionRequest rq) : Sq
         }
 
         if (failure is not null) ExceptionDispatchInfo.Capture(failure).Throw();
+    }
+
+    public void ConfigureFrom(ICredential credential)
+    {
+        if (credential is null)
+            _credConfig = "";
     }
 }

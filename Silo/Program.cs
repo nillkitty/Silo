@@ -16,9 +16,15 @@ namespace Silo;
 ///     console copy while Explorer, shortcuts and file associations (which name <c>silo.exe</c>) get the
 ///     GUI. The rules:
 ///     <list type="bullet">
-///         <item><c>silo.exe ...</c> starts the app (any arguments, such as a file to open, go to it). Add <c>--cli</c> first to run a command instead.</item>
+///         <item>
+///             <c>silo.exe ...</c> starts the app (any arguments, such as a file to open, go to it). Add <c>--cli</c>
+///             first to run a command instead.
+///         </item>
 ///         <item><c>silo ...</c> (the console copy) runs a command and returns its exit code.</item>
-///         <item><c>silo</c> with no arguments, or <c>silo --gui ...</c>, starts <c>silo.exe</c> detached and returns, like <c>devenv</c>.</item>
+///         <item>
+///             <c>silo</c> with no arguments, or <c>silo --gui ...</c>, starts <c>silo.exe</c> detached and returns,
+///             like <c>devenv</c>.
+///         </item>
 ///     </list>
 ///     Command mode never touches <see cref="App" />, so no WPF is initialised.
 /// </remarks>
@@ -35,7 +41,7 @@ internal static class Program
 
         if (consoleStub)
         {
-            if (args.Length == 0) return LaunchGui(self!, []);
+            if (args.Length == 0) return LaunchGui(self!,                                            []);
             if (args[0].Equals("--gui", StringComparison.OrdinalIgnoreCase)) return LaunchGui(self!, args[1..]);
 
             return SiloCli.Run(args);

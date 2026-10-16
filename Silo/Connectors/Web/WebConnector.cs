@@ -1,5 +1,4 @@
-﻿using Silo.Contracts.Connectors;
-using Silo.Shell;
+﻿using Silo.Extensions;
 using Silo.Ui.Windows.Connecting;
 using Telefrag.DI;
 
@@ -13,26 +12,36 @@ namespace Silo.Connectors.Web;
 [Singleton(typeof(IUriProvider))]
 public class WebConnector : IConnector, IUriProvider, IUriConnector, IConnectorUi
 {
-    public ConnectorSetupFlags Flags { get; }
+    public ConnectorSetupFlags Flags     { get; }
+    public Exception?          LastError { get; }
+    public List<object>        Metadata  { get; }
+
+    public string? Description => "Web sites and web services (http and https)";
 
     // Silo only ever opens http(s) inside itself -- it doesn't try to become the system's browser.
     public UriSchemeRegistration    ForSystem              => UriSchemeRegistration.DontRegister;
     public UriSchemeRegistration    ForUser                => UriSchemeRegistration.DontRegister;
     public ExistingProviderHandling OtherProvidersHandling => ExistingProviderHandling.Default;
-    public Exception?               LastError              { get; }
-    public List<object>             Metadata               { get; }
 
-    public string? Description => "Web sites and web services (http and https)";
-
-    public string? Validate(Uri uri)
+    public IConnection CreateConnection(ConnectionRequest crq)
     {
-        return uri.Host.Length > 0 ? null : "A web address needs a host name, such as https://example.com/.";
+        throw new NotImplementedException();
+    }
+
+    public Type GetStateType()
+    {
+        throw new NotImplementedException();
     }
 
     public IConnectorSetup CreateSetup(ConnectorSetupContext context)
     {
         return new UriFieldSetup(this, text => UriRules.Check(text, [this], UriRules.AnyScope), "Web address",
                                  "Examples:  https://example.com/    https://api.example.com/v1/items");
+    }
+
+    public string? Validate(Uri uri)
+    {
+        return uri.Host.Length > 0 ? null : "A web address needs a host name, such as https://example.com/.";
     }
 
     public UriSchemeScope HandlesScheme(string scheme)
@@ -43,14 +52,18 @@ public class WebConnector : IConnector, IUriProvider, IUriConnector, IConnectorU
                    _                 => UriSchemeScope.Unknown
                };
     }
+}
 
-    public IConnection CreateConnection(ConnectionRequest crq)
-    {
-        throw new NotImplementedException();
-    }
+public class WebConnection : ICredentialSink
+{
+    public ICredential? Credential                   { get; private set; }
+    public bool         UseDefaultCredentials        { get; private set; }
+    public bool         UseDefaultNetworkCredentials { get; private set; }
 
-    public Type GetStateType()
+    public void ConfigureFrom(ICredential credential)
     {
-        throw new NotImplementedException();
+        Credential                   = credential;
+        UseDefaultCredentials        = credential?.IsDefault        ?? false;
+        UseDefaultNetworkCredentials = credential?.IsDefaultNetwork ?? false;
     }
 }

@@ -103,9 +103,14 @@ public class SqlItem : INodeDetails, ICommandProvider, INodeProvider
     public Uri     Uri  { get; }
     public object? Data => this;
 
+    /// <summary>
+    ///     The product's name for the version of the server this item is on (<c>2022</c>, <c>2008 R2</c>...), as the server
+    ///     reported it when the connection was made. Empty until then, so a node made before the connection is up says so
+    ///     by leaving it out.
+    /// </summary>
     private string GetServerVersion()
     {
-        throw new NotImplementedException();
+        return SqlNames.ProductVersion(Connection.ServerVersion);
     }
 
     public static string IconKeyOf(SqlItemKind kind, bool accessible)
@@ -114,12 +119,24 @@ public class SqlItem : INodeDetails, ICommandProvider, INodeProvider
 
         return kind switch
                {
-                   SqlItemKind.Server   => "Server",
-                   SqlItemKind.Database => "Database5",
-                   SqlItemKind.Folder   => "Folder17",
-                   SqlItemKind.Table    => "TbTable",
-                   SqlItemKind.View     => "Layers",
-                   _                    => "Record"
+                   SqlItemKind.Host                => "Network",
+                   SqlItemKind.Server              => "Server",
+                   SqlItemKind.Database            => "Database5",
+                   SqlItemKind.Folder              => "Folder17",
+                   SqlItemKind.Namespace           => "Modules",
+                   SqlItemKind.Schema              => "HierarchyStructure",
+                   SqlItemKind.Table               => "TbTable",
+                   SqlItemKind.View                => "Layers",
+                   SqlItemKind.Column              => "SqlColumn",
+                   SqlItemKind.ParametricObject    => "Coding",
+                   SqlItemKind.NonParametricObject => "Code",
+                   SqlItemKind.ScalarFunction      => "SqlFunction",
+                   SqlItemKind.Synonym             => "Link",
+                   SqlItemKind.Sequence            => "Checklist",
+                   SqlItemKind.User                => "Credentials",
+                   SqlItemKind.Role                => "Shield",
+                   SqlItemKind.RoleMember          => "Person",
+                   _                               => "Record"
                };
     }
 
@@ -212,98 +229,98 @@ public record SqlNode : SiloNode
         {
             case SqlItemKind.Host:
                 Text     = $"Server - {Model.Uri.Host}";
-                Icon     = null; // claude: server icon
+                Icon     = Model.Icon;
                 TypeName = "SQL Server Host";
                 break;
             case SqlItemKind.Server:
-                Text     = $"SQL Server {Model.Version} - {Model.Uri.Host}";
-                Icon     = null; // claude: database server icon
+                Text     = Model.Version.Length > 0 ? $"SQL Server {Model.Version} - {Model.Uri.Host}" : $"SQL Server - {Model.Uri.Host}";
+                Icon     = Model.Icon;
                 TypeName = "SQL Server Instance";
                 break;
             case SqlItemKind.Database:
                 Text     = Model.Name;
-                Icon     = null; // claude: database icon
+                Icon     = Model.Icon;
                 TypeName = "Database";
                 break;
             case SqlItemKind.Folder:
                 Text     = Model.Name;
-                Icon     = null; // claude: folder icon
+                Icon     = Model.Icon;
                 TypeName = "Folder";
                 break;
             case SqlItemKind.Namespace:
                 Text     = Model.Name;
-                Icon     = null; // claude: schema/namespace icon
-                TypeName = "Namespce";
+                Icon     = Model.Icon;
+                TypeName = "Namespace";
                 break;
             case SqlItemKind.Table:
                 Text     = Model.Name;
-                Icon     = null; // claude: table icon
+                Icon     = Model.Icon;
                 TypeName = "Database Table";
                 break;
 
             case SqlItemKind.Column:
                 Text     = Model.Name;
-                Icon     = null; // claude: column icon
+                Icon     = Model.Icon;
                 TypeName = "Database Column";
                 break;
 
             case SqlItemKind.View:
                 Text     = Model.Name;
-                Icon     = null; // claude: db view icon
+                Icon     = Model.Icon;
                 TypeName = "Database View";
                 break;
 
             case SqlItemKind.ParametricObject:
                 Text     = Model.Name;
-                Icon     = null; // claude: method with parameters icon
+                Icon     = Model.Icon;
                 TypeName = Model.TypeName;
                 break;
 
             case SqlItemKind.NonParametricObject:
                 Text     = Model.Name;
-                Icon     = null; // claude: table valued function/view icon
+                Icon     = Model.Icon;
                 TypeName = Model.TypeName;
                 break;
 
             case SqlItemKind.ScalarFunction:
                 Text     = Model.Name;
-                Icon     = null; // claude: function icon
+                Icon     = Model.Icon;
                 TypeName = "Scalar Function";
                 break;
 
             case SqlItemKind.Synonym:
                 Text     = Model.Name;
-                Icon     = null; // claude: synonym icon
+                Icon     = Model.Icon;
                 TypeName = "Synonym";
                 break;
 
             case SqlItemKind.Sequence:
                 Text     = Model.Name;
-                Icon     = null; // claude: sequence icon
+                Icon     = Model.Icon;
                 TypeName = "Sequence";
                 break;
 
             case SqlItemKind.Schema:
                 Text     = Model.Name;
-                Icon     = null; // claude: schema icon
+                Icon     = Model.Icon;
                 TypeName = "Database Schema";
                 break;
 
             case SqlItemKind.User:
                 Text     = Model.Name;
-                Icon     = null; // claude: user icon
+                Icon     = Model.Icon;
                 TypeName = "Database Principal";
                 break;
 
             case SqlItemKind.Role:
                 Text     = Model.Name;
-                Icon     = null; // claude: role icon
+                Icon     = Model.Icon;
                 TypeName = "Database Role";
                 break;
 
             case SqlItemKind.RoleMember:
                 Text     = Model.Name;
-                Icon     = null; // claude: role member icon
+                Icon     = Model.Icon;
                 TypeName = "Database Role Member";
                 break;
 

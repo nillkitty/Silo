@@ -1,5 +1,5 @@
-﻿using System.Windows;
-using System.Windows.Media;
+﻿using System.Windows.Media;
+using Silo.Model;
 using Telefrag.DI;
 using Telefrag.Exceptions;
 
@@ -7,6 +7,29 @@ namespace Silo.Extensions;
 
 public static class Extensions
 {
+    extension(ICredentialSink s)
+    {
+        public void UseCredential(ICredential c)
+        {
+            c.Required();
+            c.Configure(s.Required());
+            s.ConfigureFrom(c);
+        }
+    }
+
+    extension(ICredential c)
+    {
+        public bool IsDefault        => c.Required().Realm == AuthRealm.DefaultCredential;
+        public bool IsDefaultNetwork => c.Required().Realm == AuthRealm.DefaultNetwork;
+
+        public void UseOn(ICredentialSink s)
+        {
+            c.Required();
+            c.Configure(s.Required());
+            s.ConfigureFrom(c);
+        }
+    }
+
     extension(Container c)
     {
         public TService Require<TService>(string? name = null) where TService : class
