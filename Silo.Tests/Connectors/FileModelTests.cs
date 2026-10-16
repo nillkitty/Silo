@@ -260,6 +260,47 @@ public class FileModelTests
     }
 
     [Test]
+    public void The_kind_of_item_picks_the_kind_of_node_and_each_keeps_the_model_text_and_uri()
+    {
+        var folder = Model(_dir).GetNode()!;
+        var file   = Model(MakeFile("a.txt")).GetNode()!;
+
+        Assert.That(folder, Is.InstanceOf<FolderNode>());
+        Assert.That(folder.TypeName, Is.EqualTo("Directory"));
+        Assert.That(file, Is.InstanceOf<FileNode>());
+        Assert.That(file.TypeName, Is.EqualTo("File"));
+        Assert.That(file.DataContext, Is.InstanceOf<FileModel>());
+        Assert.That(file.Text, Is.EqualTo("a.txt"));
+        Assert.That(file.Uri, Is.Not.Null);
+        Assert.That(file.Icon!.OriginalString, Is.EqualTo("Document"));
+    }
+
+    [Test]
+    public void A_missing_item_gets_a_blocked_node_with_the_missing_icon_and_its_name()
+    {
+        var node = Model(Path.Combine(_dir, "gone.txt")).GetNode()!;
+
+        Assert.That(node, Is.InstanceOf<BlockedNode>());
+        Assert.That(node.Icon!.OriginalString, Is.EqualTo("FsFileMissing"));
+        Assert.That(node.Text, Is.EqualTo("gone.txt (inaccessible)"));
+        Assert.That(node.ChildLoader, Is.Null);
+    }
+
+    [Test]
+    public async Task Refreshing_a_folder_reads_its_contents_again()
+    {
+        MakeFile("a.txt");
+        var model = Model(_dir);
+        var node  = model.GetNode()!;
+        await node.LoadChildrenAsync();
+        MakeFile("b.txt");
+
+        await model.RefreshAsync();
+
+        Assert.That(node.Children.Select(c => c.Text), Is.EqualTo(new[] { "a.txt", "b.txt" }));
+    }
+
+    [Test]
     public async Task Loading_a_folder_node_adds_a_collapsed_node_per_child_and_each_folder_can_be_loaded_in_turn()
     {
         MakeFolder("sub");

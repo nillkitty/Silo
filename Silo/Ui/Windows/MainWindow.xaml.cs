@@ -1,12 +1,18 @@
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
-using System.Windows;
+using System.IO;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media;
+using System.Windows.Media.Media3D;
+using System.Windows.Threading;
+using System.Xml.Linq;
 using AvalonDock.Layout;
-using AvalonDock.Layout.Serialization;
+using AvalonDock.Serializer.Xml;
 using AvalonDock.Themes;
+using Serilog;
+using Silo.Commanding;
 using Silo.Design;
 using Silo.Explorer;
 using Silo.Hosting;
@@ -20,6 +26,7 @@ using Silo.Toolbar;
 using Silo.Tools;
 using Silo.Ui.Documents;
 using Silo.Ui.Windows;
+using Silo.ViewModel;
 
 namespace Silo;
 
@@ -32,11 +39,28 @@ public partial class MainWindow : Window, IWindowLayout
     private static readonly GridLength _navExpandedWidth = new(300);
 
     /// <summary>
-    ///     NavColumn's width while collapsed - wide enough for the header bar's toggle button to remain clickable (see the
-    ///     Grid in MainWindow.xaml's nav cell), so re-expanding is always reachable, and for the rail's icons, which follow
-    ///     the live "Icon Size" setting (icon + the rail button's padding and accent bar).
+    ///     The bottom of the nav pane (NavTreeBottom and NavRailBottom): Inbox, Settings and Profile. They stand apart
+    ///     from the Silos, so they are always there and always hug the bottom edge.
     /// </summary>
-    private static GridLength NavCollapsedWidth => new(Math.Max(32, AppDesignSettings.Instance.IconSize + 16));
+    private readonly IReadOnlyList<AppNavNode> _bottomRoots = AppNavTree.BuildBottomRoots();
+
+    private readonly AppNavNode _connectionsNode = AppNavTree.BuildConnections();
+
+    /// <summary>
+    ///     Where each open document's node (a document that is an <see cref="INodeProvider" />) was put, so closing the
+    ///     tab takes it out of the same place.
+    /// </summary>
+    private readonly Dictionary<INodeProvider, NodeHost> _documentNodes = new(ReferenceEqualityComparer.Instance);
+
+    private readonly ExplorerView _explorer = null!;
+
+    private readonly AppNavNode     _performanceNode = AppNavTree.BuildPerformance();
+    private readonly PropertiesView _properties      = null!;
+
+    private readonly AppNavNode _recentNode = AppNavTree.BuildRecent();
+
+    /// <summary>The nav node (and name-change subscription) of each open Silo.</summary>
+    private readonly Dictionary<OpenSilo, SiloNav> _siloNavs = new(ReferenceEqualityComparer.Instance);
 
     /// <summary>
     ///     The top of the nav pane (NavTree and NavRail share it): "Recent" while no Silo is open, otherwise a node per
@@ -44,146 +68,79 @@ public partial class MainWindow : Window, IWindowLayout
     /// </summary>
     private readonly ObservableCollection<AppNavNode> _topRoots = [];
 
-    /// <summary>
-    ///     The bottom of the nav pane (NavTreeBottom and NavRailBottom): Inbox, Settings and Profile. They stand apart
-    ///     from the Silos, so they are always there and always hug the bottom edge.
-    /// </summary>
-    private readonly IReadOnlyList<AppNavNode> _bottomRoots = AppNavTree.BuildBottomRoots();
+    private bool _closeApproved;
 
-    private readonly AppNavNode _recentNode      = AppNavTree.BuildRecent();
-    private readonly AppNavNode _connectionsNode = AppNavTree.BuildConnections();
-    private readonly AppNavNode _performanceNode = AppNavTree.BuildPerformance();
+    // --- remembered arrangement (the Window table of the Silo, see WindowPlacements) -----------------------------
 
-    /// <summary>The nav node (and name-change subscription) of each open Silo.</summary>
-    private readonly Dictionary<OpenSilo, SiloNav> _siloNavs = new(ReferenceEqualityComparer.Instance);
+    /// <summary>The dock layout the window was built with (null until the window has loaded).</summary>
+    private string? _defaultDockXml;
 
-    private sealed record SiloNav(AppNavNode Node, EventHandler Renamed);
+    private bool _navSyncQueued;
 
     /// <summary>The node currently selected, in whichever of the two nav trees it is.</summary>
     private AppNavNode? _selectedNode;
 
-    private bool _navSyncQueued;
+    private OpenSilo? _watched;
+
+    /// <summary>The selected document tab's content, when it adds items to the Edit menu (a table does); else null.</summary>
+    public IEditContributor? ActiveEditContributor => Documents.SelectedContent as IEditContributor;
 
     public App App => App.Instance!;
 
     /// <summary>The document tabs in the middle of the window (tables, navigation views...).</summary>
-    public DocumentTabs Documents { get; private set; } = null!;
+    public DocumentTabs Documents { get; } = null!;
 
-    /// <summary>Where each open document's node (a document that is an <see cref="INodeProvider" />) was put, so closing the tab takes it out of the same place.</summary>
-    private readonly Dictionary<INodeProvider, Silo.ViewModel.NodeHost> _documentNodes = new(ReferenceEqualityComparer.Instance);
+    // --- dock panes (View menu) ----------------------------------------------------------------
 
-    private ExplorerView   _explorer   = null!;
-    private PropertiesView _properties = null!;
+    /// <summary>Whether the Explorer pane (the browsable tree on the left) is showing.</summary>
+    public bool IsExplorerOpen => IsOpen(ExplorerPane);
 
-    public MainWindow()
-    {
-        InitializeComponent();
+    /// <summary>Whether the Properties pane is showing.</summary>
+    public bool IsPropertiesOpen => IsOpen(PropertiesPane);
 
-        // Explorer on the left, Properties on the right, documents between them (see the DockHost layout in the XAML)
-        Documents   = new DocumentTabs(DockHost);
-        Documents.ContentOpened   += OnDocumentContentOpened;
-        Documents.ContentReleased += OnDocumentContentReleased;
-        _explorer   = new ExplorerView();
-        _properties = new PropertiesView();
-        ExplorerPane.Content   = _explorer;
-        PropertiesPane.Content = _properties;
-        _explorer.NodeSelected         += OnExplorerSelected;
-        _explorer.NodeOpened           += OnExplorerOpened;
-        _explorer.SelectedNodeRefreshed += (_, node) =>
-                                           {
-                                               _properties.Show(node);
-                                               NodeCommandHub.SetCurrent(node); // the tree was rebuilt: the selected node is a new object
-                                           };
-        App.SiloClosing                += OnSiloClosing;
+    /// <summary>Whether the preview tab (the one that shows the selected Explorer item) is open.</summary>
+    public bool IsSelectedItemOpen => Documents.HasPreview;
 
-        NavTree.ItemsSource       = _topRoots;
-        NavRail.ItemsSource       = _topRoots;
-        NavTreeBottom.ItemsSource = _bottomRoots;
-        NavRailBottom.ItemsSource = _bottomRoots;
+    /// <summary>Whether the Toolbox pane is showing (closed or hidden panes are not).</summary>
+    public bool IsToolboxOpen => IsOpen(ToolboxPane);
 
-        // author-mode node customisations (label, icon size, hidden) are re-read by every node when they change
-        NodeOverrides.Changed += (_, _) =>
-                                 {
-                                     foreach (var root in AllRoots()) RefreshOverrides(root);
-                                 };
-
-        // The pane starts closed - only the icon gutter shows until the person opens it.
-        NavCollapseToggle.IsChecked = true;
-        ApplyNavState(true);
-
-        SyncNav();
-        OpenSilo.OpenSilos.CollectionChanged += OnOpenSilosChanged;
-
-        // Ctrl+right-click the nav tree (in Author mode or above) for a pink design
-        // menu with a live "Icon Size" slider - see Design/DesignMenu.cs.
-        DesignMenu.EnsureItems(NavTree).Add(DesignMenuItem.Slider(
-            "Icon Size", DesignLevel.Author,
-            min: 12, max: 64,
-            getValue: () => AppDesignSettings.Instance.IconSize,
-            setValue: v => AppDesignSettings.Instance.IconSize = v,
-            format: "{0:0} px"));
-
-        // The collapsed rail's width tracks the icon size while the slider is dragged.
-        AppDesignSettings.Instance.PropertyChanged += (_, e) =>
-                                                      {
-                                                          if (e.PropertyName == nameof(AppDesignSettings.IconSize) &&
-                                                              NavCollapseToggle.IsChecked == true)
-                                                              NavColumn.Width = NavCollapsedWidth;
-                                                      };
-
-        // AvalonDock draws its own chrome (tabs, title bars, splitters) from a theme object, not from the palette brushes,
-        // so it is switched alongside the palette.
-        ApplyDockTheme();
-
-        // the layout the window starts with, for "Reset Window Layout" (and the first restore, should a Silo open before this)
-        Loaded += (_, _) => _defaultDockXml ??= CaptureLayout();
-
-        AppTheme.Instance.PropertyChanged += (_, e) =>
-                                             {
-                                                 if (e.PropertyName == nameof(AppTheme.IsEffectivelyDark)) ApplyDockTheme();
-                                             };
-
-        AddFileDesignMenu();
-
-        // Ctrl+N / Ctrl+O / Ctrl+S ... -- the keys shown beside the menu items (see Commanding/Shortcuts.cs).
-        Commanding.Shortcuts.Install(this);
-
-        // Drag a .silo file (or a link to one) onto the window to open it: a Solo Silo or a URL then gets a process of its own.
-        AllowDrop =  true;
-        DragOver  += OnDragOverSilo;
-        Drop      += OnDropSilo;
-
-        // Window title: "<file>[*] - Silo" for the active Silo; the star marks unsaved changes.
-        App.ActiveSiloChanged += (_, _) =>
-                                 {
-                                     WatchActiveSilo();
-                                     QueueNavSync();
-                                 };
-        WatchActiveSilo();
-    }
+    /// <summary>
+    ///     NavColumn's width while collapsed - wide enough for the header bar's toggle button to remain clickable (see the
+    ///     Grid in MainWindow.xaml's nav cell), so re-expanding is always reachable, and for the rail's icons, which follow
+    ///     the live "Icon Size" setting (icon + the rail button's padding and accent bar).
+    /// </summary>
+    private static GridLength NavCollapsedWidth => new(Math.Max(32, AppDesignSettings.Instance.IconSize + 16));
 
     private void ApplyDockTheme()
     {
         DockHost.Theme = AppTheme.Instance.IsEffectivelyDark ? new Vs2013DarkTheme() : new Vs2013LightTheme();
     }
 
-    /// <summary>Author-mode file settings, reached with Ctrl+right-click anywhere in the window (see <see cref="DesignMenu" />).</summary>
+    /// <summary>
+    ///     Author-mode file settings, reached with Ctrl+right-click anywhere in the window (see <see cref="DesignMenu" />
+    ///     ).
+    /// </summary>
     private void AddFileDesignMenu()
     {
         var settings = SiloFileSettings.Instance;
         var items    = DesignMenu.EnsureItems(this);
 
-        var policy = new ComboBox { ItemsSource = Enum.GetValues<ExternalChangePolicy>(), SelectedItem = settings.ConflictPolicy, MinWidth = 110 };
+        var policy = new ComboBox
+                     {
+                         ItemsSource = Enum.GetValues<ExternalChangePolicy>(), SelectedItem = settings.ConflictPolicy,
+                         MinWidth    = 110
+                     };
         policy.SelectionChanged += (_, _) =>
                                    {
                                        if (policy.SelectedItem is ExternalChangePolicy p) settings.ConflictPolicy = p;
                                    };
         settings.PropertyChanged += (_, e) =>
                                     {
-                                        if (e.PropertyName == nameof(SiloFileSettings.ConflictPolicy)) policy.SelectedItem = settings.ConflictPolicy;
+                                        if (e.PropertyName == nameof(SiloFileSettings.ConflictPolicy))
+                                            policy.SelectedItem = settings.ConflictPolicy;
                                     };
         var row = new StackPanel { Orientation = Orientation.Horizontal };
-        row.Children.Add(new TextBlock { Text = "If the file changed on disk: ", VerticalAlignment = VerticalAlignment.Center });
+        row.Children.Add(new TextBlock { Text  = "If the file changed on disk: ", VerticalAlignment = VerticalAlignment.Center });
         row.Children.Add(policy);
         items.Add(new DesignMenuItem { MinLevel = DesignLevel.Author, Content = row });
 
@@ -191,8 +148,8 @@ public partial class MainWindow : Window, IWindowLayout
         archives.Click += (_, _) => settings.NewSilosAreArchives = archives.IsChecked == true;
         items.Add(new DesignMenuItem { MinLevel = DesignLevel.Author, Content = archives });
 
-        items.Add(DesignMenuItem.Slider("Offer archive conversion above", DesignLevel.Author, 8, 1024,
-                                        () => settings.ExplodeThresholdMb, v => settings.ExplodeThresholdMb = (int)v, "{0:0} MB"));
+        items.Add(DesignMenuItem.Slider("Offer archive conversion above", DesignLevel.Author, 8, 1024, () => settings.ExplodeThresholdMb,
+                                        v => settings.ExplodeThresholdMb = (int)v, "{0:0} MB"));
     }
 
     private static bool TryGetDropped(IDataObject data, out List<string> targets)
@@ -220,10 +177,8 @@ public partial class MainWindow : Window, IWindowLayout
         if (!TryGetDropped(e.Data, out var targets)) return;
 
         e.Handled = true;
-        foreach (var target in targets) await Commanding.OpenSiloCommand.OpenPathAsync(target);
+        foreach (var target in targets) await OpenSiloCommand.OpenPathAsync(target);
     }
-
-    private OpenSilo? _watched;
 
     private void WatchActiveSilo()
     {
@@ -237,112 +192,15 @@ public partial class MainWindow : Window, IWindowLayout
         if (_watched is { } silo)
         {
             bool restore = OpenSilo.OpenSilos.Count <= 1;
-            Dispatcher.BeginInvoke(new Action(() => WindowPlacements.Track(this, silo, WindowPlacements.Main, "silo:main", this, restore, saveOnClose: false)),
-                                   System.Windows.Threading.DispatcherPriority.Loaded);
-        }
-    }
-
-    // --- remembered arrangement (the Window table of the Silo, see WindowPlacements) -----------------------------
-
-    /// <summary>The dock layout the window was built with (null until the window has loaded).</summary>
-    private string? _defaultDockXml;
-
-    /// <summary>
-    ///     The arrangement of the panes as AvalonDock XML: which dock they sit in, their sizes, the floating ones, the hidden ones.
-    ///     Documents are left out -- the tabs are opened afresh each time.
-    /// </summary>
-    public string? CaptureLayout()
-    {
-        try
-        {
-            var xml = new StringBuilder();
-            using (var writer = new System.IO.StringWriter(xml))
-                new XmlLayoutSerializer(DockHost).Serialize(writer);
-
-            var doc = System.Xml.Linq.XDocument.Parse(xml.ToString());
-            foreach (var element in doc.Descendants().Where(e => e.Name.LocalName is "LayoutDocument" or "LayoutDocumentFloatingWindow").ToList())
-                element.Remove();
-
-            return doc.ToString(System.Xml.Linq.SaveOptions.DisableFormatting);
-        }
-        catch (Exception ex)
-        {
-            Serilog.Log.Warning(ex, "Could not capture the dock layout");
-            return null;
+            Dispatcher.BeginInvoke(new Action(() => WindowPlacements.Track(this, silo, WindowPlacements.Main, "silo:main", this, restore,
+                                                                           false)), DispatcherPriority.Loaded);
         }
     }
 
     /// <summary>
-    ///     Puts the panes back where <paramref name="layout" /> says. What the panes show stays; the open tabs are carried over
-    ///     into the document pane of the new layout; a pane the layout does not have is closed (the View menu opens it again).
+    ///     View -> Reset Window Layout: the panes go back to where a new window has them, and the remembered sizes of
+    ///     windows are forgotten.
     /// </summary>
-    public void RestoreLayout(string layout)
-    {
-        _defaultDockXml ??= CaptureLayout();
-
-        var fixedPanes = new Dictionary<string, LayoutAnchorable> { ["explorer"] = ExplorerPane, ["properties"] = PropertiesPane, ["toolbox"] = ToolboxPane };
-        var contents   = fixedPanes.ToDictionary(p => p.Key, p => p.Value.Content);
-        var tools      = ToolBase.PaneTools().ToDictionary(t => "tool:" + t.Name);
-
-        // the tabs are made again by nobody: take them out of the old layout and put them in the new one
-        var tabs = DockHost.Layout.Descendents().OfType<LayoutDocument>().Select(d => (Doc: d, Content: d.Content, Selected: d.IsSelected)).ToList();
-        foreach (var tab in tabs) tab.Doc.Content = null;
-
-        var placed      = new Dictionary<string, LayoutAnchorable>();
-        var placedTools = new List<(ToolBase Tool, LayoutAnchorable Pane)>();
-        try
-        {
-            var serializer = new XmlLayoutSerializer(DockHost);
-            serializer.LayoutSerializationCallback += (_, e) =>
-                                                      {
-                                                          if (e.Model is LayoutAnchorable { ContentId: { } id } anchorable)
-                                                          {
-                                                              if (contents.TryGetValue(id, out var content))
-                                                              {
-                                                                  e.Content  = content;
-                                                                  placed[id] = anchorable;
-                                                                  return;
-                                                              }
-
-                                                              if (tools.TryGetValue(id, out var tool))
-                                                              {
-                                                                  e.Content = tool.BuildPaneContent();
-                                                                  placedTools.Add((tool, anchorable));
-                                                                  return;
-                                                              }
-                                                          }
-
-                                                          e.Cancel = true; // a document, or something this version does not have
-                                                      };
-
-            using var reader = new System.IO.StringReader(layout);
-            serializer.Deserialize(reader);
-        }
-        catch
-        {
-            foreach (var tab in tabs) tab.Doc.Content = tab.Content;
-            throw;
-        }
-
-        // the panes of the new layout are the ones the rest of this window talks to; a pane the layout left out starts closed
-        foreach (var (id, old) in fixedPanes)
-        {
-            var pane = placed.GetValueOrDefault(id) ?? new LayoutAnchorable { Title = old.Title, ContentId = id, Content = contents[id] };
-            switch (id)
-            {
-                case "explorer":   ExplorerPane   = pane; break;
-                case "properties": PropertiesPane = pane; break;
-                default:           ToolboxPane    = pane; break;
-            }
-        }
-
-        foreach (var (tool, pane) in placedTools) tool.AdoptPane(pane);
-        foreach (var tool in tools.Values.Where(t => placedTools.All(p => p.Tool != t))) tool.ResetPane();
-
-        Documents.Adopt(tabs);
-    }
-
-    /// <summary>View -> Reset Window Layout: the panes go back to where a new window has them, and the remembered sizes of windows are forgotten.</summary>
     public void ResetWindowLayout()
     {
         try
@@ -355,7 +213,7 @@ public partial class MainWindow : Window, IWindowLayout
         }
         catch (Exception ex)
         {
-            Serilog.Log.Warning(ex, "Resetting the window layout failed");
+            Log.Warning(ex, "Resetting the window layout failed");
             App.Status("The window layout could not be reset: " + ex.Message);
         }
     }
@@ -377,8 +235,6 @@ public partial class MainWindow : Window, IWindowLayout
         string flags = _watched is { IsUnsynced: true } ? " (not uploaded)" : "";
         Title = _watched is { Name: { } name } ? $"{name}{(_watched.IsDirty ? "*" : "")}{flags} - {app}{mode}" : app + mode;
     }
-
-    private bool _closeApproved;
 
     /// <summary>
     ///     Closing the window while a Silo has unsaved changes asks whether to save first (Save / Don't save / Cancel); the
@@ -530,9 +386,8 @@ public partial class MainWindow : Window, IWindowLayout
 
         // as in the navigation design, the active Silo (or "Recent") is the highlighted row, unless the person is
         // already working somewhere that is not in another Silo's branch
-        var target = silos.Count == 0                                          ? _recentNode
-                     : active is not null && _siloNavs.TryGetValue(active, out var activeNav) ? activeNav.Node
-                                                                                : null;
+        var target = silos.Count == 0                                                       ? _recentNode :
+                     active is not null && _siloNavs.TryGetValue(active, out var activeNav) ? activeNav.Node : null;
         if (target is not null &&
             (_selectedNode is null || (SiloOf(RootNodeOf(_selectedNode)) is { } owner && !ReferenceEquals(owner, active))))
             Select(target);
@@ -586,10 +441,10 @@ public partial class MainWindow : Window, IWindowLayout
 
     /// <summary>
     ///     The two jobs MainWindow's old per-item TreeViewItem/RailButton pairs used to do by
-    ///     hand, now done generically from whichever <see cref="AppNavNode"/> got selected:
-    ///     (1) walk its <see cref="AppNavItem.Parent"/> chain up to its top-level node
+    ///     hand, now done generically from whichever <see cref="AppNavNode" /> got selected:
+    ///     (1) walk its <see cref="AppNavItem.Parent" /> chain up to its top-level node
     ///     so NavRail (the collapsed pane's icon gutter) can highlight the right one, and
-    ///     (2) if the node has a real <see cref="AppNavItem.View"/>, build its content and host
+    ///     (2) if the node has a real <see cref="AppNavItem.View" />, build its content and host
     ///     it in a document tab (previewed on a click, pinned by a double-click). A node with no view (a group header like
     ///     "Schema", or a not-yet-wired setting) leaves whatever content was already showing
     ///     rather than clearing it to something misleading.
@@ -636,7 +491,10 @@ public partial class MainWindow : Window, IWindowLayout
     }
 
     /// <summary>The document tab key of a navigation view: views are identified by name, whichever node reached them.</summary>
-    private static string ViewKey(AppView view) => "view:" + view.Name;
+    private static string ViewKey(AppView view)
+    {
+        return "view:" + view.Name;
+    }
 
     private void OpenView(AppView view, bool pin)
     {
@@ -652,7 +510,7 @@ public partial class MainWindow : Window, IWindowLayout
         // only a double-click on the selected row itself, not on the empty space or the scroll bar
         var d = source;
         while (d is not null and not TreeViewItem)
-            d = (d is System.Windows.Media.Visual || d is System.Windows.Media.Media3D.Visual3D) ? System.Windows.Media.VisualTreeHelper.GetParent(d) : LogicalTreeHelper.GetParent(d);
+            d = d is Visual || d is Visual3D ? VisualTreeHelper.GetParent(d) : LogicalTreeHelper.GetParent(d);
         if (d is not TreeViewItem { DataContext: AppNavNode hit } || !ReferenceEquals(hit, node))
             return;
 
@@ -663,18 +521,21 @@ public partial class MainWindow : Window, IWindowLayout
         }
     }
 
-    /// <summary>The selected document tab's content, when it adds items to the Edit menu (a table does); else null.</summary>
-    public IEditContributor? ActiveEditContributor => Documents.SelectedContent as IEditContributor;
-
     // --- the Explorer tree and the Properties pane -----------------------------------------------
 
-    /// <summary>A click (or arrow key) in the Explorer: the details go to Properties and the node's view, if any, to the preview tab.</summary>
-    /// <summary>A document opened in a tab: if it is an <see cref="INodeProvider" /> its node joins the Explorer, under the active Silo.</summary>
+    /// <summary>
+    ///     A click (or arrow key) in the Explorer: the details go to Properties and the node's view, if any, to the
+    ///     preview tab.
+    /// </summary>
+    /// <summary>
+    ///     A document opened in a tab: if it is an <see cref="INodeProvider" /> its node joins the Explorer, under the
+    ///     active Silo.
+    /// </summary>
     private void OnDocumentContentOpened(object? sender, UIElement content)
     {
         if (content is not INodeProvider provider) return;
 
-        var host = App.ActiveSilo?.Nodes ?? App.Nodes;
+        var host                                                     = App.ActiveSilo?.Nodes ?? App.Nodes;
         if (host.Add(provider) is not null) _documentNodes[provider] = host;
     }
 
@@ -700,7 +561,7 @@ public partial class MainWindow : Window, IWindowLayout
     private void ShowNodeView(ExplorerNode node, bool pin)
     {
         string key  = node.DocKey ?? "node:" + node.Key;
-        var    open = node.Open ?? (() => NodeViews.Build(node));
+        var    open = node.Open   ?? (() => NodeViews.Build(node));
         Documents.Open(key, node.Header, open, node.Closed, pin);
     }
 
@@ -735,20 +596,6 @@ public partial class MainWindow : Window, IWindowLayout
         return null;
     }
 
-    // --- dock panes (View menu) ----------------------------------------------------------------
-
-    /// <summary>Whether the Explorer pane (the browsable tree on the left) is showing.</summary>
-    public bool IsExplorerOpen => IsOpen(ExplorerPane);
-
-    /// <summary>Whether the Properties pane is showing.</summary>
-    public bool IsPropertiesOpen => IsOpen(PropertiesPane);
-
-    /// <summary>Whether the Toolbox pane is showing (closed or hidden panes are not).</summary>
-    public bool IsToolboxOpen => IsOpen(ToolboxPane);
-
-    /// <summary>Whether the preview tab (the one that shows the selected Explorer item) is open.</summary>
-    public bool IsSelectedItemOpen => Documents.HasPreview;
-
     /// <summary>
     ///     Shows or closes the preview tab. Showing it previews the item now selected in the Explorer; with nothing selected
     ///     there is nothing to show.
@@ -765,16 +612,31 @@ public partial class MainWindow : Window, IWindowLayout
         else App.Status("Select something in the Explorer to see it here");
     }
 
-    public void SetExplorerOpen(bool open) => SetOpen(ExplorerPane, open, AnchorableShowStrategy.Left);
+    public void SetExplorerOpen(bool open)
+    {
+        SetOpen(ExplorerPane, open, AnchorableShowStrategy.Left);
+    }
 
-    public void SetPropertiesOpen(bool open) => SetOpen(PropertiesPane, open, AnchorableShowStrategy.Right);
+    public void SetPropertiesOpen(bool open)
+    {
+        SetOpen(PropertiesPane, open, AnchorableShowStrategy.Right);
+    }
 
-    public void SetToolboxOpen(bool open) => SetOpen(ToolboxPane, open, AnchorableShowStrategy.Right);
+    public void SetToolboxOpen(bool open)
+    {
+        SetOpen(ToolboxPane, open, AnchorableShowStrategy.Right);
+    }
 
-    private static bool IsOpen(LayoutAnchorable pane) => pane.Root is not null && pane.IsVisible;
+    private static bool IsOpen(LayoutAnchorable pane)
+    {
+        return pane.Root is not null && pane.IsVisible;
+    }
 
     /// <summary>Whether a tool's pane is showing, docked or floating.</summary>
-    public bool IsToolPaneOpen(LayoutAnchorable pane) => IsOpen(pane);
+    public bool IsToolPaneOpen(LayoutAnchorable pane)
+    {
+        return IsOpen(pane);
+    }
 
     /// <summary>
     ///     Opens a tool's pane: the first time it is added to the bottom of the dock area (it can be dragged out into a
@@ -826,8 +688,8 @@ public partial class MainWindow : Window, IWindowLayout
 
     /// <summary>
     ///     Selecting a root from NavRail while collapsed picks up exactly where clicking it in
-    ///     the full tree would have - <see cref="NavTree_SelectedItemChanged"/> keeps the
-    ///     highlight and content pane in sync, since setting <see cref="AppNavNode.IsSelected"/>
+    ///     the full tree would have - <see cref="NavTree_SelectedItemChanged" /> keeps the
+    ///     highlight and content pane in sync, since setting <see cref="AppNavNode.IsSelected" />
     ///     (two-way bound to TreeViewItem.IsSelected via NavTree's ItemContainerStyle) raises
     ///     the same TreeView.SelectedItemChanged event a mouse click in the tree would. Only
     ///     ever invoked for a root node, and roots are always realized (NavTree doesn't
@@ -847,4 +709,197 @@ public partial class MainWindow : Window, IWindowLayout
             ApplyNavState(false);
         }
     }
+
+    public MainWindow()
+    {
+        InitializeComponent();
+
+        // Explorer on the left, Properties on the right, documents between them (see the DockHost layout in the XAML)
+        Documents                 =  new DocumentTabs(DockHost);
+        Documents.ContentOpened   += OnDocumentContentOpened;
+        Documents.ContentReleased += OnDocumentContentReleased;
+        _explorer                 =  new ExplorerView { PinnedDocuments = () => Documents.PinnedKeys };
+
+        // the documents kept open are part of how the Silo's tree is remembered (see ExplorerView)
+        Documents.ContentOpened   += (_, _) => _explorer.DocumentsChanged();
+        Documents.ContentReleased += (_, _) => _explorer.DocumentsChanged();
+        Documents.PinnedChanged   += (_, _) => _explorer.DocumentsChanged();
+        _properties               =  new PropertiesView();
+        ExplorerPane.Content      =  _explorer;
+        PropertiesPane.Content    =  _properties;
+        _explorer.NodeSelected    += OnExplorerSelected;
+        _explorer.NodeOpened      += OnExplorerOpened;
+        _explorer.SelectedNodeRefreshed += (_, node) =>
+                                           {
+                                               _properties.Show(node);
+                                               NodeCommandHub.SetCurrent(node); // the tree was rebuilt: the selected node is a new object
+                                           };
+        App.SiloClosing += OnSiloClosing;
+
+        NavTree.ItemsSource       = _topRoots;
+        NavRail.ItemsSource       = _topRoots;
+        NavTreeBottom.ItemsSource = _bottomRoots;
+        NavRailBottom.ItemsSource = _bottomRoots;
+
+        // author-mode node customisations (label, icon size, hidden) are re-read by every node when they change
+        NodeOverrides.Changed += (_, _) =>
+                                 {
+                                     foreach (var root in AllRoots()) RefreshOverrides(root);
+                                 };
+
+        // The pane starts closed - only the icon gutter shows until the person opens it.
+        NavCollapseToggle.IsChecked = true;
+        ApplyNavState(true);
+
+        SyncNav();
+        OpenSilo.OpenSilos.CollectionChanged += OnOpenSilosChanged;
+
+        // Ctrl+right-click the nav tree (in Author mode or above) for a pink design
+        // menu with a live "Icon Size" slider - see Design/DesignMenu.cs.
+        DesignMenu.EnsureItems(NavTree)
+                  .Add(DesignMenuItem.Slider("Icon Size", DesignLevel.Author, 12, 64, () => AppDesignSettings.Instance.IconSize,
+                                             v => AppDesignSettings.Instance.IconSize = v, "{0:0} px"));
+
+        // The collapsed rail's width tracks the icon size while the slider is dragged.
+        AppDesignSettings.Instance.PropertyChanged += (_, e) =>
+                                                      {
+                                                          if (e.PropertyName              == nameof(AppDesignSettings.IconSize) &&
+                                                              NavCollapseToggle.IsChecked == true)
+                                                              NavColumn.Width = NavCollapsedWidth;
+                                                      };
+
+        // AvalonDock draws its own chrome (tabs, title bars, splitters) from a theme object, not from the palette brushes,
+        // so it is switched alongside the palette.
+        ApplyDockTheme();
+
+        // the layout the window starts with, for "Reset Window Layout" (and the first restore, should a Silo open before this)
+        Loaded += (_, _) => _defaultDockXml ??= CaptureLayout();
+
+        AppTheme.Instance.PropertyChanged += (_, e) =>
+                                             {
+                                                 if (e.PropertyName == nameof(AppTheme.IsEffectivelyDark)) ApplyDockTheme();
+                                             };
+
+        AddFileDesignMenu();
+
+        // Ctrl+N / Ctrl+O / Ctrl+S ... -- the keys shown beside the menu items (see Commanding/Shortcuts.cs).
+        Shortcuts.Install(this);
+
+        // Drag a .silo file (or a link to one) onto the window to open it: a Solo Silo or a URL then gets a process of its own.
+        AllowDrop =  true;
+        DragOver  += OnDragOverSilo;
+        Drop      += OnDropSilo;
+
+        // Window title: "<file>[*] - Silo" for the active Silo; the star marks unsaved changes.
+        App.ActiveSiloChanged += (_, _) =>
+                                 {
+                                     WatchActiveSilo();
+                                     QueueNavSync();
+                                 };
+        WatchActiveSilo();
+    }
+
+    /// <summary>
+    ///     The arrangement of the panes as AvalonDock XML: which dock they sit in, their sizes, the floating ones, the hidden
+    ///     ones.
+    ///     Documents are left out -- the tabs are opened afresh each time.
+    /// </summary>
+    public string? CaptureLayout()
+    {
+        try
+        {
+            var xml = new StringBuilder();
+            using (var writer = new StringWriter(xml))
+            {
+                new XmlLayoutSerializer(DockHost).Serialize(writer);
+            }
+
+            var doc = XDocument.Parse(xml.ToString());
+            foreach (var element in doc.Descendants()
+                                       .Where(e => e.Name.LocalName is "LayoutDocument" or "LayoutDocumentFloatingWindow")
+                                       .ToList())
+                element.Remove();
+
+            return doc.ToString(SaveOptions.DisableFormatting);
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Could not capture the dock layout");
+            return null;
+        }
+    }
+
+    /// <summary>
+    ///     Puts the panes back where <paramref name="layout" /> says. What the panes show stays; the open tabs are carried
+    ///     over
+    ///     into the document pane of the new layout; a pane the layout does not have is closed (the View menu opens it again).
+    /// </summary>
+    public void RestoreLayout(string layout)
+    {
+        _defaultDockXml ??= CaptureLayout();
+
+        var fixedPanes = new Dictionary<string, LayoutAnchorable>
+                         { ["explorer"] = ExplorerPane, ["properties"] = PropertiesPane, ["toolbox"] = ToolboxPane };
+        var contents = fixedPanes.ToDictionary(p => p.Key, p => p.Value.Content);
+        var tools    = ToolBase.PaneTools().ToDictionary(t => "tool:" + t.Name);
+
+        // the tabs are made again by nobody: take them out of the old layout and put them in the new one
+        var tabs = DockHost.Layout.Descendents().OfType<LayoutDocument>().Select(d => (Doc: d, d.Content, Selected: d.IsSelected)).ToList();
+        foreach (var tab in tabs) tab.Doc.Content = null;
+
+        var placed      = new Dictionary<string, LayoutAnchorable>();
+        var placedTools = new List<(ToolBase Tool, LayoutAnchorable Pane)>();
+        try
+        {
+            var serializer = new XmlLayoutSerializer(DockHost);
+            serializer.LayoutSerializationCallback += (_, e) =>
+                                                      {
+                                                          if (e.Model is LayoutAnchorable { ContentId: { } id } anchorable)
+                                                          {
+                                                              if (contents.TryGetValue(id, out var content))
+                                                              {
+                                                                  e.Content  = content;
+                                                                  placed[id] = anchorable;
+                                                                  return;
+                                                              }
+
+                                                              if (tools.TryGetValue(id, out var tool))
+                                                              {
+                                                                  e.Content = tool.BuildPaneContent();
+                                                                  placedTools.Add((tool, anchorable));
+                                                                  return;
+                                                              }
+                                                          }
+
+                                                          e.Cancel = true; // a document, or something this version does not have
+                                                      };
+
+            using var reader = new StringReader(layout);
+            serializer.Deserialize(reader);
+        }
+        catch
+        {
+            foreach (var tab in tabs) tab.Doc.Content = tab.Content;
+            throw;
+        }
+
+        // the panes of the new layout are the ones the rest of this window talks to; a pane the layout left out starts closed
+        foreach (var (id, old) in fixedPanes)
+        {
+            var pane = placed.GetValueOrDefault(id) ?? new LayoutAnchorable { Title = old.Title, ContentId = id, Content = contents[id] };
+            switch (id)
+            {
+                case "explorer":   ExplorerPane   = pane; break;
+                case "properties": PropertiesPane = pane; break;
+                default:           ToolboxPane    = pane; break;
+            }
+        }
+
+        foreach (var (tool, pane) in placedTools) tool.AdoptPane(pane);
+        foreach (var tool in tools.Values.Where(t => placedTools.All(p => p.Tool != t))) tool.ResetPane();
+
+        Documents.Adopt(tabs);
+    }
+
+    private sealed record SiloNav(AppNavNode Node, EventHandler Renamed);
 }

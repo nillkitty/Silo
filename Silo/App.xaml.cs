@@ -18,6 +18,7 @@ using Silo.Model;
 using Silo.Settings;
 using Silo.Theming;
 using Silo.Ui;
+using Silo.Ui.Windows;
 using Silo.UI;
 using Silo.ViewModel;
 using Telefrag.DI;
@@ -514,8 +515,32 @@ public partial class App : Application, IContainerHost
         return silo;
     }
 
-    private static void Alert(string creatingThisItemRequiresAnOpenActiveSilo)
+    /// <summary>
+    ///     Tells the person something went wrong (or needs their attention) in a window whose text they can select and copy.
+    ///     Safe to call from any thread: it is shown on the UI thread and returns when the person closes it. With no UI (a
+    ///     command-line run) the message is only logged.
+    /// </summary>
+    /// <param name="message">What to say.</param>
+    /// <param name="title">The window's title; the application's name when omitted.</param>
+    public static void Alert(string message, string? title = null)
     {
-        throw new NotImplementedException();
+        Log.Warning("Alert: {message}", message);
+
+        if (Current is not { Dispatcher: var dispatcher })
+        {
+            Console.Error.WriteLine(message);
+            return;
+        }
+
+        if (dispatcher.CheckAccess())
+            AlertDialog.Show(message, title);
+        else
+            dispatcher.Invoke(() => AlertDialog.Show(message, title));
+    }
+
+    /// <summary>Like <see cref="Alert(string, string?)" /> for an exception: <paramref name="what" /> (what was being done), then the exception's message.</summary>
+    public static void Alert(Exception ex, string what)
+    {
+        Alert($"{what}\n\n{ex.Message}", null);
     }
 }

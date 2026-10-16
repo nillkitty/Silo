@@ -4,6 +4,8 @@ using System.IO;
 using Microsoft.Win32;
 using Serilog;
 using Silo.Connectors;
+using Silo.Credentials;
+using Silo.Crypto;
 using Silo.DbModel.Sqlite;
 using Silo.Extensions;
 using Silo.Hosting;
@@ -21,9 +23,19 @@ namespace Silo.Model;
 ///     If <see cref="Solo" /> is true, the Silo was opened in its own process,
 ///     because it defines a custom set of assemblies.
 /// </summary>
-public class OpenSilo : ModelBase
+public partial class OpenSilo : ModelBase
 {
+    [Toggle("silo.alwaysExpand",
+            "Whether the Silo should expand to a directory even when using compact" + " format (which is a single bytestream)", false)]
+    public bool AlwaysExpandToDirectory { get; set; }
+
+    [Toggle("silo.autoImportExtraFiles",
+            "Whether files added to the expanded directory are auto-imported " + "(versus lost) when clearing the expansion directory",
+            false)]
+    public bool AutoImportExtraFiles { get; set; }
+
     public SiloCommands Commands => field ??= new SiloCommands(this);
+
 
     public required Container Components { get; init; }
 
@@ -35,13 +47,29 @@ public class OpenSilo : ModelBase
     /// </summary>
     public ObservableCollection<IConnection> Connections { get; } = [];
 
-    public IDatabaseProvider Data         { get; private set; }
-    public ISiloEncryption   Encryption   => Components.Require<ISiloEncryption>();
-    public SiloFile?         File         { get; private set; }
-    public FileInfo?         FileInfo     => File is { } f ? new FileInfo(f.FilePath) : null;
-    public string?           FilePath     => FileInfo?.FullName;
-    public bool              IsAuthorable => UserContext.IsAuthorable;
-    public bool              IsDeveloper  => UserContext.IsDeveloper;
+    public IDatabaseProvider Data       { get; private set; }
+
+    private CredentialService? _credentials;
+    private SiloEncryption?    _encryption;
+
+    /// <summary>How this Silo keeps its secrets: sealed with a data key that a pluggable protector (the Windows account by default) has locked.</summary>
+    /// <exception cref="NotSupportedException">The Silo's storage cannot keep secrets.</exception>
+    public ISiloEncryption Encryption => _encryption ??= Data is ISecretStore store
+                                                             ? new SiloEncryption(store, SecretProtectors.Available())
+                                                             : throw new NotSupportedException("This Silo's storage cannot keep secrets.");
+
+    /// <summary>The saved credentials of this Silo; null when its storage cannot keep secrets.</summary>
+    public CredentialService? Credentials => Data is ISecretStore store ? _credentials ??= new CredentialService(store, Encryption) : null;
+
+    public SiloFile?         File       { get; private set; }
+    public FileInfo?         FileInfo   => File is { } f ? new FileInfo(f.FilePath) : null;
+    public string?           FilePath   => FileInfo?.FullName;
+
+    [Toggle("silo.foregroundReconnect", "Whether to force all (re)connections to happen synchronously", false)]
+    public bool ForegroundReconnect { get; set; }
+
+    public bool IsAuthorable => UserContext.IsAuthorable;
+    public bool IsDeveloper  => UserContext.IsDeveloper;
 
     /// <summary>
     ///     True when the document has changes that are not yet saved to its .silo file. Set when the provider reports a
@@ -75,8 +103,27 @@ public class OpenSilo : ModelBase
     public static OpenSilo                       OnlySilo  => OpenSilos is [OpenSilo os] ? os : null;
     public static ObservableCollection<OpenSilo> OpenSilos { get; } = [];
 
+    [Toggle("silo.reconnectConnections", "Whether to reconnect persisted connections upon reopening a Silo", true)]
+    public bool ReconnectConnections { get; set; } = true;
+
+    [Toggle("silo.rememberConnections", "Whether connections created are persisted if not explicitly removed", true)]
+    public bool RememberConnections { get; set; } = true;
+
+    [Toggle("silo.rememberExplorerTree", "Whether the state of the explorer pane is persisted", true)]
+    public bool RememberExplorerTree { get; set; } = true;
+
+    [Toggle("silo.rememberWindowLayouts", "Whether the sizes and positions of windows and panes are persisted", true)]
+    public bool RememberWindowLayouts { get; set; } = true;
+
+    [Toggle("silo.rememberWindowPopouts", "Whether the pop-out state of windows/panes is persisted", true)]
+    public bool RememberWindowPopouts { get; set; } = true;
+
     /// <summary>The URL this Silo is synced with, if it was opened from one (<see cref="OpenRemoteAsync" />).</summary>
     public Uri? RemoteUri { get; private set; }
+
+    [Toggle("silo.reopenMe",
+            "Whether the app should re-open this Silo if launched with no other document, " + "and this Silo is local", true)]
+    public bool ReopenMe { get; set; } = true;
 
     /// <summary>
     ///     Work to run before the document is written (and before it is closed): a tool with changes it has not handed to
@@ -85,6 +132,9 @@ public class OpenSilo : ModelBase
     public List<Func<Task>> SaveHooks { get; } = [];
 
     public ISiloUserContext UserContext { get; private set; }
+
+    /// <summary>The preferences of the Silo itself are kept in the Silo (its <c>Pref</c> table).</summary>
+    protected override IPreferenceStore? PreferenceStore => Data as IPreferenceStore;
 
     /// <summary>Raised (on the UI thread) when <see cref="IsDirty" /> or the file name changes.</summary>
     public event EventHandler? StateChanged;
@@ -146,6 +196,7 @@ public class OpenSilo : ModelBase
         a.NotifySiloOpening(c, c);
         c.Attach(Database.Load(file));
         a.NotifySiloOpened(c, c);
+        c.BeginRestoreConnections();
         return c;
     }
 
@@ -203,6 +254,14 @@ public class OpenSilo : ModelBase
     {
         Data        = provider;
         UserContext = provider.GetUserContext();
+
+        // the Silo's own preferences: what it holds, else the defaults; and what code changed is written before a save or close
+        LoadPreferences();
+        SaveHooks.Add(() =>
+                      {
+                          SavePreferences();
+                          return Task.CompletedTask;
+                      });
 
         if (provider is IDatabaseChanges changes)
             changes.Changed += (_, _) => Dispatcher.BeginInvoke(new Action(() => SetDirty(true)));
@@ -398,6 +457,10 @@ public class OpenSilo : ModelBase
             }
         }
 
+        // from here the Silo is going away: nothing about it is written any more, and connections no longer come back
+        IsClosing = true;
+        _closing.Cancel();
+
         var app = App.Instance!;
         app.NotifySiloClosing(this, this);
 
@@ -432,10 +495,10 @@ public class OpenSilo : ModelBase
         Connections.Add(result.Connection);
         _ = InitConnectionAsync(result.Connection, ConnectReason.UserCreate);
 
-        if (Data is IConnectionStore store)
+        if (RememberConnections && Data is IConnectionStore store)
             try
             {
-                store.SaveConnection(result.Name, result.Uri);
+                _savedIds[result.Connection] = store.SaveConnection(result.Name, result.Uri).Id;
             }
             catch (Exception ex)
             {
@@ -454,21 +517,34 @@ public class OpenSilo : ModelBase
     {
         try
         {
-            await connection.InitAsync(new ConnectContext(reason, Nodes));
-
-            if (connection is INodeProvider provider)
-            {
-                // a connection that already created its node through the context has nothing more to add
-                if (connection.Node is { } own && Nodes.Contains(own))
-                    return;
-
-                Nodes.Add(provider);
-            }
+            await InitConnectionCoreAsync(connection, reason, false);
         }
         catch (Exception ex)
         {
             Log.Warning(ex, "Initializing the connection {name} failed", connection.DisplayText ?? connection.Connector.DisplayName);
             App.Status($"The connection could not be initialized: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    ///     <see cref="InitConnectionAsync" /> without the error handling: throws when the connection cannot be initialized.
+    /// </summary>
+    /// <param name="inBackground">Run the connector's <c>InitAsync</c> on a worker thread, so a connector that does its work synchronously cannot hold the UI up.</param>
+    private async Task InitConnectionCoreAsync(IConnection connection, ConnectReason reason, bool inBackground)
+    {
+        var context = new ConnectContext(reason, Nodes);
+        if (inBackground)
+            await Task.Run(() => connection.InitAsync(context));
+        else
+            await connection.InitAsync(context);
+
+        if (connection is INodeProvider provider)
+        {
+            // a connection that already created its node through the context has nothing more to add
+            if (connection.Node is { } own && Nodes.Contains(own))
+                return;
+
+            Nodes.Add(provider);
         }
     }
 

@@ -1,16 +1,21 @@
-﻿using System.Linq;
+﻿using System.Windows.Media;
 using Silo.Model;
+using Silo.Ui.Documents;
 using Silo.ViewModel;
 
 namespace Silo.Explorer;
 
 /// <summary>
-///     Turns the <see cref="SiloNode" />s that connections, tools and documents contribute (see <see cref="INodeProvider" />
+///     Turns the <see cref="SiloNode" />s that connections, tools and documents contribute (see
+///     <see cref="INodeProvider" />
 ///     and <see cref="NodeHost" />) into <see cref="ExplorerNode" />s, so they show up as roots of the Explorer tree.
 /// </summary>
 public static class ProvidedNodes
 {
-    /// <summary>The Explorer roots for everything contributed to the app (tools) and to <paramref name="silo" /> (connections, documents).</summary>
+    /// <summary>
+    ///     The Explorer roots for everything contributed to the app (tools) and to <paramref name="silo" /> (connections,
+    ///     documents).
+    /// </summary>
     public static IEnumerable<ExplorerNode> For(OpenSilo silo)
     {
         var seen = new HashSet<string>(StringComparer.Ordinal);
@@ -31,7 +36,7 @@ public static class ProvidedNodes
 
     private static ExplorerNode Adapt(SiloNode source, string parentKey, int index, HashSet<string> seen)
     {
-        string key = KeyOf(source, parentKey, index, seen);
+        string key  = KeyOf(source, parentKey, index, seen);
         string kind = KindOf(source.DataContext);
 
         // children that are read when the node is first expanded: until then it shows a "Loading..." entry, which makes it expandable
@@ -40,15 +45,29 @@ public static class ProvidedNodes
         ExplorerNode? self = null;
         var node = new ExplorerNode(key, HeaderOf(source), kind, IconKeyOf(source, kind))
                    {
-                       DocKey          = source.DataContext is INodeViewProvider ? "provided:" + key : null,
-                       Open            = source.DataContext is INodeViewProvider provider ? () => provider.BuildView() ?? NodeViews.Build(self!) : null,
+                       DocKey =
+                           source.DataContext is INodeViewProvider
+                               ? "provided:" + key
+                               : null,
+                       Open =
+                           source.DataContext is INodeViewProvider
+                               provider
+                               ? () => provider.BuildView() ??
+                                       NodeViews.Build(self!)
+                               : null,
                        ExpandByDefault = source.IsExpanded,
-                       Stamp           = source.Children.Count + (lazy ? "?" : string.Empty),
-                       Details         = () => DetailsOf(source, kind),
-                       Actions         = () => ActionsOf(source),
-                       Commands        = source.DataContext as ICommandProvider,
-                       Activate        = ActivateOf(source),
-                       LoadChildren    = lazy ? () => source.LoadChildrenAsync() : null
+                       Stamp = source.Children.Count +
+                               (lazy ? "?" : string.Empty),
+                       Details = () => DetailsOf(source, kind),
+                       Actions = () => ActionsOf(source),
+                       Commands =
+                           source.DataContext as ICommandProvider,
+                       Model    = source.DataContext,
+                       Activate = ActivateOf(source),
+                       LoadChildren =
+                           lazy
+                               ? () => source.LoadChildrenAsync()
+                               : null
                    };
 
         self = node;
@@ -63,10 +82,13 @@ public static class ProvidedNodes
         return node;
     }
 
-    /// <summary>Stable across rebuilds (so expansion and selection survive): the node's URI if it has one, else its place in the tree.</summary>
+    /// <summary>
+    ///     Stable across rebuilds (so expansion and selection survive): the node's URI if it has one, else its place in
+    ///     the tree.
+    /// </summary>
     private static string KeyOf(SiloNode source, string parentKey, int index, HashSet<string> seen)
     {
-        Uri? uri = source.Uri;
+        Uri?   uri = source.Uri;
         string key = uri is null ? $"{parentKey}/{index}" : $"{parentKey}/{uri.OriginalString}";
         if (!seen.Add(key))
         {
@@ -84,9 +106,9 @@ public static class ProvidedNodes
         return source.DataContext switch
                {
                    IConnection c => c.DisplayText is { Length: > 0 } name ? name : c.Connector.DisplayName,
-                   ITool t       => t.Header,
-                   Silo.Ui.Documents.IDocumentContent { DocumentTitle: { Length: > 0 } title } => title,
-                   var other     => other?.ToString() is { Length: > 0 } text ? text : other?.GetType().Name ?? "Node"
+                   ITool t => t.Header,
+                   IDocumentContent { DocumentTitle: { Length: > 0 } title } => title,
+                   var other => other?.ToString() is { Length: > 0 } text ? text : other?.GetType().Name ?? "Node"
                };
     }
 
@@ -94,13 +116,13 @@ public static class ProvidedNodes
     {
         return context switch
                {
-                   IConnection => "Connection",
-                   INodeDetails details => details.KindText,
-                   ITool       => "Tool",
-                   Silo.Ui.Documents.IDocumentContent => "Document",
-                   UIElement   => "Document",
-                   null        => "Node",
-                   _           => context.GetType().Name
+                   IConnection          => "Connection",
+                   INodeDetails details => details.TypeName,
+                   ITool                => "Tool",
+                   IDocumentContent     => "Document",
+                   UIElement            => "Document",
+                   null                 => "Node",
+                   _                    => context.GetType().Name
                };
     }
 
@@ -108,7 +130,7 @@ public static class ProvidedNodes
     private static string IconKeyOf(SiloNode source, string kind)
     {
         string? given = source.Icon is { IsAbsoluteUri: false } icon ? icon.OriginalString : null;
-        if (!string.IsNullOrEmpty(given) && Application.Current?.TryFindResource(given) is System.Windows.Media.Geometry) return given;
+        if (!string.IsNullOrEmpty(given) && Application.Current?.TryFindResource(given) is Geometry) return given;
 
         return kind switch
                {
@@ -139,7 +161,7 @@ public static class ProvidedNodes
             yield return ("Open", t.IsChecked ? "Yes" : "No");
         }
 
-        if (((Uri?)source.Uri) is { } uri) yield return ("URI", uri.OriginalString);
+        if ((Uri?)source.Uri is { } uri) yield return ("URI", uri.OriginalString);
         if (source.Children.Count > 0) yield return ("Contains", source.Children.Count + " item(s)");
     }
 
@@ -161,9 +183,9 @@ public static class ProvidedNodes
                 break;
             case IConnection c:
                 yield return new ExplorerAction("_Open window", () =>
-                                                                 {
-                                                                     if (c.BuildWindow() is { } window) window.Show();
-                                                                 });
+                                                                {
+                                                                    if (c.BuildWindow() is { } window) window.Show();
+                                                                });
                 break;
         }
     }

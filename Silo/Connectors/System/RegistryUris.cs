@@ -14,7 +14,9 @@ public static class RegistryUris
                                                                    ["hku"]                   = "hkey_users",
                                                                    ["hkey_users"]            = "hkey_users",
                                                                    ["hkcc"]                  = "hkey_current_config",
-                                                                   ["hkey_current_config"]   = "hkey_current_config"
+                                                                   ["hkey_current_config"]   = "hkey_current_config",
+                                                                   ["hkpd"]                  = "hkey_performance_data",
+                                                                   ["hkey_performance_data"] = "hkey_performance_data"
                                                                };
 
     /// <summary>
@@ -37,6 +39,39 @@ public static class RegistryUris
 
         string path = string.Join('/', new[] { hive }.Concat(parts.Skip(1).Select(Uri.EscapeDataString)));
         return Uri.TryCreate("reg:///" + path, UriKind.Absolute, out var uri) ? uri : null;
+    }
+
+    /// <summary>What a value with no name (the key's "(Default)" value) is called in a URI, which has no way to say "the empty name".</summary>
+    public const string DefaultValueName = "(Default)";
+
+    /// <summary>
+    ///     The <c>reg:</c> URI of a key, given its full name as <c>RegistryKey.Name</c> spells it
+    ///     (<c>HKEY_CURRENT_USER\Software\Silo</c>), and of one of its values when <paramref name="valueName" /> is given
+    ///     (<c>reg:///hkey_current_user/Software/Silo?Name</c>: the whole query is the value's name; an empty name is
+    ///     <see cref="DefaultValueName" />). An empty key name is the local registry's root, <c>reg:///</c>. The opposite of
+    ///     <see cref="RegistryUriProvider.ParseUri" />.
+    /// </summary>
+    public static Uri FromKeyName(string? keyName, string? valueName = null)
+    {
+        var parts = (keyName ?? string.Empty).Split(['\\', '/'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
+        if (parts.Count > 0 && parts[0].Equals("Computer", StringComparison.OrdinalIgnoreCase)) parts.RemoveAt(0);
+
+        string text = "reg:///";
+        if (parts.Count > 0)
+        {
+            string hive = Hives.TryGetValue(parts[0].TrimEnd(':'), out var known) ? known : Uri.EscapeDataString(parts[0]);
+            text += string.Join('/', new[] { hive }.Concat(parts.Skip(1).Select(Uri.EscapeDataString)));
+        }
+
+        if (valueName is not null) text += "?" + Uri.EscapeDataString(valueName.Length == 0 ? DefaultValueName : valueName);
+
+        return new Uri(text, UriKind.Absolute);
+    }
+
+    /// <summary>The <c>reg:</c> URI of a <see cref="RegistryPath" />: its key, or its value when it names one.</summary>
+    public static Uri FromPath(RegistryPath path)
+    {
+        return FromKeyName(path.Required().FullName, path.ValueName);
     }
 
     /// <summary>Whether the text names a registry location <paramref name="connector" /> will take, and if not, why.</summary>

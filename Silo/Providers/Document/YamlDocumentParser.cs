@@ -45,10 +45,11 @@ internal sealed class YamlDocumentParser
 
         while (true)
         {
-            // Comments before the first document, or between two documents, have no sibling
-            // node in the tree to attach to -- they're collected (so they don't trip up the
-            // event-type checks below) and then simply dropped.
-            CollectComments();
+            // Comments before a document (the file's header comment, or a comment between one
+            // document and the next) are collected so they don't trip up the event-type checks
+            // below, and become the document's root node's leading comments. With no document
+            // after them (a file of only comments) they have nothing to attach to and are dropped.
+            var header = CollectComments();
 
             if (Current is StreamEnd) yield break;
 
@@ -59,6 +60,8 @@ internal sealed class YamlDocumentParser
             _unresolvedAliases.Clear();
 
             var root = ReadNode();
+            if (header.Count > 0)
+                root.LeadingComments = [..header, ..root.LeadingComments];
 
             CollectComments(); // trailing comments before '...'/the next '---' -- dropped, same as above.
             Expect<DocumentEnd>();

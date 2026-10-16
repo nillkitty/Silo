@@ -24,19 +24,25 @@
     <PackageReference Include="Serilog.Sinks.File" Version="7.0.0" />
     <PackageReference Include="Serilog.Sinks.Trace" Version="4.0.0" />
     <PackageReference Include="Telefrag.Common" Version="2026.9.11.372" />
-    <PackageReference Include="Dirkster.AvalonDock" Version="4.72.1" />
+    <PackageReference Include="Dirkster.AvalonDock" Version="5.0.1" />
+    <!-- AvalonDock 5 moved XmlLayoutSerializer out of the main package (namespace AvalonDock.Serializer.Xml); MainWindow saves/restores the dock layout with it. -->
+    <PackageReference Include="Dirkster.AvalonDock.Serializer.Xml" Version="5.0.1" />
     <!-- Dark/Light chrome for the docking area (swapped by MainWindow when AppTheme changes). -->
-    <PackageReference Include="Dirkster.AvalonDock.Themes.VS2013" Version="4.72.1" />
+    <PackageReference Include="Dirkster.AvalonDock.Themes.VS2013" Version="5.0.1" />
     <!-- SQLite persistence layer (DbModel/Sqlite/*.cs) -->
-    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.12" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.13" />
+    <!-- SQL Server connector (Connectors/Sql/*.cs) -->
+    <PackageReference Include="Microsoft.Data.SqlClient" Version="7.1.1" />
+    <!-- Credentials: Windows data protection (DPAPI) is the default secret protector (Crypto/DpapiSecretProtector.cs) -->
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="10.0.9" />
     <!-- JsonFormat (Providers/Format/JsonFormat.cs) -->
     <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
     <!-- YamlFormat (Providers/Format/YamlFormat.cs) -->
     <PackageReference Include="YamlDotNet" Version="18.1.0" />
     <!-- MarkdownFormat / MarkdownDataProvider (Providers/Format/MarkdownFormat.cs, MarkdownDataProvider.cs) -->
-    <PackageReference Include="Markdig" Version="1.4.0" />
+    <PackageReference Include="Markdig" Version="1.4.1" />
     <!-- Embedded draw.io (Drawio/*.cs): hosts the draw.io editor in a WebView2 pane -->
-    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4129.50" />
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4258.31" />
     <!--
       Costura folds the managed references into Silo.dll (see FodyWeavers.xml); Silo.exe and Silo.com are small
       stubs that start it. Fody is build-time only.

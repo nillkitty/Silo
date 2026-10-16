@@ -7,6 +7,7 @@ namespace Silo.Providers.Format;
 [Singleton(typeof(IFileFormat))]
 public class ZipFormat : IFileFormat, IArchiveFormat
 {
+    public string ContentType   { get; } = "application/zip";
     public string DisplayName   { get; } = "Zip Archive";
     public string FileExtension { get; } = "zip";
 
@@ -91,6 +92,13 @@ public sealed class ZipArchivedDirectory : IArchivedDirectory, IDisposable
         _files[name] = new ZipArchivedFile(entry);
     }
 
+    internal ZipArchivedDirectory(string? name, ArchivedDirectoryFlags flags, ZipArchive? ownedArchive = null)
+    {
+        Name          = name;
+        Flags         = flags;
+        _ownedArchive = ownedArchive;
+    }
+
     public IEnumerable<IArchivedDirectory> GetDirectories()
     {
         return _directories.Values;
@@ -99,13 +107,6 @@ public sealed class ZipArchivedDirectory : IArchivedDirectory, IDisposable
     public IEnumerable<IArchivedFile> GetFiles()
     {
         return _files.Values;
-    }
-
-    internal ZipArchivedDirectory(string? name, ArchivedDirectoryFlags flags, ZipArchive? ownedArchive = null)
-    {
-        Name          = name;
-        Flags         = flags;
-        _ownedArchive = ownedArchive;
     }
 
     /// <summary>
@@ -144,6 +145,11 @@ public sealed class ZipArchivedFile : IArchivedFile
             if (_entry.CompressedLength < _entry.Length) flags |= ArchivedFileFlags.Compressed;
             return flags;
         }
+    }
+
+    internal ZipArchivedFile(ZipArchiveEntry entry)
+    {
+        _entry = entry.Required();
     }
 
     public Stream? Read()
@@ -187,10 +193,5 @@ public sealed class ZipArchivedFile : IArchivedFile
         {
             return null;
         }
-    }
-
-    internal ZipArchivedFile(ZipArchiveEntry entry)
-    {
-        _entry = entry.Required();
     }
 }

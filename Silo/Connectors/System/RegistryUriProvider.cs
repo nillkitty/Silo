@@ -84,7 +84,8 @@ public class RegistryUriProvider : IUriProvider<RegistryPath>
             pathSegments = segments;
         }
 
-        // No remaining segments means the hive's own root, same sentinel RegistryPath.LocalRoot uses.
+        // No remaining segments means the hive's own root ("*"). That is a hive -- reg:///hkey_local_machine lists the keys of
+        // HKEY_LOCAL_MACHINE, not every hive -- and is not RegistryPath.LocalRoot, which has no hive.
         var path = pathSegments.Length > 0 ? string.Join('\\', pathSegments) : "*";
 
         // The query string (if any) names the value within the key, e.g. "...?AutoConfigUrl" ->

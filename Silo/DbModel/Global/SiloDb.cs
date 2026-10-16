@@ -120,28 +120,47 @@ public class Pref : TimedUserEntity
 /// <summary>
 ///     Stored secret blob;  one row per record
 /// </summary>
+/// <remarks>
+///     <see cref="Data" /> is never plain: it is sealed by the Silo's encryption (<see cref="Silo.Contracts.Providers.Crypto.ISiloEncryption" />),
+///     or, for a <c>datakey</c> row, locked by an <see cref="Silo.Contracts.Providers.Crypto.ISecretProtector" />. The rows are read and
+///     written through <see cref="Silo.Contracts.Providers.Data.ISecretStore" />.
+/// </remarks>
 public class Secret : TimedUserEntity
 {
     [TypeConverter(typeof(ByteArrayConverter))]
     public byte[] Data { get; set; } = [];
 
     public int    Id  { get; set; }
+
+    /// <summary>A name that is not secret: a credential's name, or <c>$datakey</c>.</summary>
     public string Key { get; set; } = string.Empty;
 
-    public OpenSilo UpdateCredential(string user, string pass, string? domain)
-    {
-        throw new NotImplementedException();
-    }
+    /// <summary>What the row holds: <c>credential</c>, <c>datakey</c>.</summary>
+    public string Kind { get; set; } = string.Empty;
+
+    /// <summary>For a <c>datakey</c>, the id of the protector that locked it.</summary>
+    public string Provider { get; set; } = string.Empty;
 }
 
 /// <summary>
 ///     Navigation tree nodes as configured by the user, one row per node
 /// </summary>
+/// <remarks>
+///     Besides nodes the person configured, the Explorer's remembered state (<see cref="Silo.Contracts.Providers.Data.INodeStateStore" />):
+///     one row per node that was expanded, open or selected, whose <see cref="Uri" /> is <c>silo:node?key=</c> and the node's Explorer
+///     key, escaped.
+/// </remarks>
 public class Node : TimedUserEntity
 {
     public int Expanded { get; set; }
     public Uri IconUri  { get; set; } = null!;
     public int Id       { get; set; }
+
+    /// <summary>The node's document was open as a permanent tab when the Silo was last used.</summary>
+    public bool IsOpen { get; set; }
+
+    /// <summary>The node was the selected one in the Explorer.</summary>
+    public bool IsSelected { get; set; }
 
     public bool   IsVisible { get; set; }
     public string Name      { get; set; } = string.Empty;

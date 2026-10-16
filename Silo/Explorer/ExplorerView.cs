@@ -1,10 +1,13 @@
 ﻿using System.Collections.ObjectModel;
 using System.Collections.Specialized;
+using System.ComponentModel;
 using System.Linq;
 using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Threading;
+using Silo.Connectors;
 using Silo.Design;
 using Silo.Drawio;
 using Silo.Model;
@@ -26,7 +29,13 @@ public sealed class ExplorerView : UserControl
     private readonly TextBlock                          _title;
     private readonly TextBlock                          _hint;
 
+    private readonly ExplorerStateSet        _remembered = new();
+    private readonly DispatcherTimer         _saveTimer;
+    private readonly DispatcherTimer         _settleTimer;
+    private readonly HashSet<OpenSilo>       _hooked = new(ReferenceEqualityComparer.Instance);
+
     private OpenSilo? _silo;
+    private bool      _userChoseSelection;
     private string    _signature = string.Empty;
     private string?   _lastSelectedKey;
     private bool      _rebuilding;
@@ -49,9 +58,15 @@ public sealed class ExplorerView : UserControl
         _tree = new TreeView { BorderThickness = new Thickness(0), ItemsSource = _roots, ItemTemplate = MakeTemplate(), ItemContainerStyle = MakeContainerStyle() };
         _tree.SelectedItemChanged        += OnSelectedItemChanged;
         _tree.MouseDoubleClick           += OnDoubleClick;
-        _tree.PreviewMouseLeftButtonDown += (_, _) => _freshSelection = false;
+        _tree.PreviewMouseLeftButtonDown += (_, _) =>
+                                            {
+                                                _freshSelection     = false;
+                                                _userChoseSelection = true; // from now on a remembered selection does not override theirs
+                                            };
+        _tree.PreviewKeyDown             += (_, _) => _userChoseSelection = true;
         _tree.PreviewMouseLeftButtonUp   += OnLeftUp;
         _tree.KeyDown                    += OnKeyDown;
+        _tree.PreviewKeyDown             += OnShortcut;
         _tree.PreviewMouseRightButtonDown += OnRightClick;
         _tree.ContextMenu                =  new ContextMenu();
         _tree.ContextMenuOpening         += OnContextMenuOpening;
@@ -61,6 +76,12 @@ public sealed class ExplorerView : UserControl
         root.Children.Add(_hint);
         root.Children.Add(_tree);
         Content = root;
+
+        // how the tree was left is written shortly after it changes (and always with the Silo's save, see HookSaving)
+        _saveTimer   = new DispatcherTimer(DispatcherPriority.Background, Dispatcher) { Interval = TimeSpan.FromMilliseconds(800) };
+        _saveTimer.Tick += (_, _) => SaveState();
+        _settleTimer = new DispatcherTimer(DispatcherPriority.Background, Dispatcher) { Interval = TimeSpan.FromSeconds(30) };
+        _settleTimer.Tick += (_, _) => Settle();
 
         Loaded += (_, _) => Refresh(false);
 
@@ -78,6 +99,15 @@ public sealed class ExplorerView : UserControl
                                  };
         Refresh(true);
     }
+
+    /// <summary>
+    ///     The keys of the document tabs the person is keeping open (set by the window that holds the tabs); the nodes whose documents these
+    ///     are come back open the next time the Silo is opened.
+    /// </summary>
+    public Func<IReadOnlyCollection<string>>? PinnedDocuments { get; set; }
+
+    /// <summary>A document tab was opened, closed or kept: the remembered state is out of date.</summary>
+    public void DocumentsChanged() => QueueSaveState();
 
     /// <summary>The node selected in the tree now, or null.</summary>
     public ExplorerNode? SelectedNode => _tree.SelectedItem as ExplorerNode;
@@ -155,14 +185,23 @@ public sealed class ExplorerView : UserControl
         {
             if (_silo is not null)
             {
+                SaveState(); // while the tree on screen is still this Silo's
                 _silo.Connections.CollectionChanged -= OnConnectionsChanged;
                 _silo.Nodes.Changed                 -= OnNodesChanged;
+                _silo.ConnectionsRestored           -= OnConnectionsRestored;
             }
+
+            _settleTimer.Stop();
+            _saveTimer.Stop();
+            _remembered.Clear();
+            _userChoseSelection = false;
 
             if (silo is not null)
             {
                 silo.Connections.CollectionChanged += OnConnectionsChanged;
                 silo.Nodes.Changed                 += OnNodesChanged;
+                silo.ConnectionsRestored           += OnConnectionsRestored;
+                LoadRemembered(silo);
             }
             force            = true;
             _lastSelectedKey = null;
@@ -201,8 +240,10 @@ public sealed class ExplorerView : UserControl
         _signature = signature;
 
         var all      = _roots.SelectMany(r => r.Descendants()).ToList();
+        var before   = all.Select(n => n.Key).ToHashSet(StringComparer.Ordinal);
         var expanded = newSilo ? [] : all.Where(n => n.IsExpanded).Select(n => n.Key).ToHashSet();
         var selected = newSilo ? null : all.FirstOrDefault(n => n.IsSelected)?.Key;
+        var restored = new List<NodeStateRecord>();
 
         _rebuilding = true;
         try
@@ -212,8 +253,18 @@ public sealed class ExplorerView : UserControl
 
             foreach (var n in built.SelectMany(r => r.Descendants()))
             {
-                n.IsExpanded = newSilo ? n.ExpandByDefault : expanded.Contains(n.Key) || (n.ExpandByDefault && !all.Any(o => o.Key == n.Key));
+                // a node the Silo remembered, appearing for the first time (it can be long after the tree was first built: a
+                // connection that is still reconnecting, a folder read when it is expanded), takes its remembered state
+                var saved = _remembered.Take(n.Key);
+                if (saved is not null) restored.Add(saved);
+
+                n.IsExpanded = saved is not null
+                                   ? saved.Expanded
+                                   : newSilo
+                                       ? n.ExpandByDefault
+                                       : expanded.Contains(n.Key) || (n.ExpandByDefault && !before.Contains(n.Key));
                 n.IsSelected = n.Key == selected;
+                n.PropertyChanged += OnNodeChanged;
             }
         }
         finally
@@ -236,6 +287,121 @@ public sealed class ExplorerView : UserControl
         {
             SelectedNodeRefreshed?.Invoke(this, current);
         }
+
+        if (restored.Count > 0) ShowRestored(restored, selected is not null);
+    }
+
+    // ---- remembering how the tree was left -----------------------------------------------------
+
+    /// <summary>Reads what the Silo remembered, and makes sure the state is written before the Silo is saved or closed.</summary>
+    private void LoadRemembered(OpenSilo silo)
+    {
+        try
+        {
+            if (silo.RememberExplorerTree && silo.Data is INodeStateStore store) _remembered.Load(store.GetNodeStates());
+        }
+        catch (Exception ex)
+        {
+            Serilog.Log.Warning(ex, "Reading the remembered Explorer state failed");
+        }
+
+        if (_hooked.Add(silo))
+            silo.SaveHooks.Add(() =>
+                               {
+                                   if (ReferenceEquals(_silo, silo)) SaveState();
+                                   return Task.CompletedTask;
+                               });
+    }
+
+    /// <summary>
+    ///     Opens, in permanent tabs, the documents of the nodes that were open when the Silo was last used, then selects the node that was
+    ///     selected -- unless the person has chosen something themselves meanwhile. Done a moment later, when the window has finished
+    ///     setting itself up and the nodes it is about to open exist in the tree that is then showing.
+    /// </summary>
+    private void ShowRestored(IReadOnlyList<NodeStateRecord> restored, bool somethingIsSelected)
+    {
+        var open   = restored.Where(r => r.Open).Select(r => r.Key).ToList();
+        var select = somethingIsSelected || _userChoseSelection ? null : restored.FirstOrDefault(r => r.Selected)?.Key;
+        if (open.Count == 0 && select is null) return;
+
+        var silo = _silo;
+        Dispatcher.BeginInvoke(new Action(() =>
+                                          {
+                                              if (!ReferenceEquals(silo, _silo)) return;
+
+                                              var nodes = _roots.SelectMany(r => r.Descendants()).ToDictionary(n => n.Key, n => n, StringComparer.Ordinal);
+                                              foreach (var key in open)
+                                                  if (nodes.TryGetValue(key, out var node) && node.DocKey is not null && node.Open is not null)
+                                                      NodeOpened?.Invoke(this, node);
+
+                                              if (select is not null && !_userChoseSelection && _tree.SelectedItem is null && nodes.TryGetValue(select, out var chosen))
+                                                  chosen.IsSelected = true;
+                                          }), DispatcherPriority.Background);
+    }
+
+    private void OnNodeChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (!_rebuilding && e.PropertyName is nameof(ExplorerNode.IsExpanded) or nameof(ExplorerNode.IsSelected)) QueueSaveState();
+    }
+
+    private void QueueSaveState()
+    {
+        _saveTimer.Stop();
+        _saveTimer.Start();
+    }
+
+    /// <summary>
+    ///     Writes how the tree is now: the nodes that are expanded, open in a tab or selected (and the default-open nodes that were closed),
+    ///     together with what the Silo remembered for nodes that have not come back yet. Does not make the Silo "modified".
+    /// </summary>
+    private void SaveState()
+    {
+        _saveTimer.Stop();
+
+        var silo = _silo;
+        if (silo is not { RememberExplorerTree: true } || silo.Data is not INodeStateStore store || silo.IsClosing || !OpenSilo.OpenSilos.Contains(silo)) return;
+
+        try
+        {
+            var pinned = (PinnedDocuments?.Invoke() ?? []).ToHashSet(StringComparer.Ordinal);
+            var live   = new List<NodeStateRecord>();
+            foreach (var n in _roots.SelectMany(r => r.Descendants()))
+            {
+                if (n.Kind == "Placeholder") continue; // "Loading..." and the like are not nodes of the tree
+
+                bool open = n.DocKey is not null && n.Open is not null && pinned.Contains(n.DocKey);
+                if (n.IsExpanded || open || n.IsSelected || n.ExpandByDefault)
+                    live.Add(new NodeStateRecord(n.Key, n.Header, n.IsExpanded, open, n.IsSelected));
+            }
+
+            store.SaveNodeStates(_remembered.Merge(live));
+        }
+        catch (Exception ex)
+        {
+            Serilog.Log.Warning(ex, "Remembering the state of the Explorer failed");
+        }
+    }
+
+    private void OnConnectionsRestored(object? sender, EventArgs e)
+    {
+        Dispatcher.BeginInvoke(new Action(() =>
+                                          {
+                                              _settleTimer.Stop();
+                                              if (_remembered.Count > 0) _settleTimer.Start();
+                                          }));
+    }
+
+    /// <summary>
+    ///     The connections have had their chance to come back and a while has passed: remembered nodes that never reappeared (a deleted table,
+    ///     a folder that is gone) are forgotten, except those under a connection that has not come back yet.
+    /// </summary>
+    private void Settle()
+    {
+        _settleTimer.Stop();
+
+        var keep = _roots.SelectMany(r => r.Descendants()).Where(n => n.Model is PendingConnection).Select(n => n.Key).ToList();
+        int dropped = _remembered.DropUnmatched(keep);
+        if (dropped > 0) Serilog.Log.Debug("Forgot {Count} remembered Explorer node(s) that did not come back", dropped);
     }
 
     // ---- interaction -------------------------------------------------------------------------
@@ -290,6 +456,33 @@ public sealed class ExplorerView : UserControl
         {
             item.IsSelected = true;
             item.Focus();
+        }
+    }
+
+    private static readonly KeyGestureConverter Gestures = new();
+
+    /// <summary>A key that is a shortcut of one of the selected node's commands (F5, Ctrl+Shift+C...) runs it.</summary>
+    private void OnShortcut(object sender, KeyEventArgs e)
+    {
+        // typing a letter to jump to an item is not a shortcut: ask the node only for a function key, Delete or a modified key
+        bool candidate = Keyboard.Modifiers != ModifierKeys.None || e.Key is (>= Key.F1 and <= Key.F24) or Key.Delete;
+        if (!candidate || _tree.SelectedItem is not ExplorerNode node) return;
+
+        try
+        {
+            foreach (var c in NodeCommandHub.CommandsFor(node).SelectMany(c => c.SelfAndDescendants()))
+            {
+                if (c.Gesture is not { Length: > 0 } text || Gestures.ConvertFromInvariantString(text) is not KeyGesture gesture) continue;
+                if (!gesture.Matches(_tree, e) || !c.Command.CanExecute(c.Parameter)) continue;
+
+                e.Handled = true;
+                c.Command.Execute(c.Parameter);
+                return;
+            }
+        }
+        catch (Exception ex)
+        {
+            Serilog.Log.Warning(ex, "Running an Explorer shortcut failed");
         }
     }
 

@@ -217,7 +217,7 @@ public static class AppNavTree
                                                                                         () => new EntityListView("IDestination"))),
                                                                       _leaf("Credentials", "Key", connections,
                                                                             view: _view("Credentials",
-                                                                                        () => new EntityListView("ICredential"))),
+                                                                                        () => new CredentialsView())),
                                                                       _leaf("Movements", "Transfer1", connections),
                                                                       _leaf("Jobs", "Folder17", connections,
                                                                             view: _view("Job Controller",

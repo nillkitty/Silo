@@ -1,4 +1,7 @@
-﻿using Silo.ViewModel;
+﻿using System.IO;
+using System.Reflection;
+using Silo.Contracts.Core;
+using Silo.ViewModel;
 
 namespace Silo.Tests.ViewModel;
 
@@ -111,5 +114,64 @@ public class SiloNodeTests
         await node.LoadChildrenAsync();
 
         Assert.That(node.Children, Is.Empty);
+    }
+
+    // ---- DataContext: always the object given ---------------------------------------------------
+
+    private sealed class RawProvider(object? data) : INodeProvider
+    {
+        public object? Data => data;
+
+        public SiloNode? GetNode() => null;
+    }
+
+    [Test]
+    public void A_provider_becomes_the_DataContext_whether_it_is_typed_as_the_provider_or_as_object()
+    {
+        var provider = new RawProvider("raw");
+        object asObject = provider;
+
+        var typed  = new SiloNode(provider);
+        var untyped = new SiloNode(asObject);
+
+        Assert.That(typed.DataContext, Is.SameAs(provider));
+        Assert.That(untyped.DataContext, Is.SameAs(provider));
+    }
+
+    [Test]
+    public void Data_is_the_providers_raw_data_or_else_the_DataContext()
+    {
+        var raw = new object();
+
+        Assert.That(new SiloNode(new RawProvider(raw)).Data, Is.SameAs(raw));
+        Assert.That(new SiloNode(raw).Data, Is.SameAs(raw));
+    }
+
+    [Test]
+    public void No_constructor_takes_a_provider_so_one_object_cannot_be_read_two_ways()
+    {
+        var parameters = typeof(SiloNode).GetConstructors(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)
+                                          .SelectMany(c => c.GetParameters());
+
+        Assert.That(parameters.Select(p => p.ParameterType), Has.None.Matches<Type>(typeof(INodeProvider).IsAssignableFrom));
+    }
+
+    [Test]
+    public void A_file_system_node_keeps_the_FileModel_as_DataContext_and_the_FileSystemInfo_as_Data()
+    {
+        string file = Path.Combine(Path.GetTempPath(), "silo-ctx-" + Guid.NewGuid().ToString("N") + ".txt");
+        global::System.IO.File.WriteAllText(file, "x");
+        try
+        {
+            var model = Silo.Connectors.File.FileConnection.FromPath(new Silo.Connectors.File.FileConnector(), file);
+            var node  = model.GetNode()!;
+
+            Assert.That(node.DataContext, Is.SameAs(model));
+            Assert.That(node.Data, Is.InstanceOf<FileSystemInfo>());
+        }
+        finally
+        {
+            global::System.IO.File.Delete(file);
+        }
     }
 }

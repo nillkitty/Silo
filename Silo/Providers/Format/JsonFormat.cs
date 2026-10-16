@@ -1,9 +1,6 @@
 using System.IO;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
-
-using Silo.Contracts.Providers.Document;
-using Silo.Contracts.Providers.Reflection;
 using Silo.Providers.Document;
 using Telefrag.DI;
 
@@ -19,6 +16,7 @@ public class JsonFormat : IFileFormat, IDocumentProvider<JToken>
                                                           LineInfoHandling              = LineInfoHandling.Load
                                                       };
 
+    public string ContentType   { get; } = "application/json";
     public string DisplayName   { get; } = "JSON File";
     public string FileExtension { get; } = "json";
 
@@ -43,4 +41,27 @@ public class JsonFormat : IFileFormat, IDocumentProvider<JToken>
 /// <summary>
 ///     Represents a JSON document
 /// </summary>
-public class JsonDocument(JsonFormat provider, Uri uri) : DocumentBase<JToken>(provider, uri);
+public class JsonDocument(JsonFormat provider, Uri uri) : DocumentBase<JToken>(provider, uri), IStructuredDataSource
+{
+    public string? AttributePrefix      => null;
+    public string? TextPropertyName     => null;
+    public string? MetaCommentName      => null;
+    public string? MetaTypeHintName     => null;
+    public string? MetaWrapperValueName => null;
+
+    public IEnumerable<JToken> ReadData()
+    {
+        using var fs = new FileStream(uri.LocalPath, FileMode.Open, FileAccess.Read);
+        return provider.Read(fs);
+    }
+
+    public JToken? GetData()
+    {
+        var d = ReadData().ToList();
+        if (d.Count == 1) return d.First();
+
+        if (d.Count == 0) return new JArray();
+
+        return JArray.FromObject(d);
+    }
+}

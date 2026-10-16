@@ -1,7 +1,6 @@
 ﻿using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Windows.Input;
-
 using Silo.Commanding;
 using Silo.Model;
 
@@ -31,14 +30,14 @@ public class SiloCommands(OpenSilo silo)
     /// <summary>Silo -> Import Data</summary>
     public SiloCommand ImportData => new ImportDataCommand(Silo);
 
-    /// <summary>Silo -> Add Data -> Tabular -> ... (the command parameter picks the template: rich, plain or typed)</summary>
-    public SiloCommand NewTable => new NewTableCommand(Silo);
-
     /// <summary>Silo -> New Connectionl</summary>
     public SiloCommand NewConnection => new NewConnectionCommand(Silo);
 
     /// <summary>Silo -> New Credential</summary>
     public SiloCommand NewCredential => new NewCredentialCommand(Silo);
+
+    /// <summary>Silo -> Add Data -> Tabular -> ... (the command parameter picks the template: rich, plain or typed)</summary>
+    public SiloCommand NewTable => new NewTableCommand(Silo);
 
     /// <summary>File -> Save Silo</summary>
     public SiloCommand SaveSilo => new SaveSiloCommand(Silo);
@@ -134,8 +133,8 @@ public record AppCommand : ICommand, INotifyPropertyChanged
         _toggle = toggle.Required();
     }
 
-    public AppCommand(string  header,      Func<object?, Task> execute, Enabler.EnablerFunc? enabler = null, string? toolTip = null,
-                      object? icon = null, bool                isCheckable = false, Checker.CheckerFunc? checker = null)
+    public AppCommand(string  header,      Func<object?, Task>? execute, Enabler.EnablerFunc? enabler = null, string? toolTip = null,
+                      object? icon = null, bool                 isCheckable = false, Checker.CheckerFunc? checker = null)
     {
         _header         = header;
         _executeHandler = execute;

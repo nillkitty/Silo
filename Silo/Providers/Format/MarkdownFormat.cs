@@ -1,10 +1,9 @@
 using System.IO;
 using Markdig;
-using Silo.Providers.Data;
 using Silo.Providers.Document;
+using Telefrag.DI;
 using MarkdigDocument = Markdig.Syntax.MarkdownDocument;
 using Markdown = Markdig.Markdown;
-using Telefrag.DI;
 
 namespace Silo.Providers.Format;
 
@@ -30,6 +29,7 @@ public class MarkdownFormat : IFileFormat, IDocumentProvider<MarkdigDocument>
     /// </summary>
     private static readonly MarkdownPipeline Pipeline = new MarkdownPipelineBuilder().UsePipeTables().Build();
 
+    public string ContentType   { get; } = "text/markdown";
     public string DisplayName   { get; } = "Markdown File";
     public string FileExtension { get; } = "md";
 

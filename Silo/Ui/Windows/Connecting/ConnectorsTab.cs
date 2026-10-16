@@ -3,6 +3,8 @@ using System.Windows.Data;
 using Serilog;
 using Silo.Connectors;
 using Silo.Contracts.ConnectorServices;
+using Silo.Model;
+using Silo.Views;
 
 namespace Silo.Ui.Windows.Connecting;
 
@@ -24,6 +26,8 @@ public sealed class ConnectorsTab : ConnectTab
 {
     private readonly ConnectorSetupContext                  _context;
     private readonly Dictionary<IConnector, IConnectorSetup> _setups = new();
+    private readonly Dictionary<IConnector, CredentialPicker> _pickers = new();
+    private readonly Dictionary<IConnector, UIElement>        _pages = new();
     private readonly ListBox                                _list;
     private readonly TextBlock                              _title;
     private readonly TextBlock                              _description;
@@ -95,8 +99,44 @@ public sealed class ConnectorsTab : ConnectTab
         _description.Text = item.Description ?? string.Empty;
 
         var setup = SetupFor(item.Connector);
-        _page.Content = setup.View;
+        _page.Content = PageFor(item.Connector, setup);
         Refresh();
+    }
+
+    /// <summary>
+    ///     What the right side shows: the connector's own page and, for a connector that can take a credential (<see cref="IAuthenticatable" />),
+    ///     a picker for one of the Silo's saved credentials below it, with New and Edit.
+    /// </summary>
+    private UIElement PageFor(IConnector connector, IConnectorSetup setup)
+    {
+        if (_pages.TryGetValue(connector, out var existing)) return existing;
+        if (connector is not IAuthenticatable auth || _context.Silo is null) return _pages[connector] = setup.View;
+
+        var picker = new CredentialPicker(_context.Silo, auth.AuthFlags.HasFlag(ConnectorAuthFlags.RequireCredential));
+        picker.SelectionChanged += (_, _) =>
+                                   {
+                                       if (ReferenceEquals(_selected, connector)) Refresh();
+                                   };
+        _pickers[connector] = picker;
+
+        var label = new TextBlock { Text = "Credential", FontWeight = FontWeights.SemiBold, Margin = new Thickness(12, 12, 12, 4) };
+        var note = new TextBlock
+                   {
+                       Text         = picker.IsAvailable
+                                          ? "Saved in this Silo, encrypted. Windows sign-in is tried as the connector allows."
+                                          : "This Silo's storage cannot keep credentials.",
+                       Opacity      = 0.65,
+                       TextWrapping = TextWrapping.Wrap,
+                       Margin       = new Thickness(12, 4, 12, 0)
+                   };
+        picker.Margin = new Thickness(12, 0, 12, 0);
+
+        var panel = new StackPanel();
+        panel.Children.Add(setup.View);
+        panel.Children.Add(label);
+        panel.Children.Add(picker);
+        panel.Children.Add(note);
+        return _pages[connector] = panel;
     }
 
     private IConnectorSetup SetupFor(IConnector connector)
@@ -156,11 +196,25 @@ public sealed class ConnectorsTab : ConnectTab
                 return;
             }
 
+            _pickers.TryGetValue(connector, out var picker);
+            if (picker is { Required: true, SelectedId: null })
+            {
+                Set(null, "This connector needs a credential: choose one, or make a new one.", true);
+                return;
+            }
+
             var    request = setup.BuildRequest();
             string name    = string.IsNullOrWhiteSpace(setup.SuggestedName) ? connector.DisplayName : setup.SuggestedName;
             request.Connector   ??= connector;
             request.DisplayName ??= name;
-            Set(new ConnectionTarget(name, request.RequestedUri, cancel => ConnectionCreation.CreateAsync(connector, request, cancel)), null);
+            Set(new ConnectionTarget(name, request.RequestedUri, cancel =>
+                                                                 {
+                                                                     // the credential is opened only now, when it is used, and goes to the connection in the request
+                                                                     request.Metadata.RemoveAll(m => m is Credential);
+                                                                     if (picker?.OpenSelected() is { } credential) request.Metadata.Add(credential);
+
+                                                                     return ConnectionCreation.CreateAsync(connector, request, cancel);
+                                                                 }), null);
         }
         catch (Exception ex)
         {

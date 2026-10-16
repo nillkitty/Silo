@@ -73,6 +73,12 @@ public sealed class ExplorerNode : INotifyPropertyChanged, IOverridableNode
     public ICommandProvider? Commands { get; init; }
 
     /// <summary>
+    ///     The object the node stands for (what a <see cref="Silo.ViewModel.SiloNode" /> holds as its DataContext): the
+    ///     <see cref="Silo.Providers.Action.IActionProvider{TNodeType}" />s for its type offer commands for it.
+    /// </summary>
+    public object? Model { get; init; }
+
+    /// <summary>
     ///     Called when the node is expanded, for a node whose children are read on demand (a folder's contents): starts the
     ///     load, whose result reaches the tree as a change of the node's source (see <see cref="ProvidedNodes" />).
     /// </summary>

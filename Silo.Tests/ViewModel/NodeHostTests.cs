@@ -9,6 +9,8 @@ public class NodeHostTests
     {
         public int Calls { get; private set; }
 
+        public object? Data => null;
+
         public SiloNode? GetNode()
         {
             Calls++;

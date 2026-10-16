@@ -1,4 +1,5 @@
 ﻿using System.Windows.Input;
+using Silo.Commanding;
 using Silo.Explorer;
 
 namespace Silo.Toolbar;
@@ -10,8 +11,16 @@ namespace Silo.Toolbar;
 /// <param name="Parameter">Passed to the command.</param>
 /// <param name="IconKey">A geometry resource key; null for a text-only entry (the node's built-in actions have no icon).</param>
 /// <param name="ToolTip">Explanation, if any.</param>
-/// <param name="Group">Commands of the same group sit together.</param>
+/// <param name="Group">
+///     Commands of the same group sit together, under the group's name as a heading in the menus (no heading when it is null
+///     or empty).
+/// </param>
 /// <param name="OnToolbar">Whether a toolbar button is made for it.</param>
+/// <param name="Gesture">The keyboard shortcut as text ("F5"), shown in the menus and handled while the Explorer has the focus.</param>
+/// <param name="IsChecked">For a switch: whether it is on now (the menu entry is then checkable).</param>
+/// <param name="IsDefault">Shown in bold: it is what the node does by default.</param>
+/// <param name="IsDestructive">Shown in red.</param>
+/// <param name="Children">A submenu's entries.</param>
 public sealed record NodeCommand(
     string   Id,
     string   Header,
@@ -20,12 +29,39 @@ public sealed record NodeCommand(
     string?  IconKey,
     string?  ToolTip,
     string?  Group,
-    bool     OnToolbar);
+    bool     OnToolbar,
+    string?  Gesture       = null,
+    Func<bool>? IsChecked  = null,
+    bool     IsDefault     = false,
+    bool     IsDestructive = false,
+    IReadOnlyList<NodeCommand>? Children = null)
+{
+    /// <summary>The group of the node's built-in actions: nameless (no heading) and apart from the provided commands.</summary>
+    public const string ActionsGroup = "";
+
+    /// <summary>This command and the ones in its submenu, depth first.</summary>
+    public IEnumerable<NodeCommand> SelfAndDescendants()
+    {
+        yield return this;
+        foreach (var child in Children ?? [])
+        foreach (var d in child.SelfAndDescendants())
+            yield return d;
+    }
+
+    /// <summary>The node command for a provided one (its submenu too).</summary>
+    public static NodeCommand From(ProvidedCommand c)
+    {
+        return new NodeCommand(c.Id, c.Header, c.Command, c.Parameter, c.IconKey, c.ToolTip, c.Group, c.Placement.HasFlag(CommandPlacement.Toolbar),
+                               c.Gesture, c.IsChecked, c.IsDefault, c.IsDestructive, c.Children?.Select(From).ToList());
+    }
+}
 
 /// <summary>
-///     Tracks the node that is selected in the Explorer and works out its commands: those it offers through
-///     <see cref="ICommandProvider" /> (<see cref="ExplorerNode.Commands" />) followed by its built-in actions
-///     (<see cref="ExplorerNode.Actions" />, text only).
+///     Tracks the node that is selected in the Explorer and works out its commands: those it offers itself through
+///     <see cref="ICommandProvider" /> (<see cref="ExplorerNode.Commands" />), those the
+///     <see cref="Silo.Providers.Action.IActionProvider{TNodeType}" />s offer for its model (<see cref="ExplorerNode.Model" />),
+///     then its built-in actions (<see cref="ExplorerNode.Actions" />, text only). They are put together by group, the groups in
+///     the order they were first mentioned, except <see cref="ProvidedCommand.LastGroup" />, which is always last.
 /// </summary>
 public static class NodeCommandHub
 {
@@ -50,16 +86,22 @@ public static class NodeCommandHub
 
         try
         {
-            if (node.Commands is { } provider)
-            {
-                foreach (var c in provider.GetCommands())
-                    result.Add(new NodeCommand(c.Id, c.Header, c.Command, c.Parameter, c.IconKey, c.ToolTip, c.Group ?? "commands",
-                                               c.Placement.HasFlag(CommandPlacement.Toolbar)));
-            }
+            foreach (var c in node.Commands?.GetCommands() ?? [])
+                result.Add(NodeCommand.From(c));
         }
         catch (Exception ex)
         {
             Serilog.Log.Warning(ex, "Getting the commands of the Explorer node {Key} failed", node.Key);
+        }
+
+        try
+        {
+            foreach (var c in ActionProviders.CommandsFor(node.Model))
+                result.Add(NodeCommand.From(c));
+        }
+        catch (Exception ex)
+        {
+            Serilog.Log.Warning(ex, "Getting the provided commands of the Explorer node {Key} failed", node.Key);
         }
 
         // the node's built-in actions come last, as text-only entries
@@ -77,9 +119,11 @@ public static class NodeCommandHub
         foreach (var action in actions)
         {
             var run = action.Run;
-            result.Add(new NodeCommand("action:" + n++, action.Header, new Silo.Commanding.DelegateCommand(_ => run()), null, null, null, "actions", true));
+            result.Add(new NodeCommand("action:" + n++, action.Header, new Silo.Commanding.DelegateCommand(_ => run()), null, null, null, NodeCommand.ActionsGroup, true));
         }
 
-        return result;
+        // one block per group, in the order the groups first appear (the last group, if any, after all the rest), each keeping its
+        // commands' order
+        return result.GroupBy(c => c.Group).OrderBy(g => g.Key == ProvidedCommand.LastGroup ? 1 : 0).SelectMany(g => g).ToList();
     }
 }

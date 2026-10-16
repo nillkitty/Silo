@@ -54,6 +54,9 @@ public sealed class DocumentTabs
     /// <summary>A document's content was put in a tab (a new tab, or the preview tab taking it over).</summary>
     public event EventHandler<UIElement>? ContentOpened;
 
+    /// <summary>A preview tab was kept as a permanent tab.</summary>
+    public event EventHandler? PinnedChanged;
+
     /// <summary>A tab's content went away (closed, replaced as a preview, or closed from code). Raised once per <see cref="ContentOpened" />.</summary>
     public event EventHandler<UIElement>? ContentReleased;
 
@@ -92,6 +95,9 @@ public sealed class DocumentTabs
     public IReadOnlyList<string> Keys => _entries.Keys.ToList();
 
     public bool Has(string key) => _entries.ContainsKey(key);
+
+    /// <summary>The keys of the permanent tabs (not the preview tab): the documents the person is keeping open.</summary>
+    public IReadOnlyCollection<string> PinnedKeys => _entries.Where(e => e.Value.Pinned).Select(e => e.Key).ToList();
 
     /// <summary>Whether the preview tab (the single italic tab that clicks reuse) is open.</summary>
     public bool HasPreview => _preview is not null;
@@ -271,6 +277,7 @@ public sealed class DocumentTabs
         e.Pinned    = true;
         e.Doc.Title = Marked(e);
         if (ReferenceEquals(_preview, e)) _preview = null;
+        PinnedChanged?.Invoke(this, EventArgs.Empty);
     }
 
     private static string Marked(Entry e) => e.Pinned ? e.Title : PreviewMark + e.Title;
