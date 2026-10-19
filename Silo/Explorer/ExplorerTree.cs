@@ -1,9 +1,14 @@
 ﻿using System.Linq;
 using AuthoredTable = Silo.DbModel.Global.AuthoredTable;
 using Diagram = Silo.DbModel.Global.Diagram;
+using Silo.Bindings;
+using Silo.Definitions;
+using Silo.Design;
+using SyntaxKind = Silo.DbModel.Meta.SyntaxKind;
 using Silo.Drawio;
 using Silo.DbModel.Worlds;
 using Silo.Model;
+using Silo.Providers.Definitions;
 using Silo.Tabular;
 using Silo.Views;
 
@@ -19,14 +24,25 @@ public static class ExplorerTree
     /// <summary>The key of the document tab the "Tables" list shares between the Explorer and the navigation flyout.</summary>
     public const string TablesDocKey = "view:Tables";
 
+    /// <summary>The keys of the document tabs the "Enums" and "Syntaxes" lists share between the Explorer and the navigation flyout.</summary>
+    public const string EnumsDocKey = "view:Enums";
+
+    public const string SyntaxesDocKey = "view:Syntaxes";
+
     public static IReadOnlyList<ExplorerNode> Build(OpenSilo silo)
     {
-        var roots = new List<ExplorerNode> { BuildLocal(silo) };
+        // whatever connections, tools and documents contribute through INodeProvider / ConnectContext
+        var provided = ProvidedNodes.For(silo).ToList();
+
+        // the Silo's own node (what it keeps: saved characters, strings, shortcuts, ...) comes first, so it is the first thing seen
+        var own   = provided.Where(n => n.Kind == "Silo").ToList();
+        var roots = new List<ExplorerNode>(own) { BuildLocal(silo) };
         if (BuildDiagrams(silo) is { } diagrams) roots.Add(diagrams);
+        if (BuildDataBindings(silo) is { } bindings) roots.Add(bindings);
+        if (BuildTypes(silo) is { } types) roots.Add(types);
         roots.AddRange(BuildConnections(silo));
 
-        // whatever connections, tools and documents contribute through INodeProvider / ConnectContext
-        roots.AddRange(ProvidedNodes.For(silo));
+        roots.AddRange(provided.Except(own));
         return roots;
     }
 
@@ -55,6 +71,7 @@ public static class ExplorerTree
 
         var local = new ExplorerNode("local", "Local", "World", "Database5")
                     {
+                        Realm = Realm.World, WorldKey = LocalWorld.Key,
                         ExpandByDefault = true,
                         Details = () =>
                                   [
@@ -73,6 +90,7 @@ public static class ExplorerTree
         int id = table.Id;
         return new ExplorerNode($"local/tables/{id}", table.Name, "Table", "Data1")
                {
+                   Realm = Realm.World, WorldKey = LocalWorld.Key,
                    DocKey  = TableEditors.DocKey(silo, id),
                    Open    = () => TableEditors.BuildDocument(silo, id, false),
                    Closed  = TableEditors.Release,
@@ -147,6 +165,7 @@ public static class ExplorerTree
         int id = diagram.Id;
         return new ExplorerNode($"diagrams/{id}", diagram.Name, "Diagram", "FlowDiagram")
                {
+                   Realm = Realm.Global,
                    Stamp    = diagram.Modified.Ticks.ToString(),
                    Activate = () => DiagramActions.Open(silo, id),
                    Details  = () => DiagramDetails(store, id),
@@ -174,6 +193,247 @@ public static class ExplorerTree
         yield return ("Opens in", "The Diagram Canvas (double-click)");
         yield return ("Created", diagram.Created.ToLocalTime().ToString("g"));
         yield return ("Modified", diagram.Modified.ToLocalTime().ToString("g"));
+    }
+
+    // ---- data bindings -----------------------------------------------------------------------------
+
+    /// <summary>
+    ///     The live values the Silo samples (performance counters and the like), shown in diagrams as <c>{bind:Name}</c>; null when the Silo
+    ///     cannot hold them.
+    /// </summary>
+    private static ExplorerNode? BuildDataBindings(OpenSilo silo)
+    {
+        if (silo.Data is not IDataBindingStore store) return null;
+
+        IReadOnlyList<DbModel.Global.DataBinding> list;
+        try
+        {
+            list = store.ListDataBindings();
+        }
+        catch (Exception ex)
+        {
+            Serilog.Log.Warning(ex, "Listing the data bindings for the Explorer failed");
+            list = [];
+        }
+
+        var folder = new ExplorerNode("bindings", "Data bindings", "Folder", "DataStructure")
+                     {
+                         Details = () => [("Contains", "Live values sampled while the Silo is open"),
+                                          ("Use", "Put {bind:Name} in a diagram cell's silo-label (Edit Data)"),
+                                          ("Count", list.Count.ToString())],
+                         Actions = () => [new ExplorerAction("_New data binding...", () => DataBindingActions.New(silo))]
+                     };
+
+        foreach (var binding in list)
+            folder.Children.Add(BuildDataBinding(silo, store, binding));
+
+        return folder;
+    }
+
+    private static ExplorerNode BuildDataBinding(OpenSilo silo, IDataBindingStore store, DbModel.Global.DataBinding binding)
+    {
+        int    id   = binding.Id;
+        string name = binding.Name;
+        return new ExplorerNode($"bindings/{id}", name, "DataBinding", "Data1")
+               {
+                   Realm    = Realm.Global,
+                   Stamp    = binding.Modified.Ticks.ToString(),
+                   Activate = () => DataBindingActions.Edit(silo, id),
+                   Details  = () => DataBindingDetails(store, id),
+                   Actions = () =>
+                             [
+                                 new ExplorerAction("_Edit...", () => DataBindingActions.Edit(silo, id)),
+                                 new ExplorerAction("_Copy token", () => DataBindingActions.CopyToken(name)),
+                                 new ExplorerAction("D_elete...", () => DataBindingActions.Delete(silo, id))
+                             ]
+               };
+    }
+
+    private static IEnumerable<(string, string)> DataBindingDetails(IDataBindingStore store, int id)
+    {
+        var b = store.GetDataBinding(id);
+        if (b is null)
+        {
+            yield return ("Data binding", "No longer exists");
+            yield break;
+        }
+
+        yield return ("Name", b.Name);
+        yield return ("Token", "{bind:" + b.Name + "}");
+        yield return ("Source", b.Source);
+        yield return ("Every", b.Interval.TotalSeconds.ToString("0.###") + " s");
+        yield return ("Sampling", b.Enabled ? "While the Silo is open" : "Off");
+        if (DataBindingService.Current.TryGetSample(b.Name, out var sample))
+        {
+            yield return (sample.Error is null ? "Value" : "Error", sample.Error ?? sample.Value?.ToString() ?? "(nothing)");
+            yield return ("Read at", sample.Time.ToLocalTime().ToString("T"));
+        }
+
+        if (b.Description is { Length: > 0 } d) yield return ("Description", d);
+    }
+
+    // ---- enums and syntaxes ------------------------------------------------------------------------
+
+    /// <summary>
+    ///     The types defined in the Silo itself: its enums (<c>enum:Name</c>) and its syntaxes (<c>syntax:Name</c>). Like the diagrams they belong
+    ///     to the Silo rather than to a world; null when the Silo can hold neither.
+    /// </summary>
+    private static ExplorerNode? BuildTypes(OpenSilo silo)
+    {
+        var folders = new List<ExplorerNode>();
+        if (silo.Data is IEnumStore enums) folders.Add(BuildEnums(silo, enums));
+        if (silo.Data is ISyntaxStore syntaxes) folders.Add(BuildSyntaxes(silo, syntaxes));
+        if (folders.Count == 0) return null;
+
+        var types = new ExplorerNode("types", "Types", "Folder", "DataModel")
+                    {
+                        ExpandByDefault = true,
+                        Details         = () => [("Contains", "Enums and syntaxes defined in this Silo"), ("Referred to as", "enum:Name and syntax:Name")]
+                    };
+        foreach (var folder in folders) types.Children.Add(folder);
+        return types;
+    }
+
+    private static ExplorerNode BuildEnums(OpenSilo silo, IEnumStore store)
+    {
+        IReadOnlyList<EnumRecord> list;
+        try
+        {
+            list = store.GetEnums();
+        }
+        catch (Exception ex)
+        {
+            Serilog.Log.Warning(ex, "Listing the enums for the Explorer failed");
+            list = [];
+        }
+
+        var folder = new ExplorerNode("types/enums", "Enums", "Folder", "Checklist")
+                     {
+                         ExpandByDefault = true,
+                         DocKey          = EnumsDocKey,
+                         Open            = () => new EnumsView(),
+                         Details         = () => [("Contains", "Enums defined in this Silo: named sets of known values"), ("Count", list.Count.ToString()), ("Referred to as", "enum:Name")],
+                         Actions         = () => [new ExplorerAction("_New enum...", () => DefinitionActions.NewEnum(silo))]
+                     };
+
+        foreach (var e in list) folder.Children.Add(BuildEnum(silo, e));
+        return folder;
+    }
+
+    private static ExplorerNode BuildEnum(OpenSilo silo, EnumRecord e)
+    {
+        int id = e.Id;
+        var node = new ExplorerNode($"types/enums/{id}", e.Name, "Enum", "Checklist")
+                   {
+                       Realm = Realm.Meta,
+                       Stamp    = DefinitionText.Stamp(e),
+                       Activate = () => DefinitionActions.EditEnum(silo, id),
+                       Details  = () => EnumDetails(e),
+                       Actions = () =>
+                                 [
+                                     new ExplorerAction("_Edit...", () => DefinitionActions.EditEnum(silo, id)),
+                                     new ExplorerAction("_Add value...", () => DefinitionActions.AddValue(silo, id)),
+                                     new ExplorerAction("D_elete...", () => DefinitionActions.DeleteEnum(silo, id))
+                                 ]
+                   };
+
+        foreach (var v in e.Values) node.Children.Add(BuildEnumValue(silo, e, v));
+        return node;
+    }
+
+    private static ExplorerNode BuildEnumValue(OpenSilo silo, EnumRecord e, EnumValueRecord v)
+    {
+        int enumId = e.Id, valueId = v.Id;
+        return new ExplorerNode($"types/enums/{enumId}/{valueId}", DefinitionText.Label(v), "Enum value", "Record")
+               {
+                   Realm = Realm.Meta,
+                   Stamp    = v.Name + "|" + v.Value + "|" + v.Description,
+                   Activate = () => DefinitionActions.EditValue(silo, enumId, valueId),
+                   Details = () =>
+                             [
+                                 ("Label", v.Name),
+                                 ("Value", v.Value ?? string.Empty),
+                                 ("Enum", e.Name),
+                                 ("Type", e.Type.ToString()),
+                                 ("Note", v.Description ?? string.Empty)
+                             ],
+                   Actions = () =>
+                             [
+                                 new ExplorerAction("_Edit...", () => DefinitionActions.EditValue(silo, enumId, valueId)),
+                                 new ExplorerAction("D_elete...", () => DefinitionActions.DeleteValue(silo, enumId, valueId))
+                             ]
+               };
+    }
+
+    private static IEnumerable<(string, string)> EnumDetails(EnumRecord e)
+    {
+        yield return ("Name", e.Name);
+        yield return ("Referred to as", "enum:" + e.Name);
+        yield return ("Values are", DefinitionText.Describe(e.Type));
+        if (DefinitionText.Describe(e.Flags) is { Length: > 0 } flags) yield return ("Flags", flags);
+        if (!string.IsNullOrEmpty(e.Description)) yield return ("Description", e.Description);
+        yield return ("Known values", e.Values.Count.ToString());
+        foreach (var v in e.Values) yield return ("  " + v.Name, v.Value ?? string.Empty);
+    }
+
+    private static ExplorerNode BuildSyntaxes(OpenSilo silo, ISyntaxStore store)
+    {
+        IReadOnlyList<SyntaxRecord> list;
+        try
+        {
+            list = store.GetSyntaxes();
+        }
+        catch (Exception ex)
+        {
+            Serilog.Log.Warning(ex, "Listing the syntaxes for the Explorer failed");
+            list = [];
+        }
+
+        var folder = new ExplorerNode("types/syntaxes", "Syntaxes", "Folder", "Code")
+                     {
+                         ExpandByDefault = false,
+                         DocKey          = SyntaxesDocKey,
+                         Open            = () => new SyntaxesView(),
+                         Details         = () => [("Contains", "Syntaxes defined in this Silo: rules for checking a string and turning it into an object"), ("Count", list.Count.ToString()), ("Referred to as", "syntax:Name")],
+                         Actions = () =>
+                                   [
+                                       new ExplorerAction("_New syntax...", () => DefinitionActions.NewSyntax(silo)),
+                                       new ExplorerAction("_Restore predefined syntaxes", () => DefinitionActions.RestoreDefaults(silo))
+                                   ]
+                     };
+
+        foreach (var s in list) folder.Children.Add(BuildSyntax(silo, s));
+        return folder;
+    }
+
+    private static ExplorerNode BuildSyntax(OpenSilo silo, SyntaxRecord s)
+    {
+        int id = s.Id;
+        return new ExplorerNode($"types/syntaxes/{id}", DefinitionText.NameWithAlias(s), "Syntax", "Code")
+               {
+                   Realm = Realm.Meta,
+                   Stamp    = DefinitionText.Stamp(s),
+                   Activate = () => DefinitionActions.EditSyntax(silo, id),
+                   Details  = () => SyntaxDetails(s),
+                   Actions = () =>
+                             [
+                                 new ExplorerAction("_Edit...", () => DefinitionActions.EditSyntax(silo, id)),
+                                 new ExplorerAction("D_elete...", () => DefinitionActions.DeleteSyntax(silo, id))
+                             ]
+               };
+    }
+
+    private static IEnumerable<(string, string)> SyntaxDetails(SyntaxRecord s)
+    {
+        yield return ("Name", s.Name);
+        if (!string.IsNullOrEmpty(s.Alias)) yield return ("Alias", s.Alias);
+        yield return ("Referred to as", "syntax:" + s.Name + (string.IsNullOrEmpty(s.Alias) ? string.Empty : " or syntax:" + s.Alias));
+        yield return ("Built on", DefinitionText.Source(s));
+        if (s.Kind == SyntaxKind.Pattern && s.Pattern is not null) yield return ("Pattern", s.Pattern);
+        if (s.Kind == SyntaxKind.Parser && SyntaxParsers.Find(s.Parser) is { } parser) yield return ("Becomes", parser.ValueType.Name);
+        if (!string.IsNullOrEmpty(s.Description)) yield return ("Description", s.Description);
+        if (!string.IsNullOrEmpty(s.Example)) yield return ("Example", s.Example);
+        if (s.IsSeeded) yield return ("Origin", "Predefined (came with Silo)");
     }
 
     // ---- connections -------------------------------------------------------------------------------

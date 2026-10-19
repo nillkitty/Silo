@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Windows;
+using Silo.Commanding;
 using Silo.Design;
 
 namespace Silo.Nav;
@@ -23,9 +24,21 @@ namespace Silo.Nav;
 ///     forever. Keeping the parent link on <see cref="AppNavItem" /> and the child link here, on
 ///     a different object, means neither direction is ever reachable from the other.
 /// </remarks>
-public sealed class AppNavNode : INotifyPropertyChanged, IOverridableNode
+public sealed class AppNavNode : INotifyPropertyChanged, IOverridableNode, ICommandProvider, IModelHolder
 {
     public AppNavItem Item { get; }
+
+    /// <summary>The item the node shows: what the providers registered for <see cref="AppNavItem" /> are asked about.</summary>
+    object? IModelHolder.Model => Item;
+
+    /// <summary>The node's right-click menu (see <see cref="ContextCommands" />): open its view as the preview tab or as a tab of its own.</summary>
+    public IEnumerable<ProvidedCommand> GetCommands()
+    {
+        if (Opener is not { } open) yield break;
+
+        yield return ProvidedCommand.From("nav.open", "_Open", () => open(false), placement: CommandPlacement.Menu) with { IsDefault = true };
+        yield return ProvidedCommand.From("nav.openTab", "Open as a _tab", () => open(true), placement: CommandPlacement.Menu);
+    }
 
     /// <summary>
     ///     The child nodes. Observable, so a group can gain or lose children while it is on screen (the Silo's Worlds

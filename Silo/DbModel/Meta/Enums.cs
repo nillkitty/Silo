@@ -21,6 +21,9 @@ public class MvEnum : ItemContainer<MvEnumValue>
     ///     as well as how they are handled internally and displayed.
     /// </summary>
     public EnumType Type { get; set; }
+
+    /// <summary>What the enum is for, in a sentence</summary>
+    public string? Description { get; set; }
 }
 
 /// <summary>
@@ -116,4 +119,7 @@ public class MvEnumValue : Item
     ///     The string representation of the value defined
     /// </summary>
     public string? Value { get; set; }
+
+    /// <summary>What the value means, when the label does not say it</summary>
+    public string? Description { get; set; }
 }

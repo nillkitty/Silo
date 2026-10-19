@@ -54,7 +54,9 @@ public static class NodeViews
             grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
             var name  = Muted(rows[i].Name);
             name.Margin = new Thickness(0, 2, 12, 2);
-            var value = new TextBlock { Text = rows[i].Value, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 2, 0, 2) };
+            FrameworkElement value = rows[i].Value.Contains('\n')
+                                         ? MultilineValue(rows[i].Value)
+                                         : new TextBlock { Text = rows[i].Value, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 2, 0, 2) };
             Grid.SetRow(name, i);
             Grid.SetRow(value, i);
             Grid.SetColumn(value, 1);
@@ -63,6 +65,30 @@ public static class NodeViews
         }
 
         return grid;
+    }
+
+    /// <summary>
+    ///     A value of several lines (a stack trace, say): shown as read-only text in a fixed-width font that can be selected and copied.
+    /// </summary>
+    private static TextBox MultilineValue(string text)
+    {
+        var box = new TextBox
+                  {
+                      Text                      = text,
+                      IsReadOnly                = true,
+                      TextWrapping              = TextWrapping.NoWrap,
+                      BorderThickness           = new Thickness(0),
+                      Background                = System.Windows.Media.Brushes.Transparent,
+                      FontFamily                = new System.Windows.Media.FontFamily("Consolas"),
+                      FontSize                  = 12,
+                      Margin                    = new Thickness(0, 2, 0, 2),
+                      Padding                   = new Thickness(0),
+                      MaxHeight                 = 360,
+                      VerticalScrollBarVisibility   = ScrollBarVisibility.Auto,
+                      HorizontalScrollBarVisibility = ScrollBarVisibility.Auto
+                  };
+        box.SetResourceReference(Control.ForegroundProperty, "Theme.Text");
+        return box;
     }
 
     public static TextBlock Muted(string text)

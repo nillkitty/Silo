@@ -1,9 +1,6 @@
 using Markdig.Extensions.Tables;
 using Markdig.Syntax;
 using Markdig.Syntax.Inlines;
-using Silo.Contracts.Providers.Data;
-using Silo.Contracts.Providers.Data.Source;
-using MarkdigDocument = Markdig.Syntax.MarkdownDocument;
 
 namespace Silo.Providers.Data;
 
@@ -21,15 +18,15 @@ namespace Silo.Providers.Data;
 /// </remarks>
 public class MarkdownDataProvider : IFlatDataProvider
 {
-    private readonly MarkdigDocument _document;
-    private readonly Uri?            _sourceUri;
+    private readonly MarkdownDocument _document;
+    private readonly Uri?             _sourceUri;
 
     public string? DisplayName { get; } = "Markdown Tables & Lists";
 
     /// <summary>
     ///     Walks every block in the tree, depth-first, in document order.
     /// </summary>
-    internal static IEnumerable<Block> Descendants(ContainerBlock container)
+    internal static IEnumerable<Markdig.Syntax.Block> Descendants(ContainerBlock container)
     {
         foreach (var child in container)
         {
@@ -77,8 +74,7 @@ public class MarkdownDataProvider : IFlatDataProvider
                 break;
 
             case ContainerInline container:
-                for (var child = container.FirstChild; child is not null; child = child.NextSibling)
-                    AppendPlainText(builder, child);
+                for (var child = container.FirstChild; child is not null; child = child.NextSibling) AppendPlainText(builder, child);
                 break;
         }
     }
@@ -93,10 +89,15 @@ public class MarkdownDataProvider : IFlatDataProvider
         return new Origin(obj.Line + 1, obj.Column + 1, obj.Span.Start);
     }
 
-    public MarkdownDataProvider(MarkdigDocument document, Uri? sourceUri = null)
+    public MarkdownDataProvider(MarkdownDocument document, Uri? sourceUri = null)
     {
         _document  = document.Required();
         _sourceUri = sourceUri;
+    }
+
+    public IEnumerable<DataVerb> GetSupportedVerbs()
+    {
+        throw new NotImplementedException();
     }
 
     /// <summary>
@@ -134,15 +135,17 @@ public class MarkdownDataProvider : IFlatDataProvider
 /// </summary>
 internal sealed class MarkdownTableDataSource : ITabularDataSource
 {
-    private readonly Table  _table;
-    public           Origin Origin { get; }
+    private readonly Table _table;
 
     public string         CanonicalName   { get; }
+    public Uri            DataSourceUri   { get; }
+    public string?        DefaultAlias    { get; }
     public string         LocalNamespace  { get; }
     public string         NativeNamespace { get; }
     public IDataProvider? Provider        { get; }
 
     public IReadOnlyList<string> ColumnNames { get; }
+    public Origin                Origin      { get; }
 
     private static IReadOnlyList<string> BuildColumnNames(Table table)
     {
@@ -177,17 +180,6 @@ internal sealed class MarkdownTableDataSource : ITabularDataSource
         return string.Join(" ", parts);
     }
 
-    public IEnumerable<IReadOnlyList<string>> GetRows()
-    {
-        foreach (var block in _table)
-        {
-            if (block is not TableRow { IsHeader: false } row)
-                continue;
-
-            yield return BuildRow(row, ColumnNames.Count);
-        }
-    }
-
     public MarkdownTableDataSource(IDataProvider provider, Table table, int ordinal, Uri? sourceUri)
     {
         _table = table.Required();
@@ -197,6 +189,17 @@ internal sealed class MarkdownTableDataSource : ITabularDataSource
         LocalNamespace  = sourceUri?.ToString() ?? string.Empty;
         Origin          = MarkdownDataProvider.OriginOf(table);
         ColumnNames     = BuildColumnNames(table);
+    }
+
+    public IEnumerable<IReadOnlyList<string>> GetRows()
+    {
+        foreach (var block in _table)
+        {
+            if (block is not TableRow { IsHeader: false } row)
+                continue;
+
+            yield return BuildRow(row, ColumnNames.Count);
+        }
     }
 }
 
@@ -208,11 +211,13 @@ internal sealed class MarkdownTableDataSource : ITabularDataSource
 /// </summary>
 internal sealed class MarkdownListDataSource : IListDataSource
 {
-    public bool                     IsOrdered       { get; }
     public string                   CanonicalName   { get; }
+    public Uri                      DataSourceUri   { get; }
+    public string?                  DefaultAlias    { get; } = "md";
     public string                   LocalNamespace  { get; }
     public string                   NativeNamespace { get; }
     public IDataProvider?           Provider        { get; }
+    public bool                     IsOrdered       { get; }
     public IReadOnlyList<IListItem> Items           { get; }
     public Origin                   Origin          { get; }
 

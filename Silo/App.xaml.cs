@@ -288,7 +288,16 @@ public partial class App : Application, IContainerHost
         AppDesignLevel.Apply();
         SiloFileSettings.Apply();
         DesignMenu.Register();
+
+        // Ctrl+Shift+hover: a pink tip showing what an element's right-click menu is built from (Commanding/ContextMenuInspector.cs)
+        global::Silo.Commanding.ContextMenuInspector.Start();
         ResourceIndex.Instance.Build();
+
+        // Shortcut keys kept in the Silo (the Unicode Explorer's hotkeys, for one): Windows hot keys that work in every application.
+        global::Silo.Hotkeys.GlobalHotkeyService.Current.Start();
+
+        // Data bindings ({bind:Name} in diagrams): sampled while their Silo is open.
+        global::Silo.Bindings.DataBindingService.Current.Start();
 
         // Working folders left behind by a crashed Silo process (those still in use are locked and skipped).
         _ = Task.Run(SiloArchive.SweepOrphans);
@@ -348,6 +357,8 @@ public partial class App : Application, IContainerHost
 
     protected override void OnExit(ExitEventArgs e)
     {
+        global::Silo.Hotkeys.GlobalHotkeyService.Current.Stop();
+        global::Silo.Bindings.DataBindingService.Current.Stop();
         SingleInstance.StopServer();
         base.OnExit(e);
     }
@@ -415,9 +426,9 @@ public partial class App : Application, IContainerHost
             if (t.IsInterface) continue;
             if (!t.IsPublic) continue;
 
-            var ca = t.GetCustomAttribute<RegisterAttribute>(true);
-            var ta = t.GetCustomAttribute<TransientAttribute>(true);
-            var sa = t.GetCustomAttribute<SingletonAttribute>(true);
+            var ca = t.GetCustomAttributes<RegisterAttribute>(true)?.FirstOrDefault();
+            var ta = t.GetCustomAttributes<TransientAttribute>(true)?.FirstOrDefault();
+            var sa = t.GetCustomAttributes<SingletonAttribute>(true)?.FirstOrDefault();
             if (ca is { } aa)
             {
                 var r = Components.RegisterSingleton(aa.ServiceType, t, aa.Key, null,

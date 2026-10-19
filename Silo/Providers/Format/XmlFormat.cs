@@ -9,10 +9,16 @@ namespace Silo.Providers.Format;
 [Singleton(typeof(IFileFormat))]
 public class XmlFormat : IFileFormat, IDocumentProvider<XDocument>
 {
-    public LoadOptions Options       { get; set; } = LoadOptions.SetBaseUri | LoadOptions.SetLineInfo;
-    public string      ContentType   { get; }      = "application/xml";
-    public string      DisplayName   { get; }      = "XML File";
-    public string      FileExtension { get; }      = "xml";
+    public LoadOptions Options     { get; set; } = LoadOptions.SetBaseUri | LoadOptions.SetLineInfo;
+    public string      ContentType { get; }      = "application/xml";
+    public string      DisplayName { get; }      = "XML File";
+
+    public string FileExtension { get; } = "xml";
+
+    public IEnumerable<DataVerb> GetSupportedVerbs()
+    {
+        throw new NotImplementedException();
+    }
 
     /// <summary>
     ///     Reads the single XML document in <paramref name="stream" />. XML has no convention for
@@ -33,12 +39,12 @@ public class XmlFormat : IFileFormat, IDocumentProvider<XDocument>
 /// </summary>
 public class XmlDocument(IDocumentProvider<XDocument> provider, Uri uri) : DocumentBase<XDocument>(provider, uri), IStructuredDataSource
 {
-    public string? AttributePrefix  { get; } = "@";
-    public string? TextPropertyName { get; } = "#text";
+    public string? AttributePrefix { get; } = "@";
 
     public string? MetaCommentName      { get; } = "$comment";
     public string? MetaTypeHintName     { get; } = "$type";
     public string? MetaWrapperValueName { get; } = "$value";
+    public string? TextPropertyName     { get; } = "#text";
 
     public XDocument? ReadData()
     {

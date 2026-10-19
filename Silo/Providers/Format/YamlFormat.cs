@@ -30,9 +30,15 @@ namespace Silo.Providers.Format;
 [Singleton(typeof(IFileFormat))]
 public class YamlFormat : IFileFormat, IDocumentProvider<YamlDocNode>
 {
-    public string ContentType   { get; } = "application/yaml";
-    public string DisplayName   { get; } = "YAML File";
+    public string ContentType { get; } = "application/yaml";
+    public string DisplayName { get; } = "YAML File";
+
     public string FileExtension { get; } = "yaml";
+
+    public IEnumerable<DataVerb> GetSupportedVerbs()
+    {
+        throw new NotImplementedException();
+    }
 
     /// <summary>
     ///     Reads every <c>---</c>-separated document in <paramref name="stream" />, in order.
@@ -59,10 +65,10 @@ public class YamlFormat : IFileFormat, IDocumentProvider<YamlDocNode>
 public class YamlDocument(YamlFormat provider, Uri uri) : DocumentBase<YamlDocNode>(provider, uri), IStructuredDataSource
 {
     public string? AttributePrefix      { get; } = null;
-    public string? TextPropertyName     { get; } = null;
     public string? MetaCommentName      { get; } = "$comment";
     public string? MetaTypeHintName     { get; } = "$type";
     public string? MetaWrapperValueName { get; } = "$value";
+    public string? TextPropertyName     { get; } = null;
 
     /// <summary>
     ///     The documents as JSON: no documents give an empty array, one document gives its own value, several give an array of

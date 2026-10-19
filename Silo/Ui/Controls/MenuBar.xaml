@@ -79,7 +79,7 @@
                        CommandTarget="{Binding .}"
                        Command="{Binding Commands.NewConnection}" />
         <MenuItem Header="_Credential" Command="{Binding Commands.NewCredential}" />
-        <MenuItem Header="Convert to _Archive Format" CommandTarget="{Binding .}"  Command="{Binding Commands.ConvertToArchive}" />
+        <MenuItem Header="Convert to _Archive Format..." CommandTarget="{Binding .}"  Command="{Binding Commands.ConvertToArchive}" />
         <Separator />
         <!--
             Add Data: things authored here rather than pulled from a source. Each item hands its kind to the same command
@@ -203,8 +203,13 @@
         same list is in the Explorer's right-click menu and on the toolbar. Disabled while the selected node offers none.
     -->
     <MenuItem x:Name="NodeMenu" Header="_Node" IsEnabled="False" SubmenuOpened="NodeMenu_SubmenuOpened" />
-    <MenuItem Header="_Run">
-
+    <!--
+        One entry per Lab the container knows (Labs/LabHost.cs), filled each time the menu opens
+        (AnalysisMenu_SubmenuOpened): a Lab that is added shows up here without a change to this file. An empty menu item
+        cannot open, so it starts with a stand-in.
+    -->
+    <MenuItem x:Name="AnalysisMenu" Header="_Analysis" SubmenuOpened="AnalysisMenu_SubmenuOpened">
+        <MenuItem Header="(no labs)" IsEnabled="False" />
     </MenuItem>
     <MenuItem Header="_Tools"
                    DataContext="{Binding App.Tools}">

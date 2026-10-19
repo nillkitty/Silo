@@ -3,6 +3,7 @@ using Silo.Model;
 using Silo.Ui.Documents;
 using Silo.ViewModel;
 
+using Silo.Design;
 namespace Silo.Explorer;
 
 /// <summary>
@@ -63,6 +64,8 @@ public static class ProvidedNodes
                        Commands =
                            source.DataContext as ICommandProvider,
                        Model    = source.DataContext,
+                       Realm    = (source.DataContext as IRealmed)?.Realm ?? Realm.None,
+                       WorldKey = (source.DataContext as IRealmed)?.WorldKey,
                        Activate = ActivateOf(source),
                        LoadChildren =
                            lazy

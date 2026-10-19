@@ -1,6 +1,7 @@
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
+using Silo.Labs;
 using Silo.Tabular;
 using Silo.Toolbar;
 using Silo.Ui.Documents;
@@ -85,6 +86,68 @@ public partial class MenuBar : Menu
             NodeMenu.Items.Add(entry);
 
         if (NodeMenu.Items.Count == 0) NodeMenu.Items.Add(new MenuItem { Header = "(no commands)", IsEnabled = false });
+    }
+
+    // ---- Analysis ------------------------------------------------------------------------------
+
+    /// <summary>
+    ///     Lists the Labs the container knows, to open one on its own; below them the Labs that can study what is selected in the
+    ///     Explorer; below those the Lab windows that are open.
+    /// </summary>
+    private void AnalysisMenu_SubmenuOpened(object sender, RoutedEventArgs e)
+    {
+        if (!ReferenceEquals(e.OriginalSource, sender)) return;
+
+        AnalysisMenu.Items.Clear();
+
+        var labs = LabHost.Labs;
+        foreach (var lab in labs)
+        {
+            var l = lab;
+            var item = new MenuItem { Header = "Open " + l.Name.Replace("_", "__"), ToolTip = l.Description };
+
+            // always set, even to nothing: inside the menu bar an implicit style would otherwise read an icon off the command
+            item.Icon = ToolbarIcons.Find(l.IconKey) is { } geometry ? new AppIcon { Icon = geometry, Size = 16 } : null;
+            item.Click += (_, _) => LabHost.Open(l);
+            AnalysisMenu.Items.Add(item);
+        }
+
+        if (labs.Count == 0) AnalysisMenu.Items.Add(new MenuItem { Header = "(no labs)", IsEnabled = false });
+
+        // the selected node, in the Labs that take it
+        var selected = NodeCommandHub.Current;
+        var accepting = selected?.Model is { } model ? LabHost.LabsAccepting(model).ToList() : [];
+        if (accepting.Count > 0)
+        {
+            AnalysisMenu.Items.Add(new Separator());
+            foreach (var (lab, value) in accepting)
+            {
+                var l = lab;
+                var v = value;
+                var item = new MenuItem { Header = $"Open \"{selected!.Display.Replace("_", "__")}\" in {l.Name.Replace("_", "__")}" };
+                item.Icon  = ToolbarIcons.Find(l.IconKey) is { } geometry ? new AppIcon { Icon = geometry, Size = 16 } : null;
+                item.Click += (_, _) => LabHost.Open(l, v);
+                AnalysisMenu.Items.Add(item);
+            }
+        }
+
+        // the windows that are open
+        var windows = LabHost.Windows;
+        if (windows.Count > 0)
+        {
+            AnalysisMenu.Items.Add(new Separator());
+            foreach (var window in windows)
+            {
+                var w = window;
+                var item = new MenuItem { Header = "Window: " + w.Title.Replace("_", "__") };
+                item.Click += (_, _) =>
+                              {
+                                  if (w.WindowState == WindowState.Minimized) w.WindowState = WindowState.Normal;
+                                  w.Activate();
+                              };
+                AnalysisMenu.Items.Add(item);
+            }
+        }
     }
 
     // ---- View ----------------------------------------------------------------------------------

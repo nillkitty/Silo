@@ -514,7 +514,7 @@ public sealed partial class SqliteDatabaseProvider
 
             // 2. The fixed databases (main, x, u, y).
             newConn = SqliteConnectionFactory.OpenAndAttachFixed(newDir);
-            EntitySchema.EnsureFixedSchemas(newConn, SiloLayout.Archive);
+            EntitySchema.EnsureFixedSchemas(newConn, SiloLayout.Archive, seed: false); // the rows come from the simple file, with its syntaxes
             SqliteConnectionFactory.Attach(newConn, _workingFile!, "src");
             CopyTables(newConn, EntitySchema.All.Values.Where(i => i.SchemaKind == SchemaKind.Fixed), i => i.FixedAlias!, i => i.FixedAlias!);
             using (var detach = newConn.CreateCommand())

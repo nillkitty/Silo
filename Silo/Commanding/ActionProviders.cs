@@ -45,23 +45,27 @@ public static class ActionProviders
     /// <summary>The providers that apply to objects of <paramref name="modelType" />, most specific first.</summary>
     public static IReadOnlyList<IActionProvider> ProvidersFor(Type modelType)
     {
-        var table  = Table();
         var result = new List<IActionProvider>();
-
-        void AddFor(Type t)
-        {
-            if (table.TryGetValue(t, out var list))
-                foreach (var p in list)
-                    if (!result.Contains(p))
-                        result.Add(p);
-        }
-
-        for (var t = modelType; t is not null && t != typeof(object); t = t.BaseType)
-            AddFor(t);
-
-        foreach (var i in modelType.GetInterfaces()) AddFor(i);
-        AddFor(typeof(object));
+        foreach (var (_, providers) in Lookup(modelType))
+            foreach (var p in providers)
+                if (!result.Contains(p))
+                    result.Add(p);
         return result;
+    }
+
+    /// <summary>
+    ///     Every type checked for providers of objects of <paramref name="modelType" />, in the order they are checked -- the type
+    ///     itself, each base class, each interface, then <see cref="object" /> -- with the providers registered for each.
+    /// </summary>
+    public static IReadOnlyList<(Type Type, IReadOnlyList<IActionProvider> Providers)> Lookup(Type modelType)
+    {
+        var table = Table();
+        var types = new List<Type>();
+        for (var t = modelType; t is not null && t != typeof(object); t = t.BaseType) types.Add(t);
+        types.AddRange(modelType.GetInterfaces());
+        types.Add(typeof(object));
+
+        return types.Select(t => (t, (IReadOnlyList<IActionProvider>)(table.TryGetValue(t, out var list) ? list.ToList() : []))).ToList();
     }
 
     /// <summary>Adds a provider (one the assembly scan does not find). It is asked for objects of type <typeparamref name="T" />.</summary>

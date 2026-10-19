@@ -4,7 +4,8 @@ using AvalonDock.Layout;
 namespace Silo.Contracts.Core;
 
 /// <summary>
-///     A "Tool" registered with the app which appears in the Tools menu.
+///     A "Tool" registered with the app which appears in the Tools menu, toolbar,
+///     and runnable from REPL/CLI.
 /// </summary>
 [RequireRegistration]
 public interface ITool

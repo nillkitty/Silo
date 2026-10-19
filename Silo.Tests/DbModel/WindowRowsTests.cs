@@ -1,4 +1,5 @@
 using Microsoft.Data.Sqlite;
+using Silo.Contracts.Providers.Data;
 using Silo.DbModel.Global;
 using Silo.DbModel.Sqlite;
 
@@ -21,7 +22,10 @@ public class WindowRowsTests
     }
 
     [TearDown]
-    public void TearDown() => _conn.Dispose();
+    public void TearDown()
+    {
+        _conn.Dispose();
+    }
 
     private void Exec(string sql)
     {
@@ -38,7 +42,9 @@ public class WindowRowsTests
     }
 
     private static WindowRecord Main(int x, string? layout = null, WindowPlacementState state = WindowPlacementState.Normal)
-        => new("Main", "silo:main", x, 20, 800, 600, state, layout);
+    {
+        return new WindowRecord("Main", "silo:main", x, 20, 800, 600, state, layout);
+    }
 
     [Test]
     public void Without_a_user_the_shared_row_is_written_in_place_and_read_back()
@@ -62,9 +68,9 @@ public class WindowRowsTests
         Assert.That(WindowRows.Get(_conn, Table, me, "Main", "silo:main")!.X, Is.EqualTo(1), "falls back to the shared row");
 
         WindowRows.Save(_conn, null, Table, me, [Main(2)]);
-        Assert.That(WindowRows.Get(_conn, Table, me, "Main", "silo:main")!.X, Is.EqualTo(2));
+        Assert.That(WindowRows.Get(_conn, Table, me,   "Main", "silo:main")!.X, Is.EqualTo(2));
         Assert.That(WindowRows.Get(_conn, Table, null, "Main", "silo:main")!.X, Is.EqualTo(1));
-        Assert.That(Count(), Is.EqualTo(2));
+        Assert.That(Count(),                                                    Is.EqualTo(2));
     }
 
     [Test]
@@ -72,10 +78,10 @@ public class WindowRowsTests
     {
         Exec("INSERT INTO [User] (Domain, Name, SID, [Group]) VALUES ('D', 'D\\me', 'S-1', 0)");
 
-        Assert.That(WindowRows.FindUserId(_conn, Users, "other", "S-1"), Is.Not.Null);
-        Assert.That(WindowRows.FindUserId(_conn, Users, "D\\me", ""), Is.Not.Null);
+        Assert.That(WindowRows.FindUserId(_conn, Users, "other",    "S-1"), Is.Not.Null);
+        Assert.That(WindowRows.FindUserId(_conn, Users, "D\\me",    ""),    Is.Not.Null);
         Assert.That(WindowRows.FindUserId(_conn, Users, "D\\other", "S-2"), Is.Null);
-        Assert.That(WindowRows.FindUserId(_conn, Users, "D\\other", ""), Is.Null);
+        Assert.That(WindowRows.FindUserId(_conn, Users, "D\\other", ""),    Is.Null);
     }
 
     [Test]
@@ -85,10 +91,11 @@ public class WindowRowsTests
         long? me = WindowRows.FindUserId(_conn, Users, "D\\me", "S-1");
 
         WindowRows.Save(_conn, null, Table, null, [Main(1)]);
-        WindowRows.Save(_conn, null, Table, me, [Main(2), new WindowRecord("Table", "silo:table/5", 1, 1, 400, 300, WindowPlacementState.Normal)]);
+        WindowRows.Save(_conn, null, Table, me,
+                        [Main(2), new WindowRecord("Table", "silo:table/5", 1, 1, 400, 300, WindowPlacementState.Normal)]);
 
-        Assert.That(WindowRows.Clear(_conn, Table, me), Is.EqualTo(2));
-        Assert.That(Count(), Is.EqualTo(1));
+        Assert.That(WindowRows.Clear(_conn, Table, me),                       Is.EqualTo(2));
+        Assert.That(Count(),                                                  Is.EqualTo(1));
         Assert.That(WindowRows.Get(_conn, Table, me, "Main", "silo:main")!.X, Is.EqualTo(1));
     }
 
@@ -96,14 +103,14 @@ public class WindowRowsTests
     public void Forget_removes_a_window_for_everyone()
     {
         Exec("INSERT INTO [User] (Domain, Name, SID, [Group]) VALUES ('D', 'D\\me', 'S-1', 0)");
-        long? me = WindowRows.FindUserId(_conn, Users, "D\\me", "S-1");
-        var table = new WindowRecord("Table", "silo:table/5", 1, 1, 400, 300, WindowPlacementState.Normal);
+        long? me    = WindowRows.FindUserId(_conn, Users, "D\\me", "S-1");
+        var   table = new WindowRecord("Table", "silo:table/5", 1, 1, 400, 300, WindowPlacementState.Normal);
 
         WindowRows.Save(_conn, null, Table, null, [table]);
-        WindowRows.Save(_conn, null, Table, me, [table, Main(3)]);
+        WindowRows.Save(_conn, null, Table, me,   [table, Main(3)]);
 
         Assert.That(WindowRows.Forget(_conn, Table, "Table", "silo:table/5"), Is.EqualTo(2));
-        Assert.That(Count(), Is.EqualTo(1));
+        Assert.That(Count(),                                                  Is.EqualTo(1));
     }
 
     [Test]
@@ -125,7 +132,8 @@ public class SchemaUpgradeTests
         conn.Open();
         using (var create = conn.CreateCommand())
         {
-            create.CommandText = "CREATE TABLE [Window] ([Id] INTEGER PRIMARY KEY, [Type] TEXT); INSERT INTO [Window] (Type) VALUES ('Main')";
+            create.CommandText =
+                "CREATE TABLE [Window] ([Id] INTEGER PRIMARY KEY, [Type] TEXT); INSERT INTO [Window] (Type) VALUES ('Main')";
             create.ExecuteNonQuery();
         }
 

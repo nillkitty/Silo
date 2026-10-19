@@ -80,6 +80,7 @@ public partial class OpenSilo
 
         IConnector? connector = null;
         string      error;
+        Exception?  failure;
         try
         {
             var uri = record.SourceUri ??
@@ -114,13 +115,14 @@ public partial class OpenSilo
         catch (Exception ex)
         {
             Log.Warning(ex, "The saved connection {Name} could not be brought back", record.DisplayName);
-            error = ex.Message;
+            error   = ex.Message;
+            failure = ex;
         }
 
         if (IsClosing) return;
 
         bool retry = connector is not null && ConnectionRestore.RetriesInBackground(connector);
-        ShowPending(record, error, retry);
+        ShowPending(record, error, retry, failure);
         if (retry) _ = RetryAfterAsync(record, attempt);
     }
 
@@ -172,11 +174,11 @@ public partial class OpenSilo
         }
     }
 
-    private void ShowPending(ConnectionRecord record, string? error, bool willRetry)
+    private void ShowPending(ConnectionRecord record, string? error, bool willRetry, Exception? exception = null)
     {
         RemovePending(record.Id);
 
-        var model = new PendingConnection(record, error, willRetry, () => RetryNow(record), () => ForgetPending(record));
+        var model = new PendingConnection(record, error, willRetry, () => RetryNow(record), () => ForgetPending(record), exception);
         var node  = new SiloNode(model, model.Label, model.Uri, model.Icon, null);
         _pending[record.Id] = node;
         Nodes.AddNode(node, null);

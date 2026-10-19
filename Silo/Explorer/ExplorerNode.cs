@@ -2,7 +2,9 @@
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Windows.Media;
+using Silo.Commanding;
 using Silo.Design;
+using Silo.Toolbar;
 
 namespace Silo.Explorer;
 
@@ -14,8 +16,26 @@ public sealed record ExplorerAction(string Header, Action Run);
 ///     table, a connection. Selecting a node shows its details in the Properties pane and, when it has a view
 ///     (<see cref="Open" />), previews that view in a document tab; double-click pins the tab.
 /// </summary>
-public sealed class ExplorerNode : INotifyPropertyChanged, IOverridableNode
+public sealed class ExplorerNode : INotifyPropertyChanged, IOverridableNode, ICommandProvider, IModelHolder
 {
+    /// <summary>
+    ///     The node's own commands for its right-click menu (see <see cref="ContextCommands" />): <see cref="Commands" /> when
+    ///     that is not simply the <see cref="Model" /> (which is asked in its own right), then the built-in <see cref="Actions" />.
+    /// </summary>
+    public IEnumerable<ProvidedCommand> GetCommands()
+    {
+        if (Commands is { } commands && !ReferenceEquals(commands, Model))
+            foreach (var c in commands.GetCommands())
+                yield return c;
+
+        int n = 0;
+        foreach (var action in Actions?.Invoke() ?? [])
+        {
+            var run = action.Run;
+            yield return ProvidedCommand.From("action:" + n++, action.Header, run, group: NodeCommand.ActionsGroup);
+        }
+    }
+
     private bool _isExpanded;
     private bool _isSelected;
 
@@ -25,6 +45,15 @@ public sealed class ExplorerNode : INotifyPropertyChanged, IOverridableNode
         Header = header;
         Kind   = kind;
         Icon   = iconKey is null ? null : FindIcon(iconKey);
+
+        // the default icon size follows the Explorer icon size setting; weak, so nodes of a tree that was rebuilt can be collected
+        PropertyChangedEventManager.AddHandler(AppDesignSettings.Instance, OnDesignSettingsChanged, nameof(AppDesignSettings.ExplorerIconSize));
+    }
+
+    private void OnDesignSettingsChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IconSize)));
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(BadgeSize)));
     }
 
     /// <summary>Unique within the tree and stable across rebuilds (so expansion and selection survive a refresh).</summary>
@@ -36,6 +65,15 @@ public sealed class ExplorerNode : INotifyPropertyChanged, IOverridableNode
     public string Kind { get; }
 
     public Geometry? Icon { get; }
+
+    /// <summary>Which of the Silo's databases the node's thing is kept in; drawn as a badge on the icon. <see cref="Realm.None" />: no badge.</summary>
+    public Realm Realm { get; init; }
+
+    /// <summary>For a node in a world: the key of the world, which decides how the globe on its badge is turned.</summary>
+    public string? WorldKey { get; init; }
+
+    /// <summary>The size of the realm badge: a little over half the icon, never smaller than 9.</summary>
+    public double BadgeSize => Math.Max(9, Math.Round(IconSize * 0.6));
 
     public ObservableCollection<ExplorerNode> Children { get; } = [];
 
@@ -158,7 +196,7 @@ public sealed class ExplorerNode : INotifyPropertyChanged, IOverridableNode
         }
     }
 
-    public double DefaultIconSize => 16;
+    public double DefaultIconSize => AppDesignSettings.Instance.ExplorerIconSize;
 
     public string DesignTypeName => nameof(ExplorerNode);
 
@@ -186,7 +224,7 @@ public sealed class ExplorerNode : INotifyPropertyChanged, IOverridableNode
     /// <summary>Called after the overrides changed: tells the tree to redraw this node's text, icon and visibility.</summary>
     public void RefreshOverrides()
     {
-        foreach (var name in new[] { nameof(Display), nameof(IconSize), nameof(IsHidden), nameof(LabelOverride), nameof(IconSizeOverride) })
+        foreach (var name in new[] { nameof(Display), nameof(IconSize), nameof(BadgeSize), nameof(IsHidden), nameof(LabelOverride), nameof(IconSizeOverride) })
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
     }
 
@@ -220,7 +258,17 @@ public sealed class ExplorerNode : INotifyPropertyChanged, IOverridableNode
         return items;
     }
 
-    public IEnumerable<DesignMenuItem> DesignMenuItems() => NodeDesignMenu.Build(this);
+    public IEnumerable<DesignMenuItem> DesignMenuItems() => NodeDesignMenu.Build(this).Concat(AllIconsMenuItems());
+
+    /// <summary>The Explorer-wide icon size: one slider for every icon in the tree (also on the tree's own design menu).</summary>
+    public static IEnumerable<DesignMenuItem> AllIconsMenuItems()
+    {
+        yield return DesignMenuItem.Separator();
+        yield return DesignMenuItem.Slider("Icon size (all Explorer icons)", DesignLevel.Author, 10, 64,
+                                           () => AppDesignSettings.Instance.ExplorerIconSize,
+                                           v => AppDesignSettings.Instance.ExplorerIconSize = Math.Round(v), "{0:0} px");
+        yield return DesignMenuItem.Run("Reset Explorer icon size", () => AppDesignSettings.Instance.ExplorerIconSize = 16);
+    }
 
     private static Geometry? FindIcon(string key)
     {

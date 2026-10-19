@@ -45,6 +45,8 @@
     <PackageReference Include="YamlDotNet" Version="18.1.0" />
     <!-- MarkdownFormat / MarkdownDataProvider (Providers/Format/MarkdownFormat.cs, MarkdownDataProvider.cs) -->
     <PackageReference Include="Markdig" Version="1.4.1" />
+    <!-- Data bindings: perf:// sources (Bindings/BindingSources.cs) -->
+    <PackageReference Include="System.Diagnostics.PerformanceCounter" Version="10.0.9" />
     <!-- LDAP / Active Directory connector (Connectors/Ldap/*.cs) -->
     <PackageReference Include="System.DirectoryServices" Version="10.0.9" />
     <!-- Embedded draw.io (Drawio/*.cs): hosts the draw.io editor in a WebView2 pane -->
@@ -71,6 +73,10 @@
   <ItemGroup>
     <!-- The Silo plugin injected into the draw.io editor (see Drawio/PLUGIN-ARCHITECTURE.md). -->
     <EmbeddedResource Include="Drawio\Plugin\silo-plugin.js" LogicalName="silo-plugin.js" />
+    <!-- The Unicode Explorer's character data (generated; see Unicode/Data). -->
+    <EmbeddedResource Include="Unicode\Data\ucd.tsv.gz" LogicalName="silo-ucd.tsv.gz" />
+    <!-- draw.io diagrams that Silo templates name in <DiagramTemplate Source="..."> (see Contracts/Core/DiagramTemplate.cs). -->
+    <EmbeddedResource Include="Resources\Templates\*.drawio" LogicalName="silo-template/%(Filename)%(Extension)" />
   </ItemGroup>
 
   <ItemGroup>
@@ -79,6 +85,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Folder Include="Connectors\Ssh\" />
     <Folder Include="Connectors\System\SysObj\" />
     <Folder Include="Authoring\" />
     <Folder Include="Providers\Uri\" />

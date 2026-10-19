@@ -184,10 +184,10 @@ public static class DesignMenu
     public static readonly DependencyProperty ItemsProperty =
         DependencyProperty.RegisterAttached("Items", typeof(ObservableCollection<DesignMenuItem>), typeof(DesignMenu));
 
-    private static readonly SolidColorBrush PinkFill      = Freeze(0xFF, 0xD3, 0xEC);
+    internal static readonly SolidColorBrush PinkFill      = Freeze(0xFF, 0xD3, 0xEC);
     private static readonly SolidColorBrush PinkFillHover = Freeze(0xFF, 0x8F, 0xD1);
-    private static readonly SolidColorBrush PinkBorder    = Freeze(0xE0, 0x3F, 0x94);
-    private static readonly SolidColorBrush PinkText      = Freeze(0x5A, 0x0A, 0x38);
+    internal static readonly SolidColorBrush PinkBorder    = Freeze(0xE0, 0x3F, 0x94);
+    internal static readonly SolidColorBrush PinkText      = Freeze(0x5A, 0x0A, 0x38);
 
     private static bool _registered;
 

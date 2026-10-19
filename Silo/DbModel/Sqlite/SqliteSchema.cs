@@ -5,6 +5,7 @@ using Silo.DbModel.Meta;
 using Silo.DbModel.Temp;
 using Silo.DbModel.Universal;
 using Silo.DbModel.Worlds;
+using Silo.Providers.Definitions;
 using Silo.ViewModel;
 using GFile = Silo.DbModel.Global.File;
 using GAssembly = Silo.DbModel.Global.Assembly;
@@ -99,6 +100,9 @@ public static class EntitySchema
 
     private static readonly Dictionary<Type, EntityInfo> _byType = new();
 
+    /// <summary>Public properties that are not persisted: (entity type, property name). An <c>ItemContainer</c>'s <c>Items</c> is kept as rows of its own table, not as a column.</summary>
+    private static readonly HashSet<(Type, string)> _ignored = [(typeof(MvEnum), nameof(MvEnum.Items))];
+
     private static readonly HashSet<Type> _scalarTypes =
     [
         typeof(int), typeof(int?), typeof(long), typeof(long?),
@@ -142,6 +146,7 @@ public static class EntitySchema
         {
             if (prop.GetIndexParameters().Length > 0) continue;
             if (!prop.CanRead || !prop.CanWrite) continue; // skip computed-only properties
+            if (_ignored.Contains((type, prop.Name))) continue;
 
             var kind = IsRegisteredEntity(prop.PropertyType) ? ColumnKind.EntityRef :
                        IsScalar(prop.PropertyType)           ? ColumnKind.Scalar : ColumnKind.Json;
@@ -206,10 +211,18 @@ public static class EntitySchema
         return "TEXT"; // string, DateTime, Guid, Uri
     }
 
-    public static void EnsureFixedSchemas(SqliteConnection conn, SiloLayout? layout = null)
+    /// <summary>
+    ///     Creates the tables of every fixed entity that is missing (and adds columns an older build did not have). A Silo that has no syntax table yet
+    ///     -- a new one, or one made before syntaxes existed -- gets the predefined syntaxes (<see cref="SyntaxSeeds" />) added once, as the table is
+    ///     created, so deleting them later sticks; pass <paramref name="seed" /> false when the rows are about to be copied in from elsewhere.
+    /// </summary>
+    public static void EnsureFixedSchemas(SqliteConnection conn, SiloLayout? layout = null, bool seed = true)
     {
+        bool syntaxesAreNew = false;
         foreach (var info in _byType.Values.Where(i => i.SchemaKind == SchemaKind.Fixed))
         {
+            if (info.Type == typeof(MvSyntax) && !TableExists(conn, layout ?? SiloLayout.Archive, info.FixedAlias!, info.TableName)) syntaxesAreNew = true;
+
             using (var cmd = conn.CreateCommand())
             {
                 cmd.CommandText = BuildCreateTableSql(info, info.FixedAlias!, layout);
@@ -229,6 +242,33 @@ public static class EntitySchema
                 Serilog.Log.Warning(ex, "Could not bring the {table} table up to date", info.TableName);
             }
         }
+
+        if (seed && syntaxesAreNew) SeedSyntaxes(conn, layout ?? SiloLayout.Archive);
+    }
+
+    private static bool TableExists(SqliteConnection conn, SiloLayout layout, string alias, string table)
+    {
+        // the simple layout keeps every table in 'main', prefixing the ones that belong to another database (see SiloLayout.Table)
+        bool simple = layout.Format == SiloStorageFormat.Simple;
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = $"SELECT 1 FROM [{(simple ? MainAlias : alias)}].sqlite_master WHERE type = 'table' AND name = @name LIMIT 1";
+        cmd.Parameters.AddWithValue("@name", simple && alias != MainAlias ? $"{alias}_{table}" : table);
+        return cmd.ExecuteScalar() is not null;
+    }
+
+    private static void SeedSyntaxes(SqliteConnection conn, SiloLayout layout)
+    {
+        try
+        {
+            using var tx = conn.BeginTransaction();
+            int added = SyntaxRows.InsertMissing(conn, tx, layout.Table(MetaverseAlias, nameof(MvSyntax)), SyntaxSeeds.Defaults);
+            tx.Commit();
+            Serilog.Log.Debug("Seeded {count} predefined syntaxes", added);
+        }
+        catch (Exception ex)
+        {
+            Serilog.Log.Warning(ex, "Could not add the predefined syntaxes"); // Restore Defaults can add them later
+        }
     }
 
     static EntitySchema()
@@ -247,7 +287,9 @@ public static class EntitySchema
         Register(typeof(Authorization), nameof(Authorization), SchemaKind.Fixed, MainAlias);
         Register(typeof(GAssembly),     "Assembly",            SchemaKind.Fixed, MainAlias);
         Register(typeof(Diagram),       nameof(Diagram),       SchemaKind.Fixed, MainAlias);
+        Register(typeof(Global.DataBinding), nameof(Global.DataBinding),   SchemaKind.Fixed, MainAlias); // live values sampled while the Silo is open
         Register(typeof(SaveLogEntry),  "SaveLog",             SchemaKind.Fixed, MainAlias);
+        Register(typeof(StoredItem),    "Stored",              SchemaKind.Fixed, MainAlias); // Stored<T>: values of any shape kept as text (the Silo's own)
 
         // --- Universal database (u.db) -> 'u' -------------------------------------------------
         Register(typeof(UniversalType),     nameof(UniversalType),     SchemaKind.Fixed, UniversalAlias);
@@ -269,12 +311,16 @@ public static class EntitySchema
         Register(typeof(ColorMru),    nameof(ColorMru),    SchemaKind.Fixed, TempAlias);
         Register(typeof(TextMru),     nameof(TextMru),     SchemaKind.Fixed, TempAlias);
         Register(typeof(PeopleMru),   nameof(PeopleMru),   SchemaKind.Fixed, TempAlias);
+        Register(typeof(SessionStoredItem), "Stored",      SchemaKind.Fixed, TempAlias); // the same table, for what is only remembered for the session
 
         // --- Metaverse database (y.db) -> 'y' --------------------------------------------------
         Register(typeof(MvType),           nameof(MvType),           SchemaKind.Fixed, MetaverseAlias);
         Register(typeof(MvTypeHierarchy),  nameof(MvTypeHierarchy),  SchemaKind.Fixed, MetaverseAlias);
         Register(typeof(MvAttribute),      nameof(MvAttribute),      SchemaKind.Fixed, MetaverseAlias);
         Register(typeof(MvObj),            nameof(MvObj),            SchemaKind.Fixed, MetaverseAlias);
+        Register(typeof(MvEnum),           nameof(MvEnum),           SchemaKind.Fixed, MetaverseAlias);
+        Register(typeof(MvEnumValue),      nameof(MvEnumValue),      SchemaKind.Fixed, MetaverseAlias);
+        Register(typeof(MvSyntax),         nameof(MvSyntax),         SchemaKind.Fixed, MetaverseAlias);
         Register(typeof(Connector),        nameof(Connector),        SchemaKind.Fixed, MetaverseAlias);
         Register(typeof(ConnectorPending), nameof(ConnectorPending), SchemaKind.Fixed, MetaverseAlias);
 

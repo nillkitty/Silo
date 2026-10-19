@@ -23,6 +23,7 @@ public class WebConnector : IConnector, IUriProvider, IUriConnector, IConnectorU
     // Silo only ever opens http(s) inside itself -- it doesn't try to become the system's browser.
     public UriSchemeRegistration    ForSystem              => UriSchemeRegistration.DontRegister;
     public UriSchemeRegistration    ForUser                => UriSchemeRegistration.DontRegister;
+    public bool                     IsPublic               => true;
     public ExistingProviderHandling OtherProvidersHandling => ExistingProviderHandling.Default;
 
     public IConnection CreateConnection(ConnectionRequest crq)

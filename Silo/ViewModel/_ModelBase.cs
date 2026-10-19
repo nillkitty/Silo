@@ -63,7 +63,10 @@ public abstract class ModelBase : DependencyObject, ILogContext, IPreferenceProv
     ///     properties start
     ///     with (the model's constructor has run).
     /// </summary>
-    public IReadOnlyList<Preference> Preferences => field ??= CreatePreferences();
+    public IReadOnlyList<IPreference> Preferences => OwnPreferences;
+
+    // the same list as it is made: Load and Persist are the model's business, not part of what a preference is
+    private IReadOnlyList<Preference> OwnPreferences => field ??= CreatePreferences();
 
     private IReadOnlyList<Preference> CreatePreferences()
     {
@@ -85,14 +88,14 @@ public abstract class ModelBase : DependencyObject, ILogContext, IPreferenceProv
             Logger.Warning(ex, "Reading the stored preferences failed");
         }
 
-        foreach (var preference in Preferences)
+        foreach (var preference in OwnPreferences)
             preference.Load(stored.GetValueOrDefault(preference.Key));
     }
 
     /// <summary>Writes the preferences whose properties were changed in code since they were loaded or last written.</summary>
     public void SavePreferences()
     {
-        foreach (var preference in Preferences)
+        foreach (var preference in OwnPreferences)
             try
             {
                 preference.Persist();

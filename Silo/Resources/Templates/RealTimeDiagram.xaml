@@ -1,0 +1,15 @@
+﻿<SiloTemplate xmlns="clr-namespace:Silo.Contracts.Core"
+              xmlns:z="clr-namespace:Silo.DbModel.Global"
+              Name="Real Time Diagram" Description="Demo of real time diagram binding to system data sources.">
+
+    <!-- Live values, sampled while the Silo is open; diagram cells show them as {bind:Name}. Edit them under Data bindings in the Explorer. -->
+    <z:DataBinding Interval="0:00:01" Name="CpuPercent" Source="perf:///Processor(_Total)/%25 Processor Time" />
+    <z:DataBinding Interval="0:00:01" Name="WorkingSetMB" Source="perf:///Memory/Available MBytes" />
+    <z:DataBinding Interval="0:00:01" Name="IOPS" Source="perf:///PhysicalDisk(_Total)/Disk Transfers%2Fsec" />
+    <z:DataBinding Interval="0:00:01" Name="Throughput" Source="perf:///Network Interface(*)\Bytes Total/sec" />
+
+    <!-- The diagram's draw.io XML is RealTimeDiagram.drawio next to this file (an embedded resource; open it in draw.io to edit).
+         Each box's silo-label / silo-style.fillColor are templates over the bindings above (see DiagramBindings). -->
+    <DiagramTemplate Name="PerfDiagram" Source="RealTimeDiagram.drawio" />
+
+</SiloTemplate>

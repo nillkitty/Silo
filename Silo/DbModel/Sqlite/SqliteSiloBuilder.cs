@@ -89,8 +89,28 @@ public class SqliteNewSiloBuilder : INewSiloBuilder
         if (template != null)
         {
             foreach (var i in template.Items)
-                if (!x.AddItem(i))
+            {
+                // Diagrams and data bindings get their ids from their stores (several in one template would all be Id 0).
+                bool added;
+                try
+                {
+                    added = i switch
+                            {
+                                Diagram d     => x.SaveDiagram(d) is not null,
+                                DiagramTemplate t => x.SaveDiagram(t.ToDiagram()) is not null,
+                                Global.DataBinding b => x.SaveDataBinding(b) is not null,
+                                _             => x.AddItem(i)
+                            };
+                }
+                catch (Exception ex)
+                {
+                    Log.Error(ex, "Adding '{item}' from template '{template}' failed", i, template.Name);
+                    added = false;
+                }
+
+                if (!added)
                     Log.Error("Failed to add item '{item}' to new Silo, per template '{template}'.", i, template.Name);
+            }
 
             Task.Run(() => x.SaveAsync()).GetAwaiter().GetResult();
         }

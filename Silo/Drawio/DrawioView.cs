@@ -67,6 +67,7 @@ public sealed partial class DrawioView : UserControl, IDisposable
     private DrawioOptions? _override;
     private DrawioProfile  _profile;
     private bool           _refreshing;
+    private bool           _sourceDirty;
     private bool           _started;
     private IDiagramContentSource? _source;
     private bool           _webInitialized;
@@ -133,9 +134,10 @@ public sealed partial class DrawioView : UserControl, IDisposable
         get => _source;
         set
         {
-            if (_source is not null) _source.Changed -= OnLiveDataChanged;
+            if (_source is not null) _source.Changed -= OnSourceChanged;
             _source = value;
-            if (_source is not null) _source.Changed += OnLiveDataChanged;
+            if (_source is not null) _source.Changed += OnSourceChanged;
+            _sourceDirty = true;
             RequestRefresh();
         }
     }
@@ -272,6 +274,42 @@ public sealed partial class DrawioView : UserControl, IDisposable
         Navigate();
     }
 
+    /// <summary>
+    ///     Reloads the editor from scratch, carrying the diagram across: clears WebView2's caches and service workers (so
+    ///     draw.io's files, the host page and the plugin are fetched fresh), rewrites the host page, re-registers the plugin
+    ///     and navigates again. draw.io's own saved settings and scratchpad (local storage) are kept.
+    /// </summary>
+    public async Task ResetEditorAsync()
+    {
+        if (!_webInitialized || _web.CoreWebView2 is not { } core) return;
+
+        if (_editorReady) _currentXml = await GetXmlAsync() ?? _currentXml;
+
+        ShowStatus("Resetting the editor…", true);
+        try
+        {
+            await core.Profile.ClearBrowsingDataAsync(CoreWebView2BrowsingDataKinds.DiskCache |
+                                                      CoreWebView2BrowsingDataKinds.CacheStorage |
+                                                      CoreWebView2BrowsingDataKinds.ServiceWorkers);
+        }
+        catch (Exception ex)
+        {
+            _log.Warning(ex, "Clearing the editor's caches failed");
+        }
+
+        try
+        {
+            DrawioRuntime.WriteHostPage();
+        }
+        catch (Exception ex)
+        {
+            _log.Warning(ex, "Rewriting the draw.io host page failed");
+        }
+
+        _sourceDirty = true;
+        await ReloadEditorAsync();
+    }
+
     public void Dispose()
     {
         if (_disposed) return;
@@ -281,7 +319,7 @@ public sealed partial class DrawioView : UserControl, IDisposable
         _reconfigureTimer.Stop();
         _profile.Changed    -= OnProfileChanged;
         DiagramData.Changed -= OnLiveDataChanged;
-        if (_source is not null) _source.Changed -= OnLiveDataChanged;
+        if (_source is not null) _source.Changed -= OnSourceChanged;
         foreach (var tcs in _exports.Values) tcs.TrySetResult(null);
         CompleteAllPending();
 
@@ -762,16 +800,73 @@ public sealed partial class DrawioView : UserControl, IDisposable
         return doc.ToXml();
     }
 
+    /// <summary>
+    ///     Asks the plugin for the cells carrying bindings, evaluates them, and has the plugin write the values into those
+    ///     cells in place. False when the plugin did not answer (the caller falls back to a reload).
+    /// </summary>
+    private async Task<bool> ApplyBindingsInPlaceAsync()
+    {
+        var found = await SendPluginAsync("bindingCells", null, 3000);
+        if (found?.GetBool("ok") != true || found.Get("result") is not { } result ||
+            !result.TryGetProperty("cells", out var cells) || cells.ValueKind != JsonValueKind.Array)
+            return false;
+
+        var updates = new JsonArray();
+        foreach (var cell in cells.EnumerateArray())
+        {
+            if (!cell.TryGetProperty("id", out var id) || !cell.TryGetProperty("attributes", out var attributes) ||
+                attributes.ValueKind != JsonValueKind.Object)
+                continue;
+
+            var bindings = attributes.EnumerateObject()
+                                     .Where(a => a.Value.ValueKind == JsonValueKind.String)
+                                     .Select(a => (a.Name, a.Value.GetString() ?? ""));
+            if (DiagramBindings.Evaluate(id.ToString(), bindings) is { } update) updates.Add(update);
+        }
+
+        if (updates.Count == 0) return true;
+
+        var applied = await SendPluginAsync("applyBindings", new JsonObject { ["cells"] = updates }, 3000);
+        return applied?.GetBool("ok") == true;
+    }
+
     private void OnLiveDataChanged()
     {
         if (_disposed) return;
         Dispatcher.BeginInvoke(RequestRefresh);
     }
 
+    /// <summary>The generated layer changed: the next refresh must rebuild the diagram, not just re-evaluate bindings.</summary>
+    private void OnSourceChanged()
+    {
+        _sourceDirty = true;
+        OnLiveDataChanged();
+    }
+
     private async Task RefreshAsync()
     {
         if (!_editorReady || _refreshing || _disposed) return;
-        if (_source is null && !(Options.EnableBindings && DiagramBindings.HasBindings(_currentXml))) return;
+        if (_source is null && !Options.EnableBindings) return;
+        if (_source is null && !IsPluginReady && !DiagramBindings.HasBindings(_currentXml)) return;
+
+        // Only binding values changed and the plugin is there: update the cells in place, which keeps the selection,
+        // the undo history and the view (and does not need to wait for the person to stop editing).
+        if (!_sourceDirty && IsPluginReady && Options.EnableBindings)
+        {
+            _refreshing = true;
+            try
+            {
+                if (await ApplyBindingsInPlaceAsync()) return;
+            }
+            catch (Exception ex)
+            {
+                _log.Debug(ex, "In-place binding update failed; reloading the diagram instead");
+            }
+            finally
+            {
+                _refreshing = false;
+            }
+        }
 
         var o = Options;
         double sinceEdit = (DateTime.UtcNow - _lastUserChangeUtc).TotalMilliseconds;
@@ -788,6 +883,7 @@ public sealed partial class DrawioView : UserControl, IDisposable
             string? current  = await GetXmlAsync();
             string  baseline = DrawioDocument.Parse(current).ToXml();
             string  next     = Compose(current);
+            _sourceDirty = false;
             if (next == baseline) return;
 
             _currentXml = next;

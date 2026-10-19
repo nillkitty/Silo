@@ -79,7 +79,7 @@ public sealed class DrawioOptionsWindow : Window
         var footer = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 8, 0, 0) };
         DockPanel.SetDock(footer, Dock.Bottom);
         footer.Children.Add(MakeButton("Reset to defaults", ResetDefaults));
-        footer.Children.Add(MakeButton("Reload editor", async () => await _view.ReloadEditorAsync()));
+        footer.Children.Add(MakeButton("Reload editor", async () => await _view.ResetEditorAsync()));
         footer.Children.Add(MakeButton("Close", Close));
         root.Children.Add(footer);
 

@@ -18,8 +18,14 @@ public abstract class ImageFormat : IFileFormat, IDocumentProvider<ImageSource>
 {
     public abstract string ContentType { get; }
 
-    public abstract string DisplayName   { get; }
+    public abstract string DisplayName { get; }
+
     public abstract string FileExtension { get; }
+
+    public IEnumerable<DataVerb> GetSupportedVerbs()
+    {
+        throw new NotImplementedException();
+    }
 
     /// <summary>
     ///     Decodes every frame of the image in <paramref name="stream" />, from its current position: a still picture has one,

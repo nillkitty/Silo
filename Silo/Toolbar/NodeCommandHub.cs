@@ -57,11 +57,8 @@ public sealed record NodeCommand(
 }
 
 /// <summary>
-///     Tracks the node that is selected in the Explorer and works out its commands: those it offers itself through
-///     <see cref="ICommandProvider" /> (<see cref="ExplorerNode.Commands" />), those the
-///     <see cref="Silo.Providers.Action.IActionProvider{TNodeType}" />s offer for its model (<see cref="ExplorerNode.Model" />),
-///     then its built-in actions (<see cref="ExplorerNode.Actions" />, text only). They are put together by group, the groups in
-///     the order they were first mentioned, except <see cref="ProvidedCommand.LastGroup" />, which is always last.
+///     Tracks the node that is selected in the Explorer and works out its commands with <see cref="ContextCommands" />, so the
+///     Node menu, the toolbar and the node's right-click menu always agree.
 /// </summary>
 public static class NodeCommandHub
 {
@@ -78,52 +75,12 @@ public static class NodeCommandHub
         Changed?.Invoke(null, EventArgs.Empty);
     }
 
-    /// <summary>The commands of <paramref name="node" />; empty when there is no node or it offers none.</summary>
+    /// <summary>
+    ///     The commands of <paramref name="node" />; empty when there is no node or it offers none. The same list the node's
+    ///     right-click menu shows (see <see cref="ContextCommands.For" />).
+    /// </summary>
     public static IReadOnlyList<NodeCommand> CommandsFor(ExplorerNode? node)
     {
-        var result = new List<NodeCommand>();
-        if (node is null) return result;
-
-        try
-        {
-            foreach (var c in node.Commands?.GetCommands() ?? [])
-                result.Add(NodeCommand.From(c));
-        }
-        catch (Exception ex)
-        {
-            Serilog.Log.Warning(ex, "Getting the commands of the Explorer node {Key} failed", node.Key);
-        }
-
-        try
-        {
-            foreach (var c in ActionProviders.CommandsFor(node.Model))
-                result.Add(NodeCommand.From(c));
-        }
-        catch (Exception ex)
-        {
-            Serilog.Log.Warning(ex, "Getting the provided commands of the Explorer node {Key} failed", node.Key);
-        }
-
-        // the node's built-in actions come last, as text-only entries
-        IEnumerable<ExplorerAction> actions = [];
-        try
-        {
-            actions = node.Actions?.Invoke().ToList() ?? [];
-        }
-        catch (Exception ex)
-        {
-            Serilog.Log.Warning(ex, "Building the actions of the Explorer node {Key} failed", node.Key);
-        }
-
-        int n = 0;
-        foreach (var action in actions)
-        {
-            var run = action.Run;
-            result.Add(new NodeCommand("action:" + n++, action.Header, new Silo.Commanding.DelegateCommand(_ => run()), null, null, null, NodeCommand.ActionsGroup, true));
-        }
-
-        // one block per group, in the order the groups first appear (the last group, if any, after all the rest), each keeping its
-        // commands' order
-        return result.GroupBy(c => c.Group).OrderBy(g => g.Key == ProvidedCommand.LastGroup ? 1 : 0).SelectMany(g => g).ToList();
+        return node is null ? [] : ContextCommands.For(node);
     }
 }

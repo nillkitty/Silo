@@ -29,9 +29,15 @@ public class MarkdownFormat : IFileFormat, IDocumentProvider<MarkdigDocument>
     /// </summary>
     private static readonly MarkdownPipeline Pipeline = new MarkdownPipelineBuilder().UsePipeTables().Build();
 
-    public string ContentType   { get; } = "text/markdown";
-    public string DisplayName   { get; } = "Markdown File";
+    public string ContentType { get; } = "text/markdown";
+    public string DisplayName { get; } = "Markdown File";
+
     public string FileExtension { get; } = "md";
+
+    public IEnumerable<DataVerb> GetSupportedVerbs()
+    {
+        return [];
+    }
 
     /// <summary>
     ///     Markdown has no native multi-document convention (unlike YAML's <c>---</c> separators),

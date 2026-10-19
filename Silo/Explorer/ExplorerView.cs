@@ -7,7 +7,10 @@ using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
+using Silo.Clipboarding;
+using Silo.Commanding;
 using Silo.Connectors;
+using Silo.Definitions;
 using Silo.Design;
 using Silo.Drawio;
 using Silo.Model;
@@ -22,7 +25,7 @@ namespace Silo.Explorer;
 ///     double-click or Enter opens the view in a tab of its own. Its background is the editor surface colour, deliberately
 ///     unlike the navigation flyout beside it, which is chrome.
 /// </summary>
-public sealed class ExplorerView : UserControl
+public sealed class ExplorerView : UserControl, IClipboardSurface
 {
     private readonly ObservableCollection<ExplorerNode> _roots = [];
     private readonly TreeView                           _tree;
@@ -41,6 +44,7 @@ public sealed class ExplorerView : UserControl
     private bool      _rebuilding;
     private bool      _freshSelection;
     private bool      _refreshQueued;
+    private (Point Start, ExplorerNode Node)? _dragArm;
 
     public ExplorerView()
     {
@@ -68,8 +72,20 @@ public sealed class ExplorerView : UserControl
         _tree.KeyDown                    += OnKeyDown;
         _tree.PreviewKeyDown             += OnShortcut;
         _tree.PreviewMouseRightButtonDown += OnRightClick;
-        _tree.ContextMenu                =  new ContextMenu();
-        _tree.ContextMenuOpening         += OnContextMenuOpening;
+
+        // Ctrl+right-click empty space in the tree (Author level or above) for the Explorer-wide icon size
+        foreach (var item in ExplorerNode.AllIconsMenuItems()) DesignMenu.EnsureItems(_tree).Add(item);
+        // the right-click menu: the node's commands (see ContextCommands), then Cut / Copy / Paste when its model takes part
+        ContextCommands.Attach(_tree, target => ReferenceEquals(target, _tree)
+                                                   ? []
+                                                   : ClipboardCommands.MenuItems(_tree, GetClipboardContext()));
+
+        // dragging a node that can be copied moves it (Ctrl: duplicates it) into a container that accepts it; see Clipboarding/
+        _tree.AllowDrop                  =  true;
+        _tree.PreviewMouseLeftButtonDown += OnDragArm;
+        _tree.PreviewMouseMove           += OnDragMove;
+        _tree.DragOver                   += OnDragOver;
+        _tree.Drop                       += OnDrop;
 
         var root = new DockPanel();
         root.Children.Add(header);
@@ -92,6 +108,8 @@ public sealed class ExplorerView : UserControl
         }
         TableEditors.Changed += (_, _) => QueueRefresh();
         DiagramEvents.Changed += (_, _) => QueueRefresh();
+        global::Silo.Bindings.DataBindingEvents.Changed += (_, _) => QueueRefresh();
+        DefinitionEvents.Changed += (_, _) => QueueRefresh();
         NodeOverrides.Changed += (_, _) =>
                                  {
                                      foreach (var node in _roots.SelectMany(r => r.Descendants()).ToList())
@@ -128,12 +146,25 @@ public sealed class ExplorerView : UserControl
         var row = new FrameworkElementFactory(typeof(StackPanel));
         row.SetValue(StackPanel.OrientationProperty, Orientation.Horizontal);
 
+        // the icon, with a small badge in its lower-right corner for the database the thing is kept in (nothing for a node with no realm)
+        var iconHost = new FrameworkElementFactory(typeof(Grid));
+        iconHost.SetValue(FrameworkElement.MarginProperty, new Thickness(0, 0, 6, 0));
+        iconHost.SetValue(FrameworkElement.VerticalAlignmentProperty, VerticalAlignment.Center);
+
         var icon = new FrameworkElementFactory(typeof(AppIcon));
         icon.SetBinding(AppIcon.IconProperty, new Binding(nameof(ExplorerNode.Icon)));
         icon.SetBinding(AppIcon.SizeProperty, new Binding(nameof(ExplorerNode.IconSize)));
-        icon.SetValue(FrameworkElement.MarginProperty, new Thickness(0, 0, 6, 0));
-        icon.SetValue(FrameworkElement.VerticalAlignmentProperty, VerticalAlignment.Center);
-        row.AppendChild(icon);
+        iconHost.AppendChild(icon);
+
+        var badge = new FrameworkElementFactory(typeof(RealmBadge));
+        badge.SetBinding(RealmBadge.RealmProperty,    new Binding(nameof(ExplorerNode.Realm)));
+        badge.SetBinding(RealmBadge.WorldKeyProperty, new Binding(nameof(ExplorerNode.WorldKey)));
+        badge.SetBinding(RealmBadge.SizeProperty,     new Binding(nameof(ExplorerNode.BadgeSize)));
+        badge.SetValue(FrameworkElement.HorizontalAlignmentProperty, HorizontalAlignment.Right);
+        badge.SetValue(FrameworkElement.VerticalAlignmentProperty,   VerticalAlignment.Bottom);
+        badge.SetValue(FrameworkElement.MarginProperty,              new Thickness(0, 0, -3, -3));
+        iconHost.AppendChild(badge);
+        row.AppendChild(iconHost);
 
         var text = new FrameworkElementFactory(typeof(TextBlock));
         text.SetBinding(TextBlock.TextProperty, new Binding(nameof(ExplorerNode.Display)));
@@ -464,6 +495,11 @@ public sealed class ExplorerView : UserControl
     /// <summary>A key that is a shortcut of one of the selected node's commands (F5, Ctrl+Shift+C...) runs it.</summary>
     private void OnShortcut(object sender, KeyEventArgs e)
     {
+        // Ctrl+C / X / V are Copy, Cut and Paste when the selected node's model takes part in the clipboard (a node command that
+        // also uses Ctrl+C, such as "Copy URI", gives way to it)
+        if (Keyboard.Modifiers == ModifierKeys.Control && e.Key is Key.C or Key.X or Key.V && ClipboardCommands.Claims(e.Key, GetClipboardContext()))
+            return;
+
         // typing a letter to jump to an item is not a shortcut: ask the node only for a function key, Delete or a modified key
         bool candidate = Keyboard.Modifiers != ModifierKeys.None || e.Key is (>= Key.F1 and <= Key.F24) or Key.Delete;
         if (!candidate || _tree.SelectedItem is not ExplorerNode node) return;
@@ -486,23 +522,96 @@ public sealed class ExplorerView : UserControl
         }
     }
 
-    private void OnContextMenuOpening(object sender, ContextMenuEventArgs e)
-    {
-        var menu = _tree.ContextMenu!;
-        menu.Items.Clear();
+    // ---- clipboard, and drag and drop ----------------------------------------------------------
 
-        // what the node's model offers (ICommandProvider), then its built-in actions: the same list as the Node menu and the toolbar
+    /// <summary>What Copy, Cut and Paste mean for the selected node (see <see cref="ClipboardFocus" />).</summary>
+    public ClipboardContext GetClipboardContext() => ContextFor(SelectedNode);
+
+    /// <summary>
+    ///     A node's model is what is copied and cut; the models of the node and of every node above it are offered a paste, the
+    ///     node's own first.
+    /// </summary>
+    private static ClipboardContext ContextFor(ExplorerNode? node)
+    {
+        if (node is null) return ClipboardContext.Empty;
+
+        IReadOnlyList<ICopyable> selection = node.Model is ICopyable copyable ? [copyable] : [];
+        return new ClipboardContext(selection, TargetsFor(node));
+    }
+
+    private static IReadOnlyList<IPastable> TargetsFor(ExplorerNode? node)
+    {
+        var targets = new List<IPastable>();
+        for (var n = node; n is not null; n = n.Parent)
+            if (n.Model is IPastable p && !targets.Any(t => ReferenceEquals(t, p)))
+                targets.Add(p);
+
+        return targets;
+    }
+
+    private void OnDragArm(object sender, MouseButtonEventArgs e)
+    {
+        _dragArm = e.OriginalSource is DependencyObject d && FindItem(d) is { DataContext: ExplorerNode { Model: ICopyable } node }
+                       ? (e.GetPosition(this), node)
+                       : null;
+    }
+
+    private void OnDragMove(object sender, MouseEventArgs e)
+    {
+        if (_dragArm is not { } arm) return;
+        if (e.LeftButton != MouseButtonState.Pressed)
+        {
+            _dragArm = null;
+            return;
+        }
+
+        var now = e.GetPosition(this);
+        if (Math.Abs(now.X - arm.Start.X) < SystemParameters.MinimumHorizontalDragDistance &&
+            Math.Abs(now.Y - arm.Start.Y) < SystemParameters.MinimumVerticalDragDistance)
+            return;
+
+        _dragArm = null;
+        var payload = AppClipboard.BeginDrag(ContextFor(arm.Node));
+        if (payload is null) return;
+
         try
         {
-            foreach (var entry in CommandMenu.Items(NodeCommandHub.CommandsFor(_tree.SelectedItem as ExplorerNode)))
-                menu.Items.Add(entry);
+            DragDrop.DoDragDrop(_tree, payload.Data, payload.CanMove ? DragDropEffects.Move | DragDropEffects.Copy : DragDropEffects.Copy);
         }
         catch (Exception ex)
         {
-            Serilog.Log.Warning(ex, "Building an Explorer menu failed");
+            Serilog.Log.Warning(ex, "Dragging an Explorer node failed");
+        }
+        finally
+        {
+            AppClipboard.EndDrag();
+        }
+    }
+
+    private void OnDragOver(object sender, DragEventArgs e)
+    {
+        e.Effects = AppClipboard.DragEffect(e.Data, TargetsAt(e.OriginalSource), e.AllowedEffects, (e.KeyStates & DragDropKeyStates.ControlKey) != 0);
+        e.Handled = true;
+    }
+
+    private void OnDrop(object sender, DragEventArgs e)
+    {
+        try
+        {
+            e.Effects = AppClipboard.Drop(e.Data, TargetsAt(e.OriginalSource), e.AllowedEffects, (e.KeyStates & DragDropKeyStates.ControlKey) != 0);
+        }
+        catch (Exception ex)
+        {
+            Serilog.Log.Warning(ex, "Dropping onto an Explorer node failed");
+            e.Effects = DragDropEffects.None;
         }
 
-        if (menu.Items.Count == 0) e.Handled = true; // nothing to offer: no menu at all
+        e.Handled = true;
+    }
+
+    private static IReadOnlyList<IPastable> TargetsAt(object source)
+    {
+        return source is DependencyObject d && FindItem(d) is { DataContext: ExplorerNode node } ? TargetsFor(node) : [];
     }
 
     private static TreeViewItem? FindItem(DependencyObject d)

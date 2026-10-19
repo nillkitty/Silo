@@ -83,6 +83,8 @@ public static class SiloPluginEvent
     public const string DoubleClick   = "silo.dblclick";
     public const string Error         = "silo.error";
     public const string Log           = "silo.log";
+    /// <summary>The host page found no plugin in the editor frame and asks for it (answered with <c>siloBootstrap</c>).</summary>
+    public const string NeedPlugin    = "silo.needPlugin";
     public const string Menu          = "silo.menu";
     public const string Ready         = "silo.ready";
     public const string Result        = "silo.result";

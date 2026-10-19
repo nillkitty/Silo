@@ -1,0 +1,33 @@
+<mxfile>
+  <diagram id="perf" name="Page-1">
+    <mxGraphModel grid="1" gridSize="10" guides="1" page="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <mxCell id="title" value="Live system counters (see Data bindings in the Explorer)" style="text;html=1;align=left;verticalAlign=middle;fontSize=16;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="40" y="0" width="660" height="30" as="geometry"/>
+        </mxCell>
+        <object id="cpu" label="CPU&lt;br&gt;&lt;b style=&quot;font-size:22px&quot;&gt;…&lt;/b&gt;" silo-label="CPU&lt;br&gt;&lt;b style=&quot;font-size:22px&quot;&gt;{bind:CpuPercent|fmt:0.0} %&lt;/b&gt;" silo-tooltip="{bind:CpuPercent}" silo-style.fillColor="{bind:CpuPercent|range:0=#d5e8d4,50=#fff2cc,80=#f8cecc}">
+          <mxCell style="rounded=1;whiteSpace=wrap;html=1;fontSize=13;strokeColor=#6c8ebf;fillColor=#dae8fc;arcSize=12;" vertex="1" parent="1">
+            <mxGeometry x="40" y="50" width="200" height="100" as="geometry"/>
+          </mxCell>
+        </object>
+        <object id="mem" label="Available memory&lt;br&gt;&lt;b style=&quot;font-size:22px&quot;&gt;…&lt;/b&gt;" silo-label="Available memory&lt;br&gt;&lt;b style=&quot;font-size:22px&quot;&gt;{bind:WorkingSetMB|fmt:N0} MB&lt;/b&gt;" silo-tooltip="{bind:WorkingSetMB}">
+          <mxCell style="rounded=1;whiteSpace=wrap;html=1;fontSize=13;strokeColor=#6c8ebf;fillColor=#dae8fc;arcSize=12;" vertex="1" parent="1">
+            <mxGeometry x="260" y="50" width="200" height="100" as="geometry"/>
+          </mxCell>
+        </object>
+        <object id="disk" label="Disk transfers&lt;br&gt;&lt;b style=&quot;font-size:22px&quot;&gt;…&lt;/b&gt;" silo-label="Disk transfers&lt;br&gt;&lt;b style=&quot;font-size:22px&quot;&gt;{bind:IOPS|fmt:N0} /s&lt;/b&gt;" silo-tooltip="{bind:IOPS}">
+          <mxCell style="rounded=1;whiteSpace=wrap;html=1;fontSize=13;strokeColor=#6c8ebf;fillColor=#dae8fc;arcSize=12;" vertex="1" parent="1">
+            <mxGeometry x="480" y="50" width="200" height="100" as="geometry"/>
+          </mxCell>
+        </object>
+        <object id="net" label="Network&lt;br&gt;&lt;b style=&quot;font-size:22px&quot;&gt;…&lt;/b&gt;" silo-label="Network&lt;br&gt;&lt;b style=&quot;font-size:22px&quot;&gt;{bind:Throughput|fmt:N0} B/s&lt;/b&gt;" silo-tooltip="{bind:Throughput}">
+          <mxCell style="rounded=1;whiteSpace=wrap;html=1;fontSize=13;strokeColor=#6c8ebf;fillColor=#dae8fc;arcSize=12;" vertex="1" parent="1">
+            <mxGeometry x="700" y="50" width="200" height="100" as="geometry"/>
+          </mxCell>
+        </object>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

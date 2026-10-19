@@ -62,10 +62,11 @@ public sealed class PendingConnection : INodeDetails, ICommandProvider
     /// <param name="willRetry">Whether it is tried again on its own.</param>
     /// <param name="retry">Tries now.</param>
     /// <param name="forget">Forgets the saved connection.</param>
-    public PendingConnection(ConnectionRecord record, string? error, bool willRetry, Action retry, Action forget)
+    public PendingConnection(ConnectionRecord record, string? error, bool willRetry, Action retry, Action forget, Exception? exception = null)
     {
         Record    = record;
         Error     = error;
+        Exception = exception;
         WillRetry = willRetry;
         _retry    = retry;
         _forget   = forget;
@@ -75,6 +76,9 @@ public sealed class PendingConnection : INodeDetails, ICommandProvider
 
     /// <summary>Why the connection could not be brought back; null while it is being tried.</summary>
     public string? Error { get; }
+
+    /// <summary>What went wrong, when there is an exception to show: its type, message, stack trace and inner exceptions, in the node's details.</summary>
+    public Exception? Exception { get; }
 
     public bool WillRetry { get; }
 
@@ -96,6 +100,7 @@ public sealed class PendingConnection : INodeDetails, ICommandProvider
         yield return ("Destination", Record.SourceUri?.ToString() ?? "(none saved)");
         yield return ("State", Failed ? "Not connected" : "Connecting");
         if (Error is not null) yield return ("Problem", Error);
+        if (Exception is not null) yield return ("Stack trace", Exception.ToString());
         if (Failed) yield return ("Next", WillRetry ? "Tries again by itself; or use Try Again" : "Use Try Again when it should be reachable");
     }
 

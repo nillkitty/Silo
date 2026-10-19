@@ -2,7 +2,9 @@ using System.Linq;
 using System.Windows.Controls;
 using System.Windows.Input;
 using AuthoredTable = Silo.DbModel.Global.AuthoredTable;
+using Silo.Commanding;
 using Silo.Model;
+using Silo.Providers.Action;
 using Silo.Tabular;
 
 namespace Silo.Views;
@@ -62,6 +64,15 @@ public class TablesView : UserControl
                                       }
                                   };
         _list.KeyDown += OnKeyDown;
+
+        // right-click a table for TableActions' commands; the blank area offers the New buttons
+        ContextCommands.SetCommands(_list, new CommandList(() =>
+        [
+            ProvidedCommand.From("tables.newRich", "New _rich text table", () => TableEditors.CreateAndOpen(ActiveSilo, TableTemplate.RichText), placement: CommandPlacement.Menu),
+            ProvidedCommand.From("tables.newPlain", "New _plain table", () => TableEditors.CreateAndOpen(ActiveSilo, TableTemplate.PlainText), placement: CommandPlacement.Menu),
+            ProvidedCommand.From("tables.newTyped", "New _typed table", () => TableEditors.CreateAndOpen(ActiveSilo, TableTemplate.Typed), placement: CommandPlacement.Menu)
+        ]));
+        ContextCommands.Attach(_list);
         root.Children.Add(_list);
 
         Content = root;
@@ -142,13 +153,8 @@ public class TablesView : UserControl
         Grid.SetColumn(when, 2);
         grid.Children.Add(when);
 
-        var menu = new ContextMenu();
-        menu.Items.Add(MakeMenuItem("_Open", () => Open(t)));
-        menu.Items.Add(MakeMenuItem("_Duplicate", () => Duplicate(t)));
-        menu.Items.Add(new Separator());
-        menu.Items.Add(MakeMenuItem("D_elete...", () => Delete(t)));
-
-        return new ListBoxItem { Content = grid, Tag = t, ContextMenu = menu };
+        // the row stands for the table: its right-click menu comes from TableActions (see ContextCommands)
+        return new ListBoxItem { Content = grid, Tag = t, DataContext = t };
     }
 
     private void OnKeyDown(object sender, KeyEventArgs e)
@@ -180,11 +186,19 @@ public class TablesView : UserControl
         button.Click += (_, _) => click();
         return button;
     }
+}
 
-    private static MenuItem MakeMenuItem(string header, Action click)
+/// <summary>The commands of an authored table (in the active Silo): open, duplicate, delete.</summary>
+public sealed class TableActions : IActionProvider<AuthoredTable>
+{
+    public IEnumerable<ProvidedCommand> GetCommands(AuthoredTable t)
     {
-        var item = new MenuItem { Header = header };
-        item.Click += (_, _) => click();
-        return item;
+        int id = t.Id;
+        yield return ProvidedCommand.From("table.open", "_Open", () => TableEditors.OpenExisting(App.Instance?.ActiveSilo, id),
+                                          placement: CommandPlacement.Menu) with { IsDefault = true };
+        yield return ProvidedCommand.From("table.duplicate", "_Duplicate", () => TableEditors.Duplicate(App.Instance?.ActiveSilo, id),
+                                          placement: CommandPlacement.Menu);
+        yield return ProvidedCommand.From("table.delete", "D_elete...", () => TableEditors.Delete(App.Instance?.ActiveSilo, id),
+                                          group: ProvidedCommand.LastGroup, placement: CommandPlacement.Menu) with { IsDestructive = true };
     }
 }

@@ -25,7 +25,7 @@ public static class DrawioDesign
         items.Add(Toggle(view, "Block cloud storage", o => o.DisableCloudStorage, (o, v) => o.DisableCloudStorage  = v));
         items.Add(DesignMenuItem.Separator());
         items.Add(new DesignMenuItem { Header = "Diagram options...", Command = new Relay(() => DrawioOptionsWindow.ShowFor(view)) });
-        items.Add(new DesignMenuItem { Header = "Reload editor", Command      = new Relay(() => _ = view.ReloadEditorAsync()) });
+        items.Add(new DesignMenuItem { Header = "Reload editor", Command      = new Relay(() => _ = view.ResetEditorAsync()) });
     }
 
     private static DesignMenuItem Toggle(DrawioView view, string header, Func<DrawioOptions, bool> get, Action<DrawioOptions, bool> set)

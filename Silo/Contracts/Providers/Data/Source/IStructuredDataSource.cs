@@ -7,6 +7,11 @@ namespace Silo.Contracts.Providers.Data.Source;
 /// </summary>
 public interface IStructuredDataSource
 {
+    /// <summary>
+    ///     If the source supports attributes (like XML), this character
+    ///     is the prefix which denotes that a property is an attribute
+    ///     versus a nested elememnt.
+    /// </summary>
     string? AttributePrefix { get; }
 
     /// <summary>
@@ -26,6 +31,10 @@ public interface IStructuredDataSource
     /// </summary>
     string? MetaWrapperValueName { get; }
 
+    /// <summary>
+    ///     For formats that support inner text/content (XML), the
+    ///     key of the property name which holds any unstructured text.
+    /// </summary>
     string? TextPropertyName { get; }
 
     /// <summary>

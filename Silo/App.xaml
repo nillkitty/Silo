@@ -11,6 +11,7 @@
                 <ResourceDictionary Source="/Resources/Paths.xaml" />
                 <!-- Hand-drawn nav icons; merged after Paths.xaml so its keys override the corrupted ones there. -->
                 <ResourceDictionary Source="/Resources/NavIcons.xaml" />
+                <ResourceDictionary Source="/Resources/DataDef/BasicFormats.xaml" />
                 <!--
                     The app-wide control styles (Button, TextBox, MenuItem, TreeView, ToolBar, ...). Every brush in
                     it is a DynamicResource into the Theme.Light/Theme.Dark palette AppTheme swaps in, so without this

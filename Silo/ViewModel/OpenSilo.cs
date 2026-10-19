@@ -279,6 +279,16 @@ public partial class OpenSilo : ModelBase
         OpenSilos.Add(this);
         App.Instance!.ActiveSilo = this;
 
+        // what the Silo keeps (saved characters, strings, shortcuts, ...) is shown in the Explorer from the moment it is open
+        try
+        {
+            Nodes.Add(new LocalSilo());
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "The Silo's own Explorer node could not be made");
+        }
+
         // the Recent view lists this Silo from now on
         RecentSilos.Instance.Record(this);
     }

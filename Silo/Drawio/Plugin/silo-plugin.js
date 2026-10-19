@@ -131,8 +131,22 @@
             }
         }));
 
-        // Add the menu bar entry once; its contents are rebuilt from state.menu every time it opens.
-        ui.menubar.addMenu('Silo', ui.menus.get('silo').funct);
+        // Add the menu bar entry once; its contents are rebuilt from state.menu every time it opens. draw.io keeps its
+        // status area (and in some themes its buttons) at the end of the bar, and an entry added after them wraps out of
+        // sight below the bar, so move it in front of them, next to Help.
+        var elt = ui.menubar.addMenu('Silo', ui.menus.get('silo').funct);
+        [ui.statusContainer, ui.buttonContainer].some(function (after) {
+            if (elt && after && after.parentNode === elt.parentNode) {
+                elt.parentNode.insertBefore(elt, after);
+                return true;
+            }
+            return false;
+        });
+
+        // Look like draw.io's own entries (EditorUi.createMenu restyles them after addMenu; a bare addMenu entry is
+        // styled as a whole bar and fills the width): copy the class of the entry now before it (Help).
+        var sibling = elt && elt.previousElementSibling;
+        if (elt && sibling && sibling.className) elt.className = sibling.className;
     }
 
     function installContextMenu(ui) {
@@ -296,6 +310,67 @@
 
         getSelection: function () {
             return { cells: state.graph.getSelectionCells().map(cellInfo) };
+        },
+
+        /** Every cell carrying silo-* binding attributes: [{ id, attributes: { 'silo-label': ..., ... } }]. */
+        bindingCells: function () {
+            var model = state.graph.getModel();
+            var cells = [];
+            for (var id in model.cells) {
+                var cell = model.cells[id];
+                if (!hasSiloData(cell)) continue;
+                var attributes = {};
+                for (var i = 0; i < cell.value.attributes.length; i++) {
+                    var a = cell.value.attributes[i];
+                    if (/^silo[-_]/i.test(a.nodeName)) attributes[a.nodeName] = a.nodeValue;
+                }
+                cells.push({ id: cell.id, attributes: attributes });
+            }
+            return { cells: cells };
+        },
+
+        /**
+         * Puts evaluated binding values into cells IN PLACE: [{ id, label?, tooltip?, style?: { key: value } }]. The cells are
+         * changed directly and redrawn, outside the undoable model, so the selection, the undo history and any open
+         * in-place editor are left alone and no autosave is triggered. A cell being edited is skipped.
+         */
+        applyBindings: function (msg) {
+            var graph = state.graph;
+            var model = graph.getModel();
+            var editing = graph.isEditing() ? graph.cellEditor.getEditingCell() : null;
+            var changed = 0;
+
+            (msg.cells || []).forEach(function (c) {
+                var cell = model.getCell(c.id);
+                if (!cell || cell === editing || !cell.value || !cell.value.setAttribute) return;
+                var dirty = false;
+
+                if (c.label !== undefined && c.label !== null && cell.value.getAttribute('label') !== c.label) {
+                    cell.value.setAttribute('label', c.label);
+                    dirty = true;
+                }
+
+                if (c.tooltip !== undefined && c.tooltip !== null && cell.value.getAttribute('tooltip') !== c.tooltip) {
+                    cell.value.setAttribute('tooltip', c.tooltip);
+                    dirty = true;
+                }
+
+                if (c.style) {
+                    var style = cell.style || '';
+                    for (var key in c.style) style = window.mxUtils.setStyle(style, key, c.style[key]);
+                    if (style !== (cell.style || '')) {
+                        cell.style = style;
+                        dirty = true;
+                    }
+                }
+
+                if (dirty) {
+                    graph.refresh(cell);
+                    changed++;
+                }
+            });
+
+            return { changed: changed };
         }
     };
 

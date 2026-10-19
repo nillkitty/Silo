@@ -25,6 +25,9 @@ public sealed partial class DrawioView
     private long    _requestCounter;
     private string? _pluginScriptId;
 
+    /// <summary>The plugin script last registered (options + source), handed to the host page if the editor frame lacks it.</summary>
+    private string? _pluginBootstrap;
+
     // ---- public state and events -------------------------------------------------------------
 
     /// <summary>The diagram's title, shown by draw.io (sent with <c>load</c>). Set before loading.</summary>
@@ -45,7 +48,8 @@ public sealed partial class DrawioView
         new("silo.refresh", "Refresh live data"),
         new("silo.fit", "Fit diagram to window"),
         DrawioPluginMenuItem.Divider,
-        new("silo.options", "Diagram options...")
+        new("silo.options", "Diagram options..."),
+        new("silo.reset", "Reset and reload editor")
     ];
 
     /// <summary>Entries the plugin adds to the right-click menu of cells that carry <c>silo-*</c> data (reported as <c>OnSiloContextAction</c>). Empty by default.</summary>
@@ -484,13 +488,15 @@ public sealed partial class DrawioView
             _pluginScriptId = null;
         }
 
+        _pluginBootstrap = null;
         if (!Options.EnableSiloPlugin) return;
 
         try
         {
             var options = Options.ToPluginOptions();
             CustomizePluginOptions(options);
-            _pluginScriptId = await core.AddScriptToExecuteOnDocumentCreatedAsync(DrawioRuntime.BuildPluginBootstrap(options, Options.PluginScriptPath));
+            _pluginBootstrap = DrawioRuntime.BuildPluginBootstrap(options, Options.PluginScriptPath);
+            _pluginScriptId  = await core.AddScriptToExecuteOnDocumentCreatedAsync(_pluginBootstrap);
         }
         catch (Exception ex)
         {
@@ -537,6 +543,11 @@ public sealed partial class DrawioView
 
             case SiloPluginEvent.Log:
                 _log.Debug("[draw.io plugin] {message}", m.GetString("message"));
+                break;
+
+            case SiloPluginEvent.NeedPlugin:
+                // The document-created script did not reach the editor iframe: the host page injects it instead.
+                if (_pluginBootstrap is not null) Post(new JsonObject { ["siloBootstrap"] = _pluginBootstrap });
                 break;
 
             case SiloPluginEvent.Error:

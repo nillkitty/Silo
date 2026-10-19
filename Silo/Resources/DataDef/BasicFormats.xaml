@@ -1,0 +1,89 @@
+﻿<av:ResourceDictionary xmlns="https://schema.nill.dev/Silo"
+                xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                xmlns:av="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                xmlns:silo="clr-namespace:Silo">
+
+    <silo:DataDefinition x:Key="IniValue">
+        <silo:Capture To="{silo:InstanceNum}">
+            <silo:Split Delimiter="=" Qualifier='\"' Escape='\' MaxTokens="2">
+               <silo:Capture To="Key" Arity="One">
+                    <silo:Rest />
+                </silo:Capture>
+                <silo:Capture To="Value" Arity="Optional">
+                    <silo:Rest />
+                </silo:Capture>
+            </silo:Split>
+        </silo:Capture>
+    </silo:DataDefinition>
+
+    <silo:DataDefinition ContentType="text/ini"  x:Key="IniFile">
+        <silo:TextDefinition AnyEncoding="True">
+            <silo:Lines Newline="CrLf,Lax" Consolidate="True">
+                <!-- ignore empty lines -->
+                <silo:Any>
+                    <!-- Section header -->
+                    <silo:Capture To="{silo:InstanceNum 'Section[{1}]'}">
+                        <silo:Span Start="[" End="]" />
+                    </silo:Capture>
+                    <av:StaticResource ResourceKey="IniValue" />
+                </silo:Any>
+            </silo:Lines>
+        </silo:TextDefinition>
+    </silo:DataDefinition>
+
+    <!-- matches single-line TSV data -->
+    <silo:TextDefinition x:Key="TsvData">
+        <!-- Split by TAB, 
+            permit elements surrounded by double quotes to contain TAB, 
+            permit double quotes if escaped with a backslash
+            escape a backaslash with two backslashes -->
+        <silo:Split Delimiter="&#x09;" Qualifier='\"' Escape='\\' Consolidate="False">
+            <!-- For each element, capture the cell value as e.g. 'Col[0]', 'Col[1]', ...
+               Placeholder {0} becomes the element number -->
+            <silo:Capture To="{silo:InstanceNum 'Col[{0}]'}">
+                <!-- Eat up the rest of the element -->
+                <silo:Rest />
+            </silo:Capture>
+        </silo:Split>
+    </silo:TextDefinition>
+
+
+
+    <!-- matches single-line CSV data -->
+    <silo:TextDefinition x:Key="CsvData">
+        <!-- Split by comma, 
+            permit elements surrounded by double quotes to contain commas, 
+            permit double quotes if escaped with a backslash
+            escape a backaslash with two backslashes -->
+        <silo:Split Delimiter="," Qualifier='\"' Escape='\\'>
+            <!-- For each element, capture the cell value as e.g. 'Col[0]', 'Col[1]', ...
+               Placeholder {0} becomes the element number -->
+            <silo:Capture To="{silo:InstanceNum 'Col[{0}]'}">
+                <!-- Eat up the rest of the element -->
+                <silo:Rest />
+            </silo:Capture>
+        </silo:Split>
+    </silo:TextDefinition>
+
+
+    <silo:DataDefinition ContentType="text/csv"  x:Key="CsvFile">
+        <silo:TextDefinition AnyEncoding="True">
+            <silo:Lines Newline="CrLf,Lax">
+                <silo:DataDefinition x:Name="Header" Arity="One">
+                    <!-- Header row: matches once -->
+                    <silo:Split Delimiter="," Qualifier='\"'>
+                        <silo:Capture To="{silo:InstanceNum 'Header[{0}]'}" />
+
+                    </silo:Split>
+                </silo:DataDefinition>
+                <silo:DataDefinition x:Name="Row" Arity="Any">
+                    <!-- Matches every other row -->
+
+                    <av:StaticResource ResourceKey="CsvData" />
+
+                </silo:DataDefinition>            
+            </silo:Lines>
+        </silo:TextDefinition>
+    </silo:DataDefinition>
+
+</av:ResourceDictionary>

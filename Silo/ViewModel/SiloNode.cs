@@ -126,6 +126,21 @@ public record SiloNode
         return false;
     }
 
+    /// <summary>
+    ///     The node for an object: the one it brings itself (a node already, or an <see cref="INodeProvider" /> with a node to
+    ///     give), else a node that describes it (an <see cref="INodeDetails" />'s own name, URI and icon), else one that shows
+    ///     its <c>ToString()</c>. The node's <see cref="DataContext" /> is always the object itself.
+    /// </summary>
+    public static SiloNode ForObject(object o)
+    {
+        o.Required();
+        if (o is SiloNode already) return already;
+        if (o is INodeProvider provider && provider.GetNode() is { } own) return own;
+        if (o is INodeDetails details) return new SiloNode(o, details.Name, details.Uri, details.Icon, null) { TypeName = details.TypeName };
+
+        return new SiloNode(o, o.ToString(), null, null, null);
+    }
+
 
     public SiloNode(Node src) : this(src.Required(), src.Name, src.Uri, src.IconUri, src.Expanded)
     {

@@ -11,5 +11,5 @@ namespace Silo.Contracts.Core;
 public interface IPreferenceProvider
 {
     /// <summary>The preferences, in the order their properties are declared. Empty when there are none.</summary>
-    IReadOnlyList<Preference> Preferences { get; }
+    IReadOnlyList<IPreference> Preferences { get; }
 }

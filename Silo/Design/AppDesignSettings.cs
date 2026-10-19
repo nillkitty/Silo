@@ -52,6 +52,23 @@ public sealed class AppDesignSettings : INotifyPropertyChanged
     } = 24;
 
     /// <summary>Loads the last-saved settings (falling back to the defaults above for anything missing or corrupt). Call once, early in startup.</summary>
+    /// <summary>
+    ///     The size of the icons in the Explorer tree (the default for every node; a node's own override, set from its
+    ///     design menu, still wins). Separate from <see cref="IconSize" />, which is the left rail's.
+    /// </summary>
+    public double ExplorerIconSize
+    {
+        get;
+        set
+        {
+            double clamped = Math.Clamp(value, 10, 96);
+            if (Math.Abs(field - clamped) < 0.01) return;
+            field = clamped;
+            _save();
+            OnPropertyChanged();
+        }
+    } = 16;
+
     public static void Apply()
     {
         try
@@ -60,6 +77,7 @@ public sealed class AppDesignSettings : INotifyPropertyChanged
                 JsonSerializer.Deserialize<Snapshot>(File.ReadAllText(SettingsFile)) is { } snapshot)
             {
                 if (snapshot.IconSize is { } iconSize) Instance.IconSize = iconSize;
+                if (snapshot.ExplorerIconSize is { } explorerIconSize) Instance.ExplorerIconSize = explorerIconSize;
             }
         }
         catch
@@ -73,7 +91,7 @@ public sealed class AppDesignSettings : INotifyPropertyChanged
         try
         {
             Directory.CreateDirectory(Path.GetDirectoryName(SettingsFile)!);
-            File.WriteAllText(SettingsFile, JsonSerializer.Serialize(new Snapshot { IconSize = IconSize }));
+            File.WriteAllText(SettingsFile, JsonSerializer.Serialize(new Snapshot { IconSize = IconSize, ExplorerIconSize = ExplorerIconSize }));
         }
         catch
         {
@@ -89,5 +107,7 @@ public sealed class AppDesignSettings : INotifyPropertyChanged
     private sealed class Snapshot
     {
         public double? IconSize { get; set; }
+
+        public double? ExplorerIconSize { get; set; }
     }
 }

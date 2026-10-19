@@ -247,6 +247,10 @@ public sealed partial class DrawioView
             case "silo.options":
                 DrawioOptionsWindow.ShowFor(this);
                 break;
+
+            case "silo.reset":
+                _ = ResetEditorAsync();
+                break;
         }
     }
 

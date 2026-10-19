@@ -1,5 +1,4 @@
 using Microsoft.Win32;
-using Silo.Shell;
 using Telefrag.DI;
 
 namespace Silo.Connectors.System;
@@ -10,6 +9,7 @@ public class RegistryUriProvider : IUriProvider<RegistryPath>
     // reg:/hkcu:/hklm:/hkcr:/hku: are only meaningful inside Silo -- nothing to register with the shell.
     public UriSchemeRegistration    ForSystem              => UriSchemeRegistration.DontRegister;
     public UriSchemeRegistration    ForUser                => UriSchemeRegistration.DontRegister;
+    public bool                     IsPublic               => false;
     public ExistingProviderHandling OtherProvidersHandling => ExistingProviderHandling.Default;
 
     private static bool TryParseHive(string token, out RegistryHive hive)

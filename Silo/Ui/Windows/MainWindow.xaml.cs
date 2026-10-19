@@ -12,6 +12,7 @@ using AvalonDock.Layout;
 using AvalonDock.Serializer.Xml;
 using AvalonDock.Themes;
 using Serilog;
+using Silo.Clipboarding;
 using Silo.Commanding;
 using Silo.Design;
 using Silo.Explorer;
@@ -754,6 +755,11 @@ public partial class MainWindow : Window, IWindowLayout
         SyncNav();
         OpenSilo.OpenSilos.CollectionChanged += OnOpenSilosChanged;
 
+        // Right-click a nav node: its commands (Open, Open as a tab, and whatever is registered for its item) - see
+        // Commanding/ContextCommands.cs.
+        ContextCommands.Attach(NavTree);
+        ContextCommands.Attach(NavTreeBottom);
+
         // Ctrl+right-click the nav tree (in Author mode or above) for a pink design
         // menu with a live "Icon Size" slider - see Design/DesignMenu.cs.
         DesignMenu.EnsureItems(NavTree)
@@ -784,6 +790,7 @@ public partial class MainWindow : Window, IWindowLayout
 
         // Ctrl+N / Ctrl+O / Ctrl+S ... -- the keys shown beside the menu items (see Commanding/Shortcuts.cs).
         Shortcuts.Install(this);
+        ClipboardCommands.Install(this); // Edit > Cut / Copy / Paste, Ctrl+X / C / V, Escape ends a cut
 
         // Drag a .silo file (or a link to one) onto the window to open it: a Solo Silo or a URL then gets a process of its own.
         AllowDrop =  true;

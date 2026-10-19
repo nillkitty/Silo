@@ -113,7 +113,10 @@ public sealed class PushedValueProvider : IDiagramDataProvider
 ///     A template is literal text with <c>{scheme:path}</c> tokens. A token can end in a formatter:
 ///     <c>{push:cpu|fmt:0.0}</c> (.NET format string) or
 ///     <c>{silo:c1.state|map:connected=#d5e8d4,disconnected=#f8cecc,*=#f5f5f5}</c> (value lookup,
-///     <c>*</c> = anything else). Substituted values in labels and tooltips are HTML-encoded.
+///     <c>*</c> = anything else) or <c>{bind:CpuPercent|range:0=#d5e8d4,50=#fff2cc,80=#f8cecc}</c> (the entry with the
+///     highest threshold the number reaches). Substituted values in labels and tooltips are HTML-encoded.
+///     Schemes: <c>push</c> (<see cref="DiagramData.Push" />), <c>silo</c> (the live Silo model) and <c>bind</c> (the
+///     Silo's data bindings, see <c>Silo.Bindings.DataBindingService</c>).
 /// </summary>
 public static class DiagramBindings
 {
@@ -156,6 +159,7 @@ public static class DiagramBindings
             _             => value.ToString() ?? ""
         };
 
+        if (format.StartsWith("range:", StringComparison.OrdinalIgnoreCase)) return Range(value, format[6..]) ?? text;
         if (!format.StartsWith("map:", StringComparison.OrdinalIgnoreCase)) return text;
 
         string? fallback = null;
@@ -171,6 +175,60 @@ public static class DiagramBindings
         }
 
         return fallback ?? text;
+    }
+
+    /// <summary>
+    ///     <c>range:</c> -- the result of the entry with the highest threshold not above the value (<c>0=green,50=amber,80=red</c>);
+    ///     null when the value is not a number or is below every threshold.
+    /// </summary>
+    private static string? Range(object? value, string spec)
+    {
+        double number;
+        try
+        {
+            if (value is null or string { Length: 0 }) return null;
+            number = Convert.ToDouble(value, CultureInfo.InvariantCulture);
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+
+        string? best   = null;
+        double  bestAt = double.NegativeInfinity;
+        foreach (string pair in spec.Split(',', StringSplitOptions.RemoveEmptyEntries))
+        {
+            int eq = pair.IndexOf('=');
+            if (eq < 0 || !double.TryParse(pair[..eq].Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out double at)) continue;
+            if (number >= at && at >= bestAt)
+            {
+                bestAt = at;
+                best   = pair[(eq + 1)..].Trim();
+            }
+        }
+
+        return best;
+    }
+
+    /// <summary>
+    ///     Evaluates one cell's bindings (its <c>silo-*</c> attributes) into the update the Silo plugin applies in place:
+    ///     <c>{ id, label?, tooltip?, style?: { key: value } }</c>; null when the cell has no bindings.
+    /// </summary>
+    public static System.Text.Json.Nodes.JsonObject? Evaluate(string id, IEnumerable<(string Name, string Template)> attributes)
+    {
+        var update = new System.Text.Json.Nodes.JsonObject { ["id"] = id };
+        System.Text.Json.Nodes.JsonObject? style = null;
+
+        foreach (var (name, template) in attributes)
+            if (name == LabelAttribute)
+                update["label"] = Expand(template, true);
+            else if (name == TooltipAttribute)
+                update["tooltip"] = Expand(template, true);
+            else if (name.StartsWith(StylePrefix, StringComparison.Ordinal))
+                (style ??= new System.Text.Json.Nodes.JsonObject())[name[StylePrefix.Length..]] = Expand(template, false);
+
+        if (style is not null) update["style"] = style;
+        return update.Count > 1 ? update : null;
     }
 
     /// <summary>Re-evaluates every binding in <paramref name="doc" />; returns how many cell values changed.</summary>

@@ -25,6 +25,21 @@ public static class PromptDialog
         return button == 0 && !string.IsNullOrWhiteSpace(text) ? text.Trim() : null;
     }
 
+    /// <summary>
+    ///     The window the prompt belongs to: the one the person is working in (a tool can float in a window of its own, possibly kept above the others,
+    ///     and a prompt owned by the main window would open behind it), else the main window.
+    /// </summary>
+    private static Window? PromptOwner()
+    {
+        var app = Application.Current;
+        if (app is null) return null;
+
+        foreach (Window w in app.Windows)
+            if (w.IsActive && w.IsVisible) return w;
+
+        return app.MainWindow is { IsVisible: true } main ? main : null;
+    }
+
     private static (int Button, bool Checked, string? Text) ShowCore(string title, string message, string[] buttons, string? checkBoxText,
                                                                       string? input)
     {
@@ -37,7 +52,7 @@ public static class PromptDialog
                          ResizeMode            = ResizeMode.NoResize,
                          ShowInTaskbar         = false,
                          WindowStartupLocation = WindowStartupLocation.CenterOwner,
-                         Owner                 = Application.Current?.MainWindow is { IsVisible: true } w ? w : null
+                         Owner                 = PromptOwner()
                      };
         if (window.Owner is null) window.WindowStartupLocation = WindowStartupLocation.CenterScreen;
 

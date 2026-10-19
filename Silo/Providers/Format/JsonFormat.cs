@@ -16,9 +16,15 @@ public class JsonFormat : IFileFormat, IDocumentProvider<JToken>
                                                           LineInfoHandling              = LineInfoHandling.Load
                                                       };
 
-    public string ContentType   { get; } = "application/json";
-    public string DisplayName   { get; } = "JSON File";
+    public string ContentType { get; } = "application/json";
+    public string DisplayName { get; } = "JSON File";
+
     public string FileExtension { get; } = "json";
+
+    public IEnumerable<DataVerb> GetSupportedVerbs()
+    {
+        throw new NotImplementedException();
+    }
 
     /// <summary>
     ///     Reads every JSON value out of <paramref name="stream" />, in order. An ordinary JSON
@@ -44,10 +50,10 @@ public class JsonFormat : IFileFormat, IDocumentProvider<JToken>
 public class JsonDocument(JsonFormat provider, Uri uri) : DocumentBase<JToken>(provider, uri), IStructuredDataSource
 {
     public string? AttributePrefix      => null;
-    public string? TextPropertyName     => null;
     public string? MetaCommentName      => null;
     public string? MetaTypeHintName     => null;
     public string? MetaWrapperValueName => null;
+    public string? TextPropertyName     => null;
 
     public IEnumerable<JToken> ReadData()
     {

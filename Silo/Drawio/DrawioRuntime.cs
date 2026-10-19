@@ -100,6 +100,7 @@ public static class DrawioRuntime
                                           // editor (see Drawio/Plugin/silo-plugin.js); draw.io itself would answer them with unknownMessage.
                                           host.addEventListener('message', function (e) {
                                             var text = typeof e.data === 'string' ? e.data : JSON.stringify(e.data);
+                                            if (text.indexOf('"siloBootstrap"') >= 0) { injectPlugin(text); return; }
                                             if (text.indexOf('"siloPlugin":true') >= 0) {
                                               var request = null;
                                               try { request = JSON.parse(text); } catch (err) { return; }
@@ -113,9 +114,26 @@ public static class DrawioRuntime
                                             frame.contentWindow.postMessage(text, '*');
                                           });
 
-                                          // Ctrl+right-click opens Silo's design menu instead of draw.io's own context menu. The editor
-                                        // is a same-origin iframe, so the capture listener can sit on its document.
+                                        // The Silo plugin normally arrives with the WebView2 document-created script; if the editor frame did not get it,
+                                        // ask Silo for it and add it here (it waits for Draw.loadPlugin, so it works before or after draw.io starts).
+                                        function injectPlugin(text) {
+                                          try {
+                                            var w = frame.contentWindow;
+                                            if (!w || w.SiloPlugin) return;
+                                            var s = w.document.createElement('script');
+                                            s.text = JSON.parse(text).siloBootstrap;
+                                            (w.document.head || w.document.documentElement).appendChild(s);
+                                          } catch (err) {
+                                            host.postMessage(JSON.stringify({ event: 'silo.error', section: 'inject', message: String(err) }));
+                                          }
+                                        }
+
+                                        // Once the editor page has loaded: make sure the plugin is in it, and let Ctrl+right-click open Silo's design menu
+                                        // instead of draw.io's own context menu (the editor is a same-origin iframe, so the capture listener can sit on its document).
                                         frame.addEventListener('load', function () {
+                                          try {
+                                            if (!frame.contentWindow.SiloPlugin) host.postMessage(JSON.stringify({ event: 'silo.needPlugin' }));
+                                          } catch (err) { }
                                           try {
                                             frame.contentWindow.document.addEventListener('contextmenu', function (e) {
                                               if (!e.ctrlKey) return;

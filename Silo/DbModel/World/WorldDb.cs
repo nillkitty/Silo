@@ -1,3 +1,8 @@
+using System.ComponentModel;
+using System.Globalization;
+using System.Reflection;
+using System.Windows.Markup;
+
 namespace Silo.DbModel.Worlds;
 
 /// <summary>
@@ -16,8 +21,71 @@ public interface IWorldTypePart
 /// <summary>
 ///     Defines a World
 /// </summary>
-public class World : ItemContainer<IWorldPart>
+public class World : ItemContainer<IWorldPart>, ISupportInitialize
 {
+    /// <inheritdoc />
+    void ISupportInitialize.BeginInit()
+    {
+    }
+
+    /// <inheritdoc />
+    void ISupportInitialize.EndInit()
+    {
+        BindReferences();
+    }
+
+    /// <summary>
+    ///     Points every <see cref="IRuntimeRef" /> held by this world's parts at this world, and sets their
+    ///     <see cref="IWorldPart.World" />. XAML loading calls it; call it after assembling a World in code.
+    /// </summary>
+    public void BindReferences()
+    {
+        foreach (var part in Parts())
+        {
+            if (part is IWorldPart wp && wp.World is null) wp.World = this;
+
+            foreach (var prop in part.GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance))
+                if (typeof(IRuntimeRef).IsAssignableFrom(prop.PropertyType) && prop.GetIndexParameters().Length == 0 &&
+                    prop.GetValue(part) is IRuntimeRef r)
+                    r.Bind(Resolve);
+        }
+    }
+
+    /// <summary>
+    ///     Finds the part of type <paramref name="type" /> whose <c>Name</c> is <paramref name="name" />; the name may be
+    ///     prefixed with this world's <see cref="Key" /> (<c>key:Name</c>).
+    /// </summary>
+    public object? Resolve(Type type, string name)
+    {
+        if (Key is { Length: > 0 } && name.StartsWith(Key + ":", StringComparison.Ordinal)) name = name[(Key.Length + 1)..];
+
+        foreach (var part in Parts())
+            if (type.IsInstanceOfType(part) &&
+                part.GetType().GetProperty("Name", BindingFlags.Public | BindingFlags.Instance)?.GetValue(part) is string n &&
+                string.Equals(n, name, StringComparison.Ordinal))
+                return part;
+
+        return null;
+    }
+
+    /// <summary>
+    ///     This world's parts and, recursively, their own items.
+    /// </summary>
+    private IEnumerable<object> Parts()
+    {
+        var pending = new Stack<object>(Items.OfType<object>().Reverse());
+        while (pending.Count > 0)
+        {
+            var part = pending.Pop();
+            yield return part;
+
+            if (part.GetType().GetProperty(nameof(Items))?.GetValue(part) is System.Collections.IEnumerable children)
+                foreach (var child in children.Cast<object>().Reverse())
+                    if (child is not null)
+                        pending.Push(child);
+        }
+    }
+
     /// <summary>Renamable, human-readable display name</summary>
     public string DisplayName { get; set; } = string.Empty;
 
@@ -54,12 +122,12 @@ public class WorldType : ItemContainer<IWorldTypePart>, IWorldPart
     /// <summary>
     ///     Optional list of auxiliary types to include
     /// </summary>
-    public WorldType[]? Include { get; set; } = [];
+    public RuntimeRef<WorldType[]>? Include { get; set; }
 
     /// <summary>
     ///     Optional base type to inherit from
     /// </summary>
-    public WorldType? Inherits { get; set; }
+    public RuntimeRef<WorldType>? Inherits { get; set; }
 
     /// <summary>The name of the type in the Silo</summary>
     public string Name { get; set; } = string.Empty;
@@ -77,6 +145,181 @@ public class WorldType : ItemContainer<IWorldTypePart>, IWorldPart
 
     /// <summary>The world that owns the object type</summary>
     public World World { get; set; } = null!;
+}
+
+/// <summary>
+///     A reference to another part, by name, that is resolved when it is first used (so it may point forward in XAML).
+/// </summary>
+public interface IRuntimeRef
+{
+    /// <summary>
+    ///     The type referred to: the element type when the reference is to an array of parts.
+    /// </summary>
+    Type ElementType { get; }
+
+    /// <summary>
+    ///     Whether <see cref="Bind" /> has been called.
+    /// </summary>
+    bool IsBound { get; }
+
+    /// <summary>
+    ///     The name(s) referred to; several are separated by commas.
+    /// </summary>
+    string? Value { get; }
+
+    /// <summary>
+    ///     Sets how names are looked up: <c>(type, name) =&gt; part or null</c>.
+    /// </summary>
+    void Bind(Func<Type, string, object?> resolver);
+}
+
+/// <summary>
+///     A by-name reference to a <typeparamref name="TTarget" /> (or, when <typeparamref name="TTarget" /> is an array, to
+///     several parts named in a comma-separated list), resolved on first use by the owner that bound it (see
+///     <see cref="World.BindReferences" />). In XAML it is written as the plain name, e.g. <c>Inherits="Contact"</c>.
+/// </summary>
+[ContentProperty(nameof(Value))]
+[TypeConverter(typeof(RuntimeRefConverter))]
+public class RuntimeRef<TTarget> : IRuntimeRef
+{
+    private Func<Type, string, object?>? _resolver;
+    private bool                         _resolved;
+    private TTarget?                     _target;
+    private string?                      _value;
+
+    /// <summary>
+    ///     The referenced part, resolving it on first use.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">Not bound yet, or a name is not found.</exception>
+    public TTarget Target
+    {
+        get
+        {
+            if (!_resolved)
+            {
+                _target   = Resolve();
+                _resolved = true;
+            }
+
+            return _target!;
+        }
+    }
+
+    /// <inheritdoc />
+    public Type ElementType => typeof(TTarget).IsArray ? typeof(TTarget).GetElementType()! : typeof(TTarget);
+
+    /// <inheritdoc />
+    public bool IsBound => _resolver is not null;
+
+    /// <inheritdoc />
+    public string? Value
+    {
+        get => _value;
+        set
+        {
+            _value    = value;
+            _resolved = false;
+        }
+    }
+
+    /// <inheritdoc />
+    public void Bind(Func<Type, string, object?> resolver)
+    {
+        _resolver = resolver;
+        _resolved = false;
+    }
+
+    public override string ToString()
+    {
+        return _value ?? string.Empty;
+    }
+
+    private TTarget Resolve()
+    {
+        if (_resolver is null)
+            throw new InvalidOperationException(
+                $"The reference to {typeof(TTarget).Name} '{_value}' is not bound; its owner must bind it (e.g. World.BindReferences) before it is used.");
+
+        if (!typeof(TTarget).IsArray)
+            return string.IsNullOrWhiteSpace(_value) ? default! : (TTarget)Find(_value.Trim());
+
+        var names = (_value ?? string.Empty).Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+        var items = Array.CreateInstance(ElementType, names.Length);
+        for (int i = 0; i < names.Length; i++) items.SetValue(Find(names[i]), i);
+        return (TTarget)(object)items;
+    }
+
+    private object Find(string name)
+    {
+        return _resolver!(ElementType, name) ??
+               throw new InvalidOperationException($"No {ElementType.Name} named '{name}' was found.");
+    }
+
+    /// <summary>
+    ///     The referenced part (see <see cref="Target" />); null when <paramref name="r" /> is null.
+    /// </summary>
+    public static implicit operator TTarget(RuntimeRef<TTarget> r)
+    {
+        return r is null ? default! : r.Target;
+    }
+
+    public static implicit operator RuntimeRef<TTarget>(string s)
+    {
+        return new RuntimeRef<TTarget> { Value = s.Required() };
+    }
+}
+
+/// <summary>
+///     Converts a name (as written in XAML) to the <see cref="RuntimeRef{TTarget}" /> type of the property being set.
+/// </summary>
+public class RuntimeRefConverter : TypeConverter
+{
+    public override bool CanConvertFrom(ITypeDescriptorContext? context, Type sourceType)
+    {
+        return sourceType == typeof(string) || base.CanConvertFrom(context, sourceType);
+    }
+
+    public override object? ConvertFrom(ITypeDescriptorContext? context, CultureInfo? culture, object value)
+    {
+        if (value is not string s) return base.ConvertFrom(context, culture, value);
+
+        var type = TargetType(context) ??
+                   throw new NotSupportedException($"Cannot tell which RuntimeRef<> type '{s}' is being converted to.");
+
+        var r = (IRuntimeRef)Activator.CreateInstance(type)!;
+        type.GetProperty(nameof(IRuntimeRef.Value))!.SetValue(r, s);
+        return r;
+    }
+
+    public override bool CanConvertTo(ITypeDescriptorContext? context, Type? destinationType)
+    {
+        return destinationType == typeof(string) || base.CanConvertTo(context, destinationType);
+    }
+
+    public override object? ConvertTo(ITypeDescriptorContext? context, CultureInfo? culture, object? value, Type destinationType)
+    {
+        return destinationType == typeof(string) && value is IRuntimeRef r
+                   ? r.Value
+                   : base.ConvertTo(context, culture, value, destinationType);
+    }
+
+    /// <summary>
+    ///     The closed RuntimeRef type of the property being set, from the XAML service context.
+    /// </summary>
+    private static Type? TargetType(ITypeDescriptorContext? context)
+    {
+        var type = context?.PropertyDescriptor?.PropertyType;
+        if (type is null && context?.GetService(typeof(IProvideValueTarget)) is IProvideValueTarget target)
+            type = target.TargetProperty switch
+                   {
+                       PropertyInfo p       => p.PropertyType,
+                       DependencyProperty d => d.PropertyType,
+                       _                    => null
+                   };
+
+        type = type is null ? null : Nullable.GetUnderlyingType(type) ?? type;
+        return type is { IsGenericType: true } && type.GetGenericTypeDefinition() == typeof(RuntimeRef<>) ? type : null;
+    }
 }
 
 /// <summary>

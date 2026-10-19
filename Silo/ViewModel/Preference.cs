@@ -12,7 +12,7 @@ namespace Silo.Model;
 ///     The property is plain code, so setting it directly does not write anything by itself: <see cref="ModelBase.SavePreferences" />
 ///     (which a Silo runs before it is saved or closed) writes what changed that way.
 /// </remarks>
-public sealed class Preference : INotifyPropertyChanged
+public sealed class Preference : IPreference
 {
     private readonly object                  _owner;
     private readonly Func<IPreferenceStore?> _store;

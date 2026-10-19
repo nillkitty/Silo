@@ -4,6 +4,7 @@ public interface IUriProvider
 {
     UriSchemeRegistration ForSystem { get; }
     UriSchemeRegistration ForUser   { get; }
+    bool                  IsPublic  { get; }
 
     ExistingProviderHandling OtherProvidersHandling { get; }
     UriSchemeScope           HandlesScheme(string scheme);

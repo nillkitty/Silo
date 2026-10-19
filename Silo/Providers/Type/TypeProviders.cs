@@ -1,9 +1,15 @@
 ﻿using Silo.Contracts.Providers.Data.Shape;
 using Silo.DbModel.Worlds;
+using Silo.Providers.Definitions;
 using Telefrag.DI;
 
 namespace Silo.Providers;
 
+/// <summary>
+///     Finds the syntaxes defined in the active Silo (<c>syntax:Name</c>, by name or alias; see <see cref="ISyntaxStore" />). New Silos start with the
+///     predefined ones: Timestamp, Duration, Guid, Regex, Wildcard, IPAddress, IPSubnet, Version, Oid, SecurityIdentifier, JObject (jobj), JArray (jarr),
+///     JToken (jtok), Base64, Html, Csv, Tsv, CliArgs and CliCommand.
+/// </summary>
 [Singleton(typeof(ITypeProvider))]
 public class SyntaxTypeProvider : ITypeProvider
 {
@@ -11,15 +17,24 @@ public class SyntaxTypeProvider : ITypeProvider
 
     public IType? Lookup(TypeLookup lookup)
     {
-        return null; // not written yet: knows no types
+        try
+        {
+            return DefinedTypes.LookupSyntax(App.Instance?.ActiveSilo?.Data as ISyntaxStore, lookup);
+        }
+        catch (Exception ex) when (ex is not ArgumentNullException)
+        {
+            Serilog.Log.Warning(ex, "Looking up a syntax failed");
+            return null;
+        }
     }
 
     public IType? Lookup(Type type)
     {
-        return null; // not written yet: knows no types
+        return null; // runtime types are the CLR provider's
     }
 }
 
+/// <summary>Finds the enums defined in the active Silo (<c>enum:Name</c>; see <see cref="IEnumStore" />).</summary>
 [Singleton(typeof(ITypeProvider))]
 public class EnumTypeProvider : ITypeProvider
 {
@@ -27,12 +42,20 @@ public class EnumTypeProvider : ITypeProvider
 
     public IType? Lookup(TypeLookup lookup)
     {
-        return null; // not written yet: knows no types
+        try
+        {
+            return DefinedTypes.LookupEnum(App.Instance?.ActiveSilo?.Data as IEnumStore, lookup);
+        }
+        catch (Exception ex) when (ex is not ArgumentNullException)
+        {
+            Serilog.Log.Warning(ex, "Looking up an enum failed");
+            return null;
+        }
     }
 
     public IType? Lookup(Type type)
     {
-        return null; // not written yet: knows no types
+        return null; // runtime types are the CLR provider's
     }
 }
 
