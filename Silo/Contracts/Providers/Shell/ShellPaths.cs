@@ -2,7 +2,7 @@ using System.Security.Principal;
 using Microsoft.Win32;
 using Silo.Connectors.System;
 
-namespace Silo.Shell;
+namespace Silo.Providers.Shell;
 
 public interface IShellPaths
 {

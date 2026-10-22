@@ -1,7 +1,7 @@
 ﻿using Silo.Connectors;
 using Silo.Connectors.System;
 using Silo.Contracts.Connectors;
-using Silo.Shell;
+using Silo.Providers;
 
 namespace Silo.Tests.Connectors;
 

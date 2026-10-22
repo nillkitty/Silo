@@ -10,8 +10,20 @@ public enum LabDock
     Left,
 
     /// <summary>To the right of the main view.</summary>
-    Right
+    Right,
+
+    /// <summary>Below the main view (above the terminal).</summary>
+    Bottom
 }
+
+/// <summary>
+///     One menu a Lab adds to its window's menu bar (the window has the standard ones: File, Edit, Lab, Value, View). A menu whose header
+///     is "_File" or "_Edit" is the Lab's own content for that menu (the window adds New Window and Close to File); the others are
+///     added between Edit and Lab.
+/// </summary>
+/// <param name="Header">The menu's text ("_Rules"); a leading "_" makes the next letter the access key.</param>
+/// <param name="Items">The entries in order; a null entry is a separator.</param>
+public sealed record LabMenu(string Header, IReadOnlyList<ProvidedCommand?> Items);
 
 /// <summary>
 ///     A "Lab": a UI harness for studying one kind of value (a web address, some bits, text, JSON, an XML schema...) in a window of its
@@ -128,6 +140,24 @@ public interface ILabSession : INotifyPropertyChanged, IDisposable
     /// <summary>Actions on the value being studied: Refresh, View Source, Add to Silo. In the Value menu and on the toolbar.</summary>
     IEnumerable<ProvidedCommand> ValueActions { get; }
 
+    /// <summary>
+    ///     The Lab's own menus (see <see cref="LabMenu" />). Empty for a Lab that has none: the window then sorts the global and value
+    ///     actions into File and Edit by what they are (new, open, save... / undo, copy, paste...) and the rest stay in Lab and Value.
+    /// </summary>
+    IEnumerable<LabMenu> Menus => [];
+
+    /// <summary>
+    ///     A bar shown between the menu bar and the toolbar (the Menu Lab puts the menu it is making there); null for none. Called once,
+    ///     after <see cref="BuildMainView" />.
+    /// </summary>
+    UIElement? BuildTopBar() => null;
+
+    /// <summary>
+    ///     Changes when the default arrangement of the panes does, so windows saved with the old one do not keep it (the saved layout is
+    ///     filed under the Lab and this number).
+    /// </summary>
+    int LayoutVersion => 1;
+
     /// <summary>Views of the current data (the DOM, the console, ...): each is a pane docked left or right of the main view.</summary>
     IReadOnlyList<LabInspector> Inspectors { get; }
 
@@ -155,8 +185,20 @@ public abstract class LabInspector
     /// <summary>The side the pane is first docked on.</summary>
     public virtual LabDock Dock => LabDock.Right;
 
+    /// <summary>
+    ///     Which column (left and right) or which section (bottom) of its side the pane is in, numbered from the window's edge inward. Panes with the same side and lane are tabbed together; panes in different lanes sit next to each
+    ///     other when the window is wide enough, else everything on a side is tabbed together.
+    /// </summary>
+    public virtual int Lane => 0;
+
     /// <summary>Whether the pane is open in a window that has no remembered layout; the others are opened from the View menu.</summary>
     public virtual bool VisibleByDefault => true;
+
+    /// <summary>
+    ///     What the pane is about. The View menu lists the panes of the things the Lab works with and keeps in the Silo (<see cref="LabPaneKind.Entity" />)
+    ///     first, and the views of what is going on (<see cref="LabPaneKind.Other" />, the default) after a line.
+    /// </summary>
+    public virtual LabPaneKind Kind => LabPaneKind.Other;
 
     /// <summary>What the pane shows (made once).</summary>
     public UIElement View => _view ??= BuildView();

@@ -8,6 +8,9 @@ using Silo.Credentials;
 using Silo.Crypto;
 using Silo.DbModel.Sqlite;
 using Silo.Hosting;
+using Silo.Providers.Crypto;
+using Silo.Providers.Data;
+using Silo.Providers.Data.Validation;
 using Silo.Remote;
 using Silo.Settings;
 using Silo.Ui.Windows;
@@ -27,11 +30,11 @@ public partial class OpenSilo : ModelBase
     private CredentialService? _credentials;
     private SiloEncryption?    _encryption;
 
-    [Toggle("silo.alwaysExpand",
+    [Toggle("Always Expand To Directory", "silo.alwaysExpand",
             "Whether the Silo should expand to a directory even when using compact" + " format (which is a single bytestream)", false)]
     public bool AlwaysExpandToDirectory { get; set; }
 
-    [Toggle("silo.autoImportExtraFiles",
+    [Toggle("Auto Import Extra Files", "silo.autoImportExtraFiles",
             "Whether files added to the expanded directory are auto-imported " + "(versus lost) when clearing the expansion directory",
             false)]
     public bool AutoImportExtraFiles { get; set; }
@@ -67,7 +70,7 @@ public partial class OpenSilo : ModelBase
     public FileInfo? FileInfo => File is { } f ? new FileInfo(f.FilePath) : null;
     public string?   FilePath => FileInfo?.FullName;
 
-    [Toggle("silo.foregroundReconnect", "Whether to force all (re)connections to happen synchronously", false)]
+    [Toggle("Foreground Reconnect", "silo.foregroundReconnect", "Whether to force all (re)connections to happen synchronously", false)]
     public bool ForegroundReconnect { get; set; }
 
     public bool IsAuthorable => UserContext.IsAuthorable;
@@ -105,26 +108,28 @@ public partial class OpenSilo : ModelBase
     public static OpenSilo                       OnlySilo  => OpenSilos is [OpenSilo os] ? os : null;
     public static ObservableCollection<OpenSilo> OpenSilos { get; } = [];
 
-    [Toggle("silo.reconnectConnections", "Whether to reconnect persisted connections upon reopening a Silo", true)]
+    [Toggle("Reconnect Connections", "silo.reconnectConnections", "Whether to reconnect persisted connections upon reopening a Silo", true)]
     public bool ReconnectConnections { get; set; } = true;
 
-    [Toggle("silo.rememberConnections", "Whether connections created are persisted if not explicitly removed", true)]
+    [Toggle("Remember Connections", "silo.rememberConnections", "Whether connections created are persisted if not explicitly removed",
+            true)]
     public bool RememberConnections { get; set; } = true;
 
-    [Toggle("silo.rememberExplorerTree", "Whether the state of the explorer pane is persisted", true)]
+    [Toggle("Remember Explorer Tree", "silo.rememberExplorerTree", "Whether the state of the explorer pane is persisted", true)]
     public bool RememberExplorerTree { get; set; } = true;
 
-    [Toggle("silo.rememberWindowLayouts", "Whether the sizes and positions of windows and panes are persisted", true)]
+    [Toggle("Remember Window Layouts", "silo.rememberWindowLayouts", "Whether the sizes and positions of windows and panes are persisted",
+            true)]
     public bool RememberWindowLayouts { get; set; } = true;
 
-    [Toggle("silo.rememberWindowPopouts", "Whether the pop-out state of windows/panes is persisted", true)]
+    [Toggle("Remember Window Popouts", "silo.rememberWindowPopouts", "Whether the pop-out state of windows/panes is persisted", true)]
     public bool RememberWindowPopouts { get; set; } = true;
 
     /// <summary>The URL this Silo is synced with, if it was opened from one (<see cref="OpenRemoteAsync" />).</summary>
     public Uri? RemoteUri { get; private set; }
 
-    [Toggle("silo.reopenMe", "Whether the app should re-open this Silo if launched with no other document, " + "and this Silo is local",
-            true)]
+    [Toggle("Re-Open Me", "silo.reopenMe",
+            "Whether the app should re-open this Silo if launched with no other document, " + "and this Silo is local", true)]
     public bool ReopenMe { get; set; } = true;
 
     /// <summary>
@@ -510,7 +515,9 @@ public partial class OpenSilo : ModelBase
         if (RememberConnections && Data is IConnectionStore store)
             try
             {
-                _savedIds[result.Connection] = store.SaveConnection(result.Name, result.Uri).Id;
+                // a connection with no destination of its own (Runtime, the current user's registry...) is saved as the connector that makes it
+                var destination = result.Uri ?? (result.Connection.Connector is { } connector ? ConnectionRestore.UriFor(connector) : null);
+                _savedIds[result.Connection] = store.SaveConnection(result.Name, destination).Id;
             }
             catch (Exception ex)
             {

@@ -1,4 +1,4 @@
-﻿namespace Silo.Shell;
+﻿namespace Silo.Providers.Shell;
 
 public record IconFrom(string Name, string Value, bool UseRegSzExpand) : ShellIcon
 {

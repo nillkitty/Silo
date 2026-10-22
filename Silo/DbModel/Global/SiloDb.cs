@@ -1,6 +1,7 @@
 ﻿using System.ComponentModel;
 using Silo.Converters;
-using Silo.Model;
+using Silo.Providers.Crypto;
+using Silo.Providers.Data;
 
 namespace Silo.DbModel.Global;
 
@@ -35,26 +36,32 @@ public enum WindowPlacementState
 ///     Tracks window position and sizes; row per Window type
 /// </summary>
 /// <remarks>
-///     A row is one window of one kind for one person: <see cref="Type" /> says what kind ("Main", "Table", "Tool", "Dialog"),
-///     <see cref="Uri" /> which one of that kind (<c>silo:main</c>, <c>silo:table/5</c>, <c>silo:tool/drawiocanvas</c>), and
-///     <see cref="UserEntity.User" /> whose it is -- a row without a user is the Silo's shared default, used by anyone who has
+///     A row is one window of one kind for one person: <see cref="Type" /> says what kind ("Main", "Table", "Tool",
+///     "Dialog"),
+///     <see cref="Uri" /> which one of that kind (<c>silo:main</c>, <c>silo:table/5</c>, <c>silo:tool/drawiocanvas</c>),
+///     and
+///     <see cref="UserEntity.User" /> whose it is -- a row without a user is the Silo's shared default, used by anyone who
+///     has
 ///     no row of their own. Position and size are in device-independent units (WPF's 1/96 inch). Writing these rows does
 ///     not mark the Silo as changed: they are saved along with the next save for any other reason.
 /// </remarks>
 public class Window : TimedUserEntity
 {
-    public int    Height { get; set; }
-    public int    Id     { get; set; }
+    public int Height { get; set; }
+    public int Id     { get; set; }
 
-    /// <summary>The main window's dock layout (AvalonDock XML: where the panes sit, floating ones, their sizes); null for other windows.</summary>
+    /// <summary>
+    ///     The main window's dock layout (AvalonDock XML: where the panes sit, floating ones, their sizes); null for
+    ///     other windows.
+    /// </summary>
     public string? Layout { get; set; }
 
     public WindowPlacementState State { get; set; }
-    public string Type   { get; set; } = string.Empty;
-    public Uri    Uri    { get; set; } = null!;
-    public int    Width  { get; set; }
-    public int    X      { get; set; }
-    public int    Y      { get; set; }
+    public string               Type  { get; set; } = string.Empty;
+    public Uri                  Uri   { get; set; } = null!;
+    public int                  Width { get; set; }
+    public int                  X     { get; set; }
+    public int                  Y     { get; set; }
 }
 
 /// <summary>
@@ -121,16 +128,16 @@ public class Pref : TimedUserEntity
 ///     Stored secret blob;  one row per record
 /// </summary>
 /// <remarks>
-///     <see cref="Data" /> is never plain: it is sealed by the Silo's encryption (<see cref="Silo.Contracts.Providers.Crypto.ISiloEncryption" />),
-///     or, for a <c>datakey</c> row, locked by an <see cref="Silo.Contracts.Providers.Crypto.ISecretProtector" />. The rows are read and
-///     written through <see cref="Silo.Contracts.Providers.Data.ISecretStore" />.
+///     <see cref="Data" /> is never plain: it is sealed by the Silo's encryption (<see cref="ISiloEncryption" />),
+///     or, for a <c>datakey</c> row, locked by an <see cref="ISecretProtector" />. The rows are read and
+///     written through <see cref="ISecretStore" />.
 /// </remarks>
 public class Secret : TimedUserEntity
 {
     [TypeConverter(typeof(ByteArrayConverter))]
     public byte[] Data { get; set; } = [];
 
-    public int    Id  { get; set; }
+    public int Id { get; set; }
 
     /// <summary>A name that is not secret: a credential's name, or <c>$datakey</c>.</summary>
     public string Key { get; set; } = string.Empty;
@@ -146,8 +153,9 @@ public class Secret : TimedUserEntity
 ///     Navigation tree nodes as configured by the user, one row per node
 /// </summary>
 /// <remarks>
-///     Besides nodes the person configured, the Explorer's remembered state (<see cref="Silo.Contracts.Providers.Data.INodeStateStore" />):
-///     one row per node that was expanded, open or selected, whose <see cref="Uri" /> is <c>silo:node?key=</c> and the node's Explorer
+///     Besides nodes the person configured, the Explorer's remembered state (<see cref="INodeStateStore" />):
+///     one row per node that was expanded, open or selected, whose <see cref="Uri" /> is <c>silo:node?key=</c> and the
+///     node's Explorer
 ///     key, escaped.
 /// </remarks>
 public class Node : TimedUserEntity

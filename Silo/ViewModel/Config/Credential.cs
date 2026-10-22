@@ -1,8 +1,10 @@
 ﻿using System.Security.Authentication;
+using Microsoft.Data.SqlClient;
 using Silo.Connectors.File;
 using Silo.Connectors.Ldap;
 using Silo.Connectors.Web;
 using Silo.Contracts.ConnectorServices;
+using Silo.Providers.Data.Validation;
 using SqlConnection = Silo.Connectors.Sql.SqlConnection;
 
 namespace Silo.Model;
@@ -74,7 +76,8 @@ public sealed class Credential : ICredential
     /// <summary>
     ///     The target realm of the credential: how it is used to sign in (which of the user name, domain and password
     ///     it uses; see <see cref="Silo.Credentials.CredentialRules.Uses" />). A credential made with a user name and
-    ///     password is <see cref="AuthRealm.Conventional" />, which is also what a credential saved before realms existed is read as.
+    ///     password is <see cref="AuthRealm.Conventional" />, which is also what a credential saved before realms existed is
+    ///     read as.
     /// </summary>
     public AuthRealm Realm { get; set; } = AuthRealm.Conventional;
 
@@ -136,7 +139,10 @@ public sealed class Credential : ICredential
         }
     }
 
-    /// <summary>The network credential of the process: the same identity as <see cref="_ConfigureDefault" /> for what signs in here.</summary>
+    /// <summary>
+    ///     The network credential of the process: the same identity as <see cref="_ConfigureDefault" /> for what signs in
+    ///     here.
+    /// </summary>
     private void _ConfigureDefaultNet(ICredentialSink target)
     {
         _ConfigureDefault(target);
@@ -177,7 +183,7 @@ public sealed class Credential : ICredential
         {
             case SqlConnection sql:
                 // the builder quotes what needs it: a password with a ; in it must not end the setting
-                sql.SetCredentialFragment(new Microsoft.Data.SqlClient.SqlConnectionStringBuilder { UserID = Username, Password = Password }.ConnectionString + ";");
+                sql.SetCredentialFragment(new SqlConnectionStringBuilder { UserID = Username, Password = Password }.ConnectionString + ";");
                 break;
             case LdapCredentialSink ldap:
                 ldap.SetBasicCredential(Username!, Password!);
@@ -189,8 +195,10 @@ public sealed class Credential : ICredential
     }
 
     /// <summary>
-    ///     Hands what the <see cref="Realm" /> uses (the signed-in user, a user name and password, ...) to the sink; a sink that
-    ///     does not take the realm's kind of credential is left alone, except where it cannot be used at all (<see cref="NotSupportedException" />).
+    ///     Hands what the <see cref="Realm" /> uses (the signed-in user, a user name and password, ...) to the sink; a sink
+    ///     that
+    ///     does not take the realm's kind of credential is left alone, except where it cannot be used at all (
+    ///     <see cref="NotSupportedException" />).
     /// </summary>
     /// <exception cref="InvalidCredentialException">The realm needs a user name or a password that is not there.</exception>
     public void Configure(ICredentialSink target)

@@ -1,7 +1,7 @@
 ﻿using Silo.Contracts.ConnectorServices;
-using Silo.Contracts.Providers.Data.Shape;
+using Silo.Providers.Data.Shape;
 
-namespace Silo.Contracts.Providers.Data.Source;
+namespace Silo.Providers.Data.Source;
 
 /// <summary>
 ///     Defines a data verb which can be used on a <see cref="IDataProvider" />

@@ -1,15 +1,18 @@
 ﻿using System.ComponentModel;
 using Serilog;
+using Silo.Providers.Data;
 
 namespace Silo.Model;
 
 /// <summary>
 ///     One preference of one model: the value of a property marked with <see cref="PreferenceAttribute" /> (or
-///     <see cref="ToggleAttribute" />), with its key, text and default. Setting <see cref="Value" /> sets the property and keeps the
+///     <see cref="ToggleAttribute" />), with its key, text and default. Setting <see cref="Value" /> sets the property and
+///     keeps the
 ///     new value in the Silo.
 /// </summary>
 /// <remarks>
-///     The property is plain code, so setting it directly does not write anything by itself: <see cref="ModelBase.SavePreferences" />
+///     The property is plain code, so setting it directly does not write anything by itself:
+///     <see cref="ModelBase.SavePreferences" />
 ///     (which a Silo runs before it is saved or closed) writes what changed that way.
 /// </remarks>
 public sealed class Preference : IPreference
@@ -20,23 +23,12 @@ public sealed class Preference : IPreference
     // the text the Silo holds for the key now; null: it holds none
     private string? _storedText;
 
-    /// <param name="definition">What is declared for the preference.</param>
-    /// <param name="owner">The model whose property it is.</param>
-    /// <param name="store">Where the model keeps its preferences now (asked each time, a model gets its Silo late); null for nowhere.</param>
-    internal Preference(PreferenceDefinition definition, object owner, Func<IPreferenceStore?> store)
-    {
-        Definition = definition;
-        _owner     = owner;
-        _store     = store;
-        Default    = definition.DeclaredDefault ?? definition.Property.GetValue(owner);
-    }
+    public PreferenceDefinition Definition { get; }
 
     public string? Category => Definition.Category;
 
     /// <summary>The value when nothing else was chosen: the attribute's default, else what the property started as.</summary>
     public object? Default { get; }
-
-    public PreferenceDefinition Definition { get; }
 
     public string Description => Definition.Description;
 
@@ -64,14 +56,6 @@ public sealed class Preference : IPreference
     }
 
     public Type ValueType => Definition.ValueType;
-
-    public event PropertyChangedEventHandler? PropertyChanged;
-
-    /// <summary>Back to the default, written to the Silo like any other choice.</summary>
-    public void Reset() => Value = Default;
-
-    /// <summary>Tells whoever shows the preference that the property was changed in code.</summary>
-    public void Refresh() => RaiseChanged();
 
     /// <summary>Sets the property without writing anything.</summary>
     internal void Apply(object? value)
@@ -109,10 +93,14 @@ public sealed class Preference : IPreference
         if (PreferenceValues.TryFromText(ValueType, stored, out object? value))
             Apply(value);
         else
-            Log.Warning("The stored value \"{Stored}\" of the preference {Key} is not a {Type}: using {Default}", stored, Key, ValueType.Name, Default);
+            Log.Warning("The stored value \"{Stored}\" of the preference {Key} is not a {Type}: using {Default}", stored, Key,
+                        ValueType.Name, Default);
     }
 
-    /// <summary>Writes the value to the Silo if it is not what the Silo holds (or, with nothing held, if it is not the default).</summary>
+    /// <summary>
+    ///     Writes the value to the Silo if it is not what the Silo holds (or, with nothing held, if it is not the
+    ///     default).
+    /// </summary>
     internal void Persist()
     {
         var store = _store();
@@ -130,5 +118,33 @@ public sealed class Preference : IPreference
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Value)));
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Text)));
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsDefault)));
+    }
+
+    /// <param name="definition">What is declared for the preference.</param>
+    /// <param name="owner">The model whose property it is.</param>
+    /// <param name="store">
+    ///     Where the model keeps its preferences now (asked each time, a model gets its Silo late); null for
+    ///     nowhere.
+    /// </param>
+    internal Preference(PreferenceDefinition definition, object owner, Func<IPreferenceStore?> store)
+    {
+        Definition = definition;
+        _owner     = owner;
+        _store     = store;
+        Default    = definition.DeclaredDefault ?? definition.Property.GetValue(owner);
+    }
+
+    public event PropertyChangedEventHandler? PropertyChanged;
+
+    /// <summary>Back to the default, written to the Silo like any other choice.</summary>
+    public void Reset()
+    {
+        Value = Default;
+    }
+
+    /// <summary>Tells whoever shows the preference that the property was changed in code.</summary>
+    public void Refresh()
+    {
+        RaiseChanged();
     }
 }

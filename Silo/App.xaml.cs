@@ -1,7 +1,9 @@
 ﻿using System.Collections.ObjectModel;
 using System.Diagnostics;
+using System.IO;
 using System.Media;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Runtime.ExceptionServices;
 using System.Windows.Threading;
 using Microsoft.Win32;
@@ -9,14 +11,19 @@ using Serilog;
 using Serilog.Debugging;
 using Serilog.Events;
 using Silo.Assets;
+using Silo.Bindings;
 using Silo.Commanding;
 using Silo.DbModel.Sqlite;
 using Silo.Design;
 using Silo.Extensions;
 using Silo.Hosting;
+using Silo.Hotkeys;
 using Silo.Model;
+using Silo.Providers;
+using Silo.Providers.Data.Validation;
 using Silo.Settings;
 using Silo.Theming;
+using Silo.Tools.UnicodeExplorer;
 using Silo.Ui;
 using Silo.UI;
 using Silo.Ui.Windows;
@@ -31,6 +38,12 @@ namespace Silo;
 /// </summary>
 public partial class App : Application, IContainerHost
 {
+    // set while this thread is the one discovering the registrations, so what it does with the container does not wait for itself
+    [ThreadStatic] private static bool _registering;
+
+    private readonly Container _components   = new(nameof(App));
+    private readonly object    _registerGate = new();
+
     /// <summary>
     ///     Help -> About
     /// </summary>
@@ -109,6 +122,18 @@ public partial class App : Application, IContainerHost
     /// </summary>
     public ObservableCollection<OpenSilo> OpenSilos => OpenSilo.OpenSilos;
 
+    /// <summary>Whether <see cref="RegistrationsReady" /> has completed, i.e. asking for a component will not wait.</summary>
+    public bool RegistrationsComplete => RegistrationsReady.IsCompleted;
+
+    /// <summary>
+    ///     Completes when the registrations declared by attributes (<c>[Singleton]</c>, <c>[Transient]</c>, <c>[Register]</c>)
+    ///     are in
+    ///     the container. Started in <see cref="OnStartup" />; completed already when nothing was started. Never faults: a
+    ///     failure
+    ///     is logged and the container keeps whatever was registered.
+    /// </summary>
+    public Task RegistrationsReady { get; private set; } = Task.CompletedTask;
+
 
     /// <summary>
     ///     Whether to show the Tolos menu
@@ -125,6 +150,8 @@ public partial class App : Application, IContainerHost
     /// </summary>
     public SiloToolsModel Tools { get; } = new();
 
+    public static Version? Version { get; } = Assembly.GetExecutingAssembly().GetName().Version;
+
     /// <summary>
     ///     Application level logger
     /// </summary>
@@ -133,9 +160,23 @@ public partial class App : Application, IContainerHost
     private IDatabaseProvider _db => ActiveSilo?.Data;
 
     /// <summary>
-    ///     Application-level components container
+    ///     Application-level components container. The registrations the app's attributes declare are discovered by reflection
+    ///     in
+    ///     the background at startup (see <see cref="RegistrationsReady" />); asking for the container -- and so for any
+    ///     component
+    ///     through <see cref="Resolve{TService}" /> or <see cref="Require{TService}" /> -- waits for that to finish if it has
+    ///     not,
+    ///     and costs nothing once it has. Code that does not need a component right away can avoid even that wait with
+    ///     <see cref="ResolveAsync{TService}" /> or <see cref="WhenRegistered" />.
     /// </summary>
-    public Container Components { get; } = new(nameof(App));
+    public Container Components
+    {
+        get
+        {
+            WaitForRegistrations();
+            return _components;
+        }
+    }
 
     /// <summary>
     ///     Gets all logs formatted to a single buffer
@@ -217,18 +258,23 @@ public partial class App : Application, IContainerHost
     }
 
 
+    /// <summary>
+    ///     Says something in the status bar (<see cref="AppStatus" />): the last result, kept until the next. Safe from any
+    ///     thread.
+    ///     Always returns false, so a failing command can end with <c>return App.Status("...")</c>.
+    /// </summary>
     public static bool Status(string text)
     {
-        if (!Current.Dispatcher.CheckAccess())
-            return Current.Dispatcher.Invoke(() => Instance!.InterError(text));
-        (Current.MainWindow as MainWindow)?.StatusError.Content = text;
+        AppStatus.Instance.Report(text);
         return false;
     }
 
+    /// <summary>Beeps and shows <paramref name="error" /> in the status bar, in red. Returns false.</summary>
     public bool InterError(string error)
     {
         Beep();
-        return Status(error);
+        AppStatus.Instance.Report(error, true);
+        return false;
     }
 
     public bool Beep()
@@ -281,7 +327,12 @@ public partial class App : Application, IContainerHost
     protected override void OnStartup(StartupEventArgs e)
     {
         _configLogging();
-        _discoverRegs();
+
+        // The reflection that finds the DI registrations, the action providers and the assemblies' resources is the slow part of
+        // starting up and nothing on the way to the first window needs it: it runs in the background, and whatever does need a
+        // component waits for it in Components (and so Resolve/Require).
+        PreloadUiAssemblies();
+        StartBackgroundDiscovery();
         AppTheme.Apply();
         _themeDerivedWindows();
         AppDesignSettings.Apply();
@@ -290,36 +341,49 @@ public partial class App : Application, IContainerHost
         DesignMenu.Register();
 
         // Ctrl+Shift+hover: a pink tip showing what an element's right-click menu is built from (Commanding/ContextMenuInspector.cs)
-        global::Silo.Commanding.ContextMenuInspector.Start();
-        ResourceIndex.Instance.Build();
+        ContextMenuInspector.Start();
+        ResourceIndex.Instance.BuildDictionary(); // the assemblies' resources are being indexed in the background
 
         // Shortcut keys kept in the Silo (the Unicode Explorer's hotkeys, for one): Windows hot keys that work in every application.
-        global::Silo.Hotkeys.GlobalHotkeyService.Current.Start();
+        GlobalHotkeyService.Current.Start();
+
+        // Palettes (the Unicode Explorer's small always-visible windows of characters): the ones marked "Show on repo load" open with their Silo.
+        PaletteService.Current.Start();
 
         // Data bindings ({bind:Name} in diagrams): sampled while their Silo is open.
-        global::Silo.Bindings.DataBindingService.Current.Start();
+        DataBindingService.Current.Start();
 
         // Working folders left behind by a crashed Silo process (those still in use are locked and skipped).
         _ = Task.Run(SiloArchive.SweepOrphans);
 
         base.OnStartup(e);
-        RegisterToolNodes();
 
         // Later launches hand their documents to the stock instance through a named pipe.
         if (Launch.ServeRequests) SingleInstance.StartServer(HandleLaunchRequest);
 
         // The document this launch is for (decided in Program.Main -- double-click in Explorer, "silo.exe file.silo", a URL) opens
         // once the window is up.
+        // The status bar says so from the start, not from when the window has settled (the open is queued for idle time).
         if (Launch.Target is { } target)
-            Dispatcher.BeginInvoke(new Action(async () => await Commanding.OpenSiloCommand.OpenPathAsync(target)),
+        {
+            var opening = AppStatus.Instance.Begin("Opening " + Path.GetFileName(target.TrimEnd('/', '\\')));
+            Dispatcher.BeginInvoke(new Action(async () => await Commanding.OpenSiloCommand.OpenPathAsync(target, opening)),
                                    DispatcherPriority.ApplicationIdle);
+        }
         else if (Launch.Mode == LaunchMode.Stock && SiloFileSettings.Instance.ReopenLastSilo)
-            Dispatcher.BeginInvoke(new Action(async () => await ReopenLastSiloAsync()), DispatcherPriority.ApplicationIdle);
+        {
+            var reopening = RecentSilos.Instance.Items.FirstOrDefault() is { IsRemote: false, Exists: true } last
+                                ? AppStatus.Instance.Begin("Reopening " + Path.GetFileName(last.Target))
+                                : null;
+            Dispatcher.BeginInvoke(new Action(async () => await ReopenLastSiloAsync(reopening)), DispatcherPriority.ApplicationIdle);
+        }
     }
 
     /// <summary>
     ///     Asks every registered tool that is an <see cref="INodeProvider" /> for the node it adds to the Explorer. Done once,
-    ///     at startup: tools belong to the app, not to a Silo.
+    ///     at startup, on the UI thread as soon as the registrations are discovered (the nodes appear in the Explorer then):
+    ///     tools
+    ///     belong to the app, not to a Silo.
     /// </summary>
     private void RegisterToolNodes()
     {
@@ -340,25 +404,30 @@ public partial class App : Application, IContainerHost
     ///     and is an ordinary (non-Solo) Silo qualifies -- a URL or a Solo Silo would need a process of its own, which is
     ///     not something to start behind the person's back. Keeps people from ending up with several scattered Silos.
     /// </summary>
-    private async Task ReopenLastSiloAsync()
+    private async Task ReopenLastSiloAsync(StatusOperation? operation = null)
     {
         try
         {
-            if (RecentSilos.Instance.Items.FirstOrDefault() is not { IsRemote: false, Exists: true } last) return;
-            if (SiloProbe.Probe(last.Target).IsSolo) return;
+            if (RecentSilos.Instance.Items.FirstOrDefault() is not { IsRemote: false, Exists: true } last ||
+                SiloProbe.Probe(last.Target).IsSolo)
+            {
+                operation?.Dispose();
+                return;
+            }
 
-            await Commanding.OpenSiloCommand.OpenPathAsync(last.Target);
+            await Commanding.OpenSiloCommand.OpenPathAsync(last.Target, operation);
         }
         catch (Exception ex)
         {
+            operation?.Fail("Reopening the last Silo failed: " + ex.Message);
             Log.Warning(ex, "Reopening the last Silo failed");
         }
     }
 
     protected override void OnExit(ExitEventArgs e)
     {
-        global::Silo.Hotkeys.GlobalHotkeyService.Current.Stop();
-        global::Silo.Bindings.DataBindingService.Current.Stop();
+        GlobalHotkeyService.Current.Stop();
+        DataBindingService.Current.Stop();
         SingleInstance.StopServer();
         base.OnExit(e);
     }
@@ -395,20 +464,152 @@ public partial class App : Application, IContainerHost
         l.Debug("Logging configured");
     }
 
-    private void _discoverRegs()
+    /// <summary>
+    ///     Starts the startup reflection on background threads: the attribute-declared registrations (and, once they are in,
+    ///     the
+    ///     tools' Explorer nodes, on the UI thread), the action-provider scan and the index of the assemblies' resources.
+    ///     Returns at once.
+    /// </summary>
+    /// <summary>
+    ///     Loads the embedded assemblies the main window's XAML uses, here on the UI thread, before the background discovery starts.
+    /// </summary>
+    /// <remarks>
+    ///     Costura loads each embedded assembly from its bytes, and every such load gets a load context of its own. When two threads
+    ///     ask for the same assembly at once (the discovery's <c>GetCustomAttributes</c> loading a type that mentions AvalonDock, and
+    ///     the main window's BAML) each can get its own copy, and the window then fails with "[A]AvalonDock.DockingManager cannot be
+    ///     cast to [B]AvalonDock.DockingManager". Loaded once here, both threads find the same copy.
+    /// </remarks>
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static void PreloadUiAssemblies()
     {
-        List<Assembly?> a =
-        [
-            Assembly.GetEntryAssembly(),
-            Assembly.GetCallingAssembly(),
-            Assembly.GetExecutingAssembly()
-        ];
-        a.Where(x => x != null).Distinct().ToList().ForEach(x => DiscoverRegistrations(x));
+        _ = typeof(AvalonDock.DockingManager).Assembly;
+        _ = typeof(AvalonDock.Themes.Vs2013DarkTheme).Assembly;
+        _ = typeof(AvalonDock.Serializer.Xml.XmlLayoutSerializer).Assembly;
     }
 
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private void StartBackgroundDiscovery()
+    {
+        // Chosen here, on the calling thread: GetCallingAssembly means something else on a pool thread.
+        var assemblies = new List<Assembly?>
+                         {
+                             Assembly.GetEntryAssembly(),
+                             Assembly.GetCallingAssembly(),
+                             Assembly.GetExecutingAssembly()
+                         }.Where(x => x != null)
+                          .Distinct()
+                          .ToList();
+
+        var dispatcher = Dispatcher;
+        var clock      = Stopwatch.StartNew();
+
+        // each step shows in the status bar while it runs (see AppStatus.Begin)
+        var status         = AppStatus.Instance;
+        var loadingParts   = status.Begin("Loading components");
+        var indexingAssets = status.Begin("Indexing resources");
+        var findingActions = status.Begin("Finding action providers");
+
+        RegistrationsReady = Task.Run(() =>
+                                      {
+                                          _registering = true;
+                                          try
+                                          {
+                                              foreach (var assembly in assemblies) DiscoverRegistrations(assembly);
+                                              loadingParts.Done($"Components loaded in {clock.ElapsedMilliseconds} ms");
+                                          }
+                                          catch (Exception ex)
+                                          {
+                                              Log.Error(ex, "Discovering the component registrations failed");
+                                              loadingParts.Fail("Loading components failed: " + ex.Message);
+                                          }
+                                          finally
+                                          {
+                                              _registering = false;
+                                              Log.Debug("Component registrations discovered in {ms} ms", clock.ElapsedMilliseconds);
+                                          }
+                                      });
+
+        // What is built from the registrations goes on from there, on the UI thread: the tools may make WPF objects.
+        _ = RegistrationsReady.ContinueWith(_ =>
+                                            {
+                                                try
+                                                {
+                                                    dispatcher.BeginInvoke(new Action(RegisterToolNodes), DispatcherPriority.Loaded);
+                                                }
+                                                catch (Exception ex)
+                                                {
+                                                    Log.Debug(ex, "The tools' Explorer nodes could not be scheduled (shutting down?)");
+                                                }
+                                            }, TaskScheduler.Default);
+
+        // Independent of the registrations; each does its reflection once, early, and is waited for only by whoever needs it.
+        _ = Task.Run(ActionProviders.Prewarm)
+                .ContinueWith(_ => findingActions.Done($"Action providers found in {clock.ElapsedMilliseconds} ms"), TaskScheduler.Default);
+        _ = ResourceIndex.Instance.BuildAssembliesAsync()
+                         .ContinueWith(_ => indexingAssets.Done($"Resources indexed in {clock.ElapsedMilliseconds} ms"),
+                                       TaskScheduler.Default);
+    }
+
+    /// <summary>
+    ///     Waits for the registrations to be discovered, if they are not yet. Not when this is the thread discovering
+    ///     them.
+    /// </summary>
+    private void WaitForRegistrations()
+    {
+        var task = RegistrationsReady;
+        if (task.IsCompleted || _registering) return;
+
+        var waited = Stopwatch.StartNew();
+        task.Wait();
+        Log.Debug("Something needed a component and waited {ms} ms for the registrations to be discovered", waited.ElapsedMilliseconds);
+    }
+
+    /// <summary>
+    ///     Runs <paramref name="action" /> on the UI thread once the registrations are discovered -- at once (but still queued
+    ///     on the
+    ///     dispatcher) if they already are. For work that wants a component but need not hold anything up.
+    /// </summary>
+    public static void WhenRegistered(Action action)
+    {
+        action.Required();
+        if (Instance is not { } app)
+        {
+            action();
+            return;
+        }
+
+        var dispatcher = app.Dispatcher;
+        _ = app.RegistrationsReady.ContinueWith(_ => dispatcher.BeginInvoke(action), TaskScheduler.Default);
+    }
+
+    /// <summary>
+    ///     As <see cref="Resolve{TService}" /> without holding the calling thread: waits for the registrations
+    ///     asynchronously.
+    /// </summary>
+    public static async Task<TService?> ResolveAsync<TService>() where TService : class
+    {
+        if (Instance is not { } app) return null;
+
+        await app.RegistrationsReady;
+        return app._components.Resolve<TService>();
+    }
+
+    /// <summary>
+    ///     Registers the components the exported types of <paramref name="a" /> declare with attributes. Startup does this for
+    ///     the app's own assemblies in the background; call it for another one (a plug-in) whenever it is loaded.
+    /// </summary>
     public void DiscoverRegistrations(Assembly? a, bool critical = false)
     {
         if (a is null) return;
+
+        lock (_registerGate)
+        {
+            DiscoverRegistrationsCore(a, critical);
+        }
+    }
+
+    private void DiscoverRegistrationsCore(Assembly a, bool critical)
+    {
         List<Type> tt = null;
         try
         {
@@ -431,22 +632,22 @@ public partial class App : Application, IContainerHost
             var sa = t.GetCustomAttributes<SingletonAttribute>(true)?.FirstOrDefault();
             if (ca is { } aa)
             {
-                var r = Components.RegisterSingleton(aa.ServiceType, t, aa.Key, null,
-                                                     aa.IsSingleton ? ComponentLifetime.Singleton : ComponentLifetime.Transient);
+                var r = _components.RegisterSingleton(aa.ServiceType, t, aa.Key, null,
+                                                      aa.IsSingleton ? ComponentLifetime.Singleton : ComponentLifetime.Transient);
                 if (r != null)
                     Log.Debug("Registered component '{tn}' from attribute (as {in})", _base(t).ShortDisplayName(),
                               aa.ServiceType.ShortDisplayName());
             }
             else if (ta != null)
             {
-                var r = Components.RegisterSingleton(ta.ServiceType, t, ta.Name, null, ComponentLifetime.Transient);
+                var r = _components.RegisterSingleton(ta.ServiceType, t, ta.Name, null, ComponentLifetime.Transient);
                 if (r != null)
                     Log.Debug("Registered transient '{tn}' from attribute (as {in})", _base(t).ShortDisplayName(),
                               ta.ServiceType.ShortDisplayName());
             }
             else if (sa != null)
             {
-                var r = Components.RegisterSingleton(sa.ServiceType, t, sa.Name, null, ComponentLifetime.Singleton);
+                var r = _components.RegisterSingleton(sa.ServiceType, t, sa.Name, null, ComponentLifetime.Singleton);
                 if (r != null)
                     Log.Debug("Registered singleton '{tn}' from attribute (as {in})", _base(t).ShortDisplayName(),
                               sa.ServiceType.ShortDisplayName());
@@ -558,5 +759,29 @@ public partial class App : Application, IContainerHost
     public static void Alert(Exception ex, string what)
     {
         Alert($"{what}\n\n{ex.Message}");
+    }
+
+    /// <summary>
+    ///     Resolves all registered implementations of <typeparamref name="TComponent" />, and
+    ///     throws an exception if none are available.
+    /// </summary>
+    /// <typeparam name="TComponent">The service type being resolved.</typeparam>
+    public static List<TComponent> RequireAny<TComponent>()
+    {
+        var tt = typeof(TComponent);
+        if (ResolveAll<TComponent>() is not [_, ..] x)
+            throw new RequiredComponentMissingException($"A required service, '{tt}', is unavilable.");
+
+        return x;
+    }
+
+    /// <summary>
+    ///     Resolves all registered implementations of <typeparamref name="TComponent" />
+    /// </summary>
+    public static List<TComponent> ResolveAll<TComponent>()
+    {
+        var ie = Resolve<IEnumerable<TComponent>>() ?? [];
+
+        return ie.ToList();
     }
 }

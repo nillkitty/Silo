@@ -2,6 +2,7 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Media3D;
 using Serilog;
+using Silo.Explorer;
 using Silo.Toolbar;
 
 namespace Silo.Commanding;
@@ -152,6 +153,9 @@ public static class ContextCommands
             Log.Warning(ex, "Getting the registered commands of {model} failed", chain.LastOrDefault()?.GetType().Name);
         }
 
+        // every Explorer node can be refreshed (F5), whatever else it offers
+        if (chain.OfType<ExplorerNode>().FirstOrDefault() is { } explorerNode) NodeCommandHub.AddRefresh(result, explorerNode);
+
         return Order(result);
     }
 
@@ -268,53 +272,117 @@ public static class ContextCommands
     /// </summary>
     public static IReadOnlyList<string> Explain(DependencyObject element)
     {
-        var    lines  = new List<string>();
+        return ExplainParts(element).Select(line => string.Concat(line.Select(p => p.Text))).ToList();
+    }
+
+    /// <summary>
+    ///     <see cref="Explain" /> as styled pieces, one list per line: type names are marked <see cref="ExplainStyle.Type" />, element and
+    ///     object names <see cref="ExplainStyle.Name" />, so the inspector can show them in italics and bold.
+    /// </summary>
+    public static IReadOnlyList<IReadOnlyList<ExplainPart>> ExplainParts(DependencyObject element)
+    {
+        var    lines  = new List<IReadOnlyList<ExplainPart>>();
         var    host   = HostOf(element);
         object target = host is null ? element : TargetFrom(host, element);
 
-        lines.Add("This:  " + Describe(target) + (host is null                  ? "   (no shared menu here; showing what one would use)" :
-                                                  ReferenceEquals(target, host) ? "   (blank area)" : ""));
-        if (host is not null && !ReferenceEquals(host, target)) lines.Add("  In:  " + Describe(host));
+        var first = new List<ExplainPart> { P("This:  ", ExplainStyle.Label) };
+        first.AddRange(DescribeParts(target));
+        if (host is null) first.Add(P("   (no shared menu here; showing what one would use)", ExplainStyle.Muted));
+        else if (ReferenceEquals(target, host)) first.Add(P("   (blank area)", ExplainStyle.Muted));
+        lines.Add(first);
 
-        lines.Add("");
-        lines.Add("Command Discovery Order:");
+        if (host is not null && !ReferenceEquals(host, target))
+        {
+            var inLine = new List<ExplainPart> { P("  In:  ", ExplainStyle.Label) };
+            inLine.AddRange(DescribeParts(host));
+            lines.Add(inLine);
+        }
+
+        lines.Add(new List<ExplainPart>());
+        lines.Add(new List<ExplainPart> { P("Command Discovery Order:", ExplainStyle.Heading) });
         var chain = Chain(target);
         for (int i = 0; i < chain.Count; i++)
         {
             var o    = chain[i];
-            var ways = new List<string>();
+            var ways = new List<List<ExplainPart>>();
             if (o is DependencyObject d)
             {
-                if (GetCommands(d) is { } attached) ways.Add("attached Commands (" + attached.GetType().Name + ")");
+                if (GetCommands(d) is { } attached)
+                    ways.Add(new List<ExplainPart> { P("attached Commands ("), P(TypeName(attached.GetType()), ExplainStyle.Type), P(")") });
                 for (var owner = ItemsControl.ItemsControlFromItemContainer(d);
                      owner is not null;
                      owner = ItemsControl.ItemsControlFromItemContainer(owner))
                     if (GetItemCommands(owner) is { } itemCommands)
                     {
-                        ways.Add("ItemCommands of " + owner.GetType().Name + " (" + itemCommands.GetType().Name + ")");
+                        ways.Add(new List<ExplainPart> { P("ItemCommands of "), P(TypeName(owner.GetType()), ExplainStyle.Type), P(" ("),
+                                  P(TypeName(itemCommands.GetType()), ExplainStyle.Type), P(")") });
                         break;
                     }
             }
 
-            if (o is ICommandProvider) ways.Add("ICommandProvider");
+            if (o is ICommandProvider) ways.Add(new List<ExplainPart> { P(nameof(ICommandProvider), ExplainStyle.Type) });
             string role = i == 0 ? "target" : chain[i - 1] is IModelHolder ? "Model" : "DataContext";
-            lines.Add($"  {i + 1}. {Describe(o)}  [{role}]  " + (ways.Count > 0 ? "\u2713 " + string.Join(", ", ways) : "\u2013 none"));
+
+            var line = new List<ExplainPart> { P($"  {i + 1}. ") };
+            line.AddRange(DescribeParts(o));
+            line.Add(P($"  [{role}]  ", ExplainStyle.Muted));
+            if (ways.Count == 0) line.Add(P("\u2013 none", ExplainStyle.Muted));
+            else
+            {
+                line.Add(P("\u2713 ", ExplainStyle.Good));
+                for (int w = 0; w < ways.Count; w++)
+                {
+                    if (w > 0) line.Add(P(", "));
+                    line.AddRange(ways[w]);
+                }
+            }
+
+            lines.Add(line);
         }
 
         var model = chain.LastOrDefault();
-        // lines.Add("");
-        lines.Insert(2, "Model: " + (model is null ? "(none)" : model.GetType().FullName));
+        lines.Insert(lines.Count > 1 && lines[1].Count > 0 ? 2 : 1,
+                     model is null
+                         ? new List<ExplainPart> { P("Model: ", ExplainStyle.Label), P("(none)", ExplainStyle.Muted) }
+                         : new List<ExplainPart> { P("Model: ", ExplainStyle.Label), P(model.GetType().FullName ?? model.GetType().Name, ExplainStyle.Type) });
         if (model is null) return lines;
-        //lines.Add("");
 
-        lines.Add("Registered Provider Order:");
+        lines.Add(new List<ExplainPart> { P("Registered Provider Order:", ExplainStyle.Heading) });
         foreach (var (type, providers) in ActionProviders.Lookup(model.GetType()))
-            lines.Add("  " + TypeName(type) + "  " + (providers.Count > 0
-                                                          ? "\u2713 " + string.Join(", ", providers.Select(p => p.GetType().Name))
-                                                          : "\u2013"));
+        {
+            var line = new List<ExplainPart> { P("  "), P(TypeName(type), ExplainStyle.Type), P("  ") };
+            if (providers.Count == 0) line.Add(P("\u2013", ExplainStyle.Muted));
+            else
+            {
+                line.Add(P("\u2713 ", ExplainStyle.Good));
+                for (int p = 0; p < providers.Count; p++)
+                {
+                    if (p > 0) line.Add(P(", "));
+                    line.Add(P(TypeName(providers[p].GetType()), ExplainStyle.Type));
+                }
+            }
+
+            lines.Add(line);
+        }
 
         return lines;
     }
+
+    /// <summary>An object as its <see cref="ExplainStyle.Type" /> name, then its <see cref="ExplainStyle.Name" /> when it has one.</summary>
+    private static IEnumerable<ExplainPart> DescribeParts(object o)
+    {
+        yield return P(TypeName(o.GetType()), ExplainStyle.Type);
+        if (o is FrameworkElement { Name.Length: > 0 } fe)
+        {
+            yield return P(" ");
+            yield return P("\"" + fe.Name + "\"", ExplainStyle.Name);
+        }
+    }
+
+    private static ExplainPart P(string text, ExplainStyle style = ExplainStyle.Plain) => new(text, style);
+
+    /// <summary>A type's name as the inspector shows it (generic arguments spelled out).</summary>
+    public static string DisplayTypeName(Type t) => TypeName(t);
 
     /// <summary>The nearest element at or above <paramref name="d" /> whose menu <see cref="Attach" /> builds, or null.</summary>
     public static FrameworkElement? HostOf(DependencyObject? d)
@@ -340,3 +408,24 @@ public static class ContextCommands
         return d is Visual or Visual3D ? VisualTreeHelper.GetParent(d) ?? LogicalTreeHelper.GetParent(d) : LogicalTreeHelper.GetParent(d);
     }
 }
+
+/// <summary>How a piece of <see cref="ContextCommands.ExplainParts" /> is meant to look.</summary>
+public enum ExplainStyle
+{
+    Plain,
+    /// <summary>A type's name (shown in italics).</summary>
+    Type,
+    /// <summary>An element's or object's own name (shown in bold).</summary>
+    Name,
+    /// <summary>The word that starts a line ("This:", "Model:").</summary>
+    Label,
+    /// <summary>A heading line.</summary>
+    Heading,
+    /// <summary>Side remarks: roles, "none".</summary>
+    Muted,
+    /// <summary>The check mark of something found.</summary>
+    Good
+}
+
+/// <summary>One piece of a line of <see cref="ContextCommands.ExplainParts" />.</summary>
+public readonly record struct ExplainPart(string Text, ExplainStyle Style = ExplainStyle.Plain);

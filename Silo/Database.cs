@@ -1,8 +1,6 @@
 ﻿using System.IO;
-using System.Windows;
-
-using Silo.Contracts.Providers.Data.Validation;
 using Silo.Model;
+using Silo.Providers.Data.Validation;
 
 namespace Silo;
 
@@ -13,8 +11,8 @@ public static class AppIdentity
 
 public static class BrandedAppIdentity
 {
-    public static string? AppName { get; set; }
     public static string? AppIcon { get; set; }
+    public static string? AppName { get; set; }
 }
 
 public static class Database

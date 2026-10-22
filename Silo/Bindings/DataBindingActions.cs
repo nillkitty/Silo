@@ -1,4 +1,5 @@
 using Silo.Model;
+using Silo.Providers.Data;
 using DataBinding = Silo.DbModel.Global.DataBinding;
 
 namespace Silo.Bindings;
@@ -43,7 +44,8 @@ public static class DataBindingActions
                         Source = BindingSources.All.SelectMany(s => s.Examples).FirstOrDefault() ?? ""
                     };
 
-        if (DataBindingWindow.Edit(draft, name => existing.Any(b => b.Name.Equals(name, StringComparison.OrdinalIgnoreCase))) is not { } made) return;
+        if (DataBindingWindow.Edit(draft, name => existing.Any(b => b.Name.Equals(name, StringComparison.OrdinalIgnoreCase))) is not
+            { } made) return;
         Save(store, made);
     }
 
@@ -57,7 +59,8 @@ public static class DataBindingActions
         }
 
         var others = store.ListDataBindings().Where(b => b.Id != id).ToList();
-        if (DataBindingWindow.Edit(binding, name => others.Any(b => b.Name.Equals(name, StringComparison.OrdinalIgnoreCase))) is not { } edited) return;
+        if (DataBindingWindow.Edit(binding, name => others.Any(b => b.Name.Equals(name, StringComparison.OrdinalIgnoreCase))) is not
+            { } edited) return;
         Save(store, edited);
     }
 
@@ -66,8 +69,9 @@ public static class DataBindingActions
         if (StoreOf(silo) is not { } store) return;
 
         string name = store.GetDataBinding(id)?.Name ?? "this data binding";
-        var answer = MessageBox.Show($"Delete the data binding \"{name}\" from this Silo?\n\nDiagram cells that show {{bind:{name}}} will show ? instead.",
-                                     AppIdentity.AppName, MessageBoxButton.YesNo, MessageBoxImage.Warning);
+        var answer =
+            MessageBox.Show($"Delete the data binding \"{name}\" from this Silo?\n\nDiagram cells that show {{bind:{name}}} will show ? instead.",
+                            AppIdentity.AppName, MessageBoxButton.YesNo, MessageBoxImage.Warning);
         if (answer != MessageBoxResult.Yes) return;
 
         try

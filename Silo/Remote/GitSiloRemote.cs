@@ -1,4 +1,5 @@
-﻿using Telefrag.DI;
+﻿using Silo.Providers.Data;
+using Telefrag.DI;
 
 namespace Silo.Remote;
 
@@ -46,6 +47,8 @@ public sealed class GitSiloRemote : IGitSiloRemote
 {
     public const string NotImplementedMessage = "Silos stored in a Git repository are not supported yet. HTTP(S) URLs are.";
 
+    public Uri Uri { get; }
+
     public string CurrentBranch => throw Nope();
 
     public bool HasUnpushedChanges
@@ -55,8 +58,6 @@ public sealed class GitSiloRemote : IGitSiloRemote
     }
 
     public string Kind => "Git";
-
-    public Uri Uri { get; }
 
     private static NotSupportedException Nope()
     {

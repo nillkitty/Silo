@@ -2,13 +2,10 @@
 using System.Diagnostics;
 using System.Net;
 using System.Net.NetworkInformation;
-using System.Net.Sockets;
 using System.Runtime.InteropServices;
 using System.Security;
 using System.Security.Principal;
-using System.Text;
 using Microsoft.Win32.SafeHandles;
-using Silo.Contracts.Providers.Network;
 using Telefrag.DI;
 
 namespace Silo.Providers.Network;
@@ -20,50 +17,16 @@ namespace Silo.Providers.Network;
 [Singleton(typeof(ILocalPortOwnershipProvider))]
 public sealed class WindowsLocalPortOwnershipProvider : ILocalPortOwnershipProvider
 {
-    /// <summary>Test seam: where the raw socket list comes from. Defaults to the operating system.</summary>
-    internal Func<IReadOnlyList<RawSocket>> Snapshot { get; init; } = ReadSystemTables;
+    private const int AfInet  = 2;
+    private const int AfInet6 = 23;
+
+    private const uint ProcessQueryLimitedInformation = 0x1000;
 
     /// <summary>Test seam: how a process id is described. Defaults to the operating system.</summary>
     internal Func<int, LocalProcessInfo?> Describe { get; init; } = DescribeProcess;
 
-    public IReadOnlyList<PortOwner> GetOwners(int port, PortProtocol protocol = PortProtocol.Tcp, int? remotePort = null)
-    {
-        if (port is < 1 or > 65535) return [];
-
-        var matches = Snapshot()
-                      .Where(s => s.Protocol == protocol && s.LocalPort == port && (remotePort is null || s.RemotePort == remotePort))
-                      .OrderBy(s => s.State == TcpState.Listen ? 0 : 1)
-                      .ThenBy(s => s.State == TcpState.Established ? 0 : 1)
-                      .ThenBy(s => s.Pid)
-                      .ToList();
-
-        var processes = new Dictionary<int, LocalProcessInfo?>();
-        var owners    = new List<PortOwner>(matches.Count);
-        foreach (var s in matches)
-        {
-            if (!processes.TryGetValue(s.Pid, out var info)) processes[s.Pid] = info = s.Pid == 0 ? null : Describe(s.Pid);
-
-            var local  = new IPEndPoint(s.LocalAddress, s.LocalPort);
-            var remote = s.State == TcpState.Listen || s.RemoteAddress is null ? null : new IPEndPoint(s.RemoteAddress, s.RemotePort);
-            owners.Add(new PortOwner(s.Protocol, local, remote, s.State, s.Pid, info));
-        }
-
-        return owners;
-    }
-
-    public PortOwner? GetOwner(int port, PortProtocol protocol = PortProtocol.Tcp, int? remotePort = null)
-    {
-        return GetOwners(port, protocol, remotePort).FirstOrDefault();
-    }
-
-    public PortOwner? GetClient(IPEndPoint remote, int serverPort)
-    {
-        ArgumentNullException.ThrowIfNull(remote);
-        if (!IsThisComputer(remote.Address)) return null;
-
-        // the client's own socket is the one whose local port is the port we saw, connected to our server port
-        return GetOwners(remote.Port, PortProtocol.Tcp, serverPort).FirstOrDefault(o => !o.IsListener);
-    }
+    /// <summary>Test seam: where the raw socket list comes from. Defaults to the operating system.</summary>
+    internal Func<IReadOnlyList<RawSocket>> Snapshot { get; init; } = ReadSystemTables;
 
     private static bool IsThisComputer(IPAddress address)
     {
@@ -82,18 +45,12 @@ public sealed class WindowsLocalPortOwnershipProvider : ILocalPortOwnershipProvi
         }
     }
 
-    // ---- the raw table --------------------------------------------------------------------------------------
-
-    /// <summary>One row of the operating system's socket table.</summary>
-    internal readonly record struct RawSocket(PortProtocol Protocol, IPAddress LocalAddress, int LocalPort, IPAddress? RemoteAddress, int RemotePort,
-                                              TcpState? State, int Pid);
-
     private static IReadOnlyList<RawSocket> ReadSystemTables()
     {
         var all = new List<RawSocket>();
-        all.AddRange(ParseTcp(GetTable(true, AfInet), false));
-        all.AddRange(ParseTcp(GetTable(true, AfInet6), true));
-        all.AddRange(ParseUdp(GetTable(false, AfInet), false));
+        all.AddRange(ParseTcp(GetTable(true,  AfInet),  false));
+        all.AddRange(ParseTcp(GetTable(true,  AfInet6), true));
+        all.AddRange(ParseUdp(GetTable(false, AfInet),  false));
         all.AddRange(ParseUdp(GetTable(false, AfInet6), true));
         return all;
     }
@@ -111,10 +68,10 @@ public sealed class WindowsLocalPortOwnershipProvider : ILocalPortOwnershipProvi
         {
             var row = table.Slice(off, size);
             rows.Add(v6
-                         ? new RawSocket(PortProtocol.Tcp, Address6(row, 0, 16), Port(row, 20), Address6(row, 24, 40), Port(row, 44), State(U32(row, 48)),
-                                         (int)U32(row, 52))
-                         : new RawSocket(PortProtocol.Tcp, new IPAddress(row.Slice(4, 4)), Port(row, 8), new IPAddress(row.Slice(12, 4)), Port(row, 16),
-                                         State(U32(row, 0)), (int)U32(row, 20)));
+                         ? new RawSocket(PortProtocol.Tcp, Address6(row, 0, 16), Port(row, 20), Address6(row, 24, 40), Port(row, 44),
+                                         State(U32(row, 48)), (int)U32(row, 52))
+                         : new RawSocket(PortProtocol.Tcp, new IPAddress(row.Slice(4, 4)), Port(row, 8), new IPAddress(row.Slice(12, 4)),
+                                         Port(row, 16), State(U32(row, 0)), (int)U32(row, 20)));
         }
 
         return rows;
@@ -128,8 +85,8 @@ public sealed class WindowsLocalPortOwnershipProvider : ILocalPortOwnershipProvi
         {
             var row = table.Slice(off, size);
             rows.Add(v6
-                         ? new RawSocket(PortProtocol.Udp, Address6(row, 0, 16), Port(row, 20), null, 0, null, (int)U32(row, 24))
-                         : new RawSocket(PortProtocol.Udp, new IPAddress(row.Slice(0, 4)), Port(row, 4), null, 0, null, (int)U32(row, 8)));
+                         ? new RawSocket(PortProtocol.Udp, Address6(row, 0, 16),           Port(row, 20), null, 0, null, (int)U32(row, 24))
+                         : new RawSocket(PortProtocol.Udp, new IPAddress(row.Slice(0, 4)), Port(row, 4),  null, 0, null, (int)U32(row, 8)));
         }
 
         return rows;
@@ -164,9 +121,6 @@ public sealed class WindowsLocalPortOwnershipProvider : ILocalPortOwnershipProvi
         return Enum.IsDefined(typeof(TcpState), (int)mib) ? (TcpState)(int)mib : TcpState.Unknown;
     }
 
-    private const int AfInet  = 2;
-    private const int AfInet6 = 23;
-
     private static byte[] GetTable(bool tcp, int family)
     {
         const int insufficientBuffer = 122;
@@ -194,7 +148,7 @@ public sealed class WindowsLocalPortOwnershipProvider : ILocalPortOwnershipProvi
     {
         try
         {
-            string  name;
+            string    name;
             DateTime? started = null;
             try
             {
@@ -214,7 +168,7 @@ public sealed class WindowsLocalPortOwnershipProvider : ILocalPortOwnershipProvi
                 return null; // already gone
             }
 
-            string? path = null, user = null;
+            string? path   = null, user = null;
             int?    parent = null;
             using (var h = OpenProcess(ProcessQueryLimitedInformation, false, pid))
             {
@@ -244,7 +198,8 @@ public sealed class WindowsLocalPortOwnershipProvider : ILocalPortOwnershipProvi
     private static int? ParentId(SafeProcessHandle h)
     {
         var info = new ProcessBasicInformation();
-        return NtQueryInformationProcess(h, 0 /* ProcessBasicInformation */, ref info, Marshal.SizeOf<ProcessBasicInformation>(), out _) == 0
+        return NtQueryInformationProcess(h, 0 /* ProcessBasicInformation */, ref info, Marshal.SizeOf<ProcessBasicInformation>(), out _) ==
+               0
                    ? (int)info.InheritedFromUniqueProcessId
                    : null;
     }
@@ -268,26 +223,13 @@ public sealed class WindowsLocalPortOwnershipProvider : ILocalPortOwnershipProvi
         }
     }
 
-    private const uint ProcessQueryLimitedInformation = 0x1000;
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct ProcessBasicInformation
-    {
-        public IntPtr ExitStatus;
-        public IntPtr PebBaseAddress;
-        public IntPtr AffinityMask;
-        public IntPtr BasePriority;
-        public IntPtr UniqueProcessId;
-        public IntPtr InheritedFromUniqueProcessId;
-    }
+    [DllImport("iphlpapi.dll", SetLastError = true)]
+    private static extern int GetExtendedTcpTable(byte[]? table,      ref int size, [MarshalAs(UnmanagedType.Bool)] bool order, int family,
+                                                  int     tableClass, uint    reserved);
 
     [DllImport("iphlpapi.dll", SetLastError = true)]
-    private static extern int GetExtendedTcpTable(byte[]? table, ref int size, [MarshalAs(UnmanagedType.Bool)] bool order, int family, int tableClass,
-                                                  uint     reserved);
-
-    [DllImport("iphlpapi.dll", SetLastError = true)]
-    private static extern int GetExtendedUdpTable(byte[]? table, ref int size, [MarshalAs(UnmanagedType.Bool)] bool order, int family, int tableClass,
-                                                  uint     reserved);
+    private static extern int GetExtendedUdpTable(byte[]? table,      ref int size, [MarshalAs(UnmanagedType.Bool)] bool order, int family,
+                                                  int     tableClass, uint    reserved);
 
     [DllImport("kernel32.dll", SetLastError = true)]
     private static extern SafeProcessHandle OpenProcess(uint access, [MarshalAs(UnmanagedType.Bool)] bool inherit, int pid);
@@ -305,6 +247,68 @@ public sealed class WindowsLocalPortOwnershipProvider : ILocalPortOwnershipProvi
     private static extern bool OpenProcessToken(SafeProcessHandle process, uint access, out IntPtr token);
 
     [DllImport("ntdll.dll")]
-    private static extern int NtQueryInformationProcess(SafeProcessHandle process, int informationClass, ref ProcessBasicInformation info, int length,
-                                                        out int returnLength);
+    private static extern int NtQueryInformationProcess(SafeProcessHandle process, int informationClass, ref ProcessBasicInformation info,
+                                                        int               length,  out int returnLength);
+
+    public IReadOnlyList<PortOwner> GetOwners(int port, PortProtocol protocol = PortProtocol.Tcp, int? remotePort = null)
+    {
+        if (port is < 1 or > 65535) return [];
+
+        var matches = Snapshot()
+                     .Where(s => s.Protocol == protocol && s.LocalPort == port && (remotePort is null || s.RemotePort == remotePort))
+                     .OrderBy(s => s.State  == TcpState.Listen ? 0 : 1)
+                     .ThenBy(s => s.State   == TcpState.Established ? 0 : 1)
+                     .ThenBy(s => s.Pid)
+                     .ToList();
+
+        var processes = new Dictionary<int, LocalProcessInfo?>();
+        var owners    = new List<PortOwner>(matches.Count);
+        foreach (var s in matches)
+        {
+            if (!processes.TryGetValue(s.Pid, out var info)) processes[s.Pid] = info = s.Pid == 0 ? null : Describe(s.Pid);
+
+            var local  = new IPEndPoint(s.LocalAddress, s.LocalPort);
+            var remote = s.State == TcpState.Listen || s.RemoteAddress is null ? null : new IPEndPoint(s.RemoteAddress, s.RemotePort);
+            owners.Add(new PortOwner(s.Protocol, local, remote, s.State, s.Pid, info));
+        }
+
+        return owners;
+    }
+
+    public PortOwner? GetOwner(int port, PortProtocol protocol = PortProtocol.Tcp, int? remotePort = null)
+    {
+        return GetOwners(port, protocol, remotePort).FirstOrDefault();
+    }
+
+    public PortOwner? GetClient(IPEndPoint remote, int serverPort)
+    {
+        ArgumentNullException.ThrowIfNull(remote);
+        if (!IsThisComputer(remote.Address)) return null;
+
+        // the client's own socket is the one whose local port is the port we saw, connected to our server port
+        return GetOwners(remote.Port, PortProtocol.Tcp, serverPort).FirstOrDefault(o => !o.IsListener);
+    }
+
+    // ---- the raw table --------------------------------------------------------------------------------------
+
+    /// <summary>One row of the operating system's socket table.</summary>
+    internal readonly record struct RawSocket(
+        PortProtocol Protocol,
+        IPAddress    LocalAddress,
+        int          LocalPort,
+        IPAddress?   RemoteAddress,
+        int          RemotePort,
+        TcpState?    State,
+        int          Pid);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct ProcessBasicInformation
+    {
+        public IntPtr ExitStatus;
+        public IntPtr PebBaseAddress;
+        public IntPtr AffinityMask;
+        public IntPtr BasePriority;
+        public IntPtr UniqueProcessId;
+        public IntPtr InheritedFromUniqueProcessId;
+    }
 }

@@ -1,13 +1,15 @@
-﻿namespace Silo.Providers.Document;
+﻿using Silo.Providers.Data.Source;
+
+namespace Silo.Providers.Document;
 
 /// <summary>
 ///     Base type for all document types
 /// </summary>
 public class DocumentBase<TContent> : IDocument<TContent>, IDataSource
 {
+    public Uri     DataSourceUri { get; }
     public Uri     Uri           { get; }
     public string  CanonicalName { get; }
-    public Uri     DataSourceUri { get; }
     public string? DefaultAlias  { get; }
 
     public string         LocalNamespace  { get; }

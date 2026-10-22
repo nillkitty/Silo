@@ -1,4 +1,5 @@
 ﻿using Serilog;
+using Silo.Providers.Data;
 using Silo.ViewModel;
 using Telefrag.DI;
 
@@ -52,6 +53,9 @@ public abstract class ModelBase : DependencyObject, ILogContext, IPreferenceProv
     /// </summary>
     protected Guid UniqueId { get; } = Guid.NewGuid();
 
+    // the same list as it is made: Load and Persist are the model's business, not part of what a preference is
+    private IReadOnlyList<Preference> OwnPreferences => field ??= CreatePreferences();
+
     /// <summary>
     ///     Gets a logger for the model's scope
     /// </summary>
@@ -64,9 +68,6 @@ public abstract class ModelBase : DependencyObject, ILogContext, IPreferenceProv
     ///     with (the model's constructor has run).
     /// </summary>
     public IReadOnlyList<IPreference> Preferences => OwnPreferences;
-
-    // the same list as it is made: Load and Persist are the model's business, not part of what a preference is
-    private IReadOnlyList<Preference> OwnPreferences => field ??= CreatePreferences();
 
     private IReadOnlyList<Preference> CreatePreferences()
     {

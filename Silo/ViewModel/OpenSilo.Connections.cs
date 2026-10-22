@@ -1,6 +1,7 @@
 ﻿using System.Windows.Threading;
 using Serilog;
 using Silo.Connectors;
+using Silo.Ui;
 using Silo.ViewModel;
 
 namespace Silo.Model;
@@ -37,32 +38,70 @@ public partial class OpenSilo
     {
         if (!ReconnectConnections || Data is not IConnectionStore) return;
 
+        // Told to the status bar now, not when the work gets its turn, so there is no gap in what it says between opening the Silo and this.
+        var status = AppStatus.Instance.Begin("Restoring connections");
+
         Dispatcher.BeginInvoke(new Action(async () =>
                                           {
                                               try
                                               {
-                                                  await RestoreConnectionsAsync();
+                                                  await RestoreConnectionsAsync(status);
                                               }
                                               catch (Exception ex)
                                               {
                                                   Log.Warning(ex, "Restoring the saved connections failed");
+                                                  status.Fail("Restoring the saved connections failed: " + ex.Message);
                                               }
                                           }), DispatcherPriority.Background);
     }
 
-    private async Task RestoreConnectionsAsync()
+    private async Task RestoreConnectionsAsync(StatusOperation status)
     {
-        if (Data is not IConnectionStore store || IsClosing) return;
+        if (Data is not IConnectionStore store || IsClosing)
+        {
+            status.Dispose();
+            return;
+        }
 
         var records = await Task.Run(() => store.GetConnections());
         var todo    = records.Where(r => !_savedIds.ContainsValue(r.Id)).ToList();
+        int failed  = 0;
         if (todo.Count > 0)
         {
-            _connectors = ConnectorCatalog.Connectors();
-            await Task.WhenAll(todo.Select(r => RestoreConnectionAsync(r, 0)));
+            status.Detail = $"0 of {todo.Count} (looking for connectors)";
+            _connectors   = ConnectorCatalog.Connectors();
+
+            // what the status line says: how far along, and which are still being waited for
+            var waiting  = todo.Select(NameOf).ToList();
+            int finished = 0;
+            status.Detail = $"0 of {todo.Count}: {Waiting(waiting)}";
+
+            await Task.WhenAll(todo.Select(async r =>
+                                           {
+                                               bool ok = await RestoreConnectionAsync(r, 0);
+                                               if (!ok) failed++;
+                                               waiting.Remove(NameOf(r));
+                                               status.Detail = $"{++finished} of {todo.Count}" + (waiting.Count > 0 ? ": " + Waiting(waiting) : string.Empty);
+                                           }));
         }
 
+        if (IsClosing) status.Dispose();
+        else if (todo.Count == 0) status.Dispose();
+        else if (failed == 0) status.Done($"{todo.Count} connection{(todo.Count == 1 ? string.Empty : "s")} restored");
+        else status.Fail($"{todo.Count - failed} of {todo.Count} connections restored; {failed} not connected (see the Explorer)");
+
         ConnectionsRestored?.Invoke(this, EventArgs.Empty);
+    }
+
+    private static string NameOf(ConnectionRecord record)
+    {
+        return string.IsNullOrWhiteSpace(record.DisplayName) ? record.SourceUri?.ToString() ?? "connection" : record.DisplayName;
+    }
+
+    /// <summary>The names still being waited for, a few of them.</summary>
+    private static string Waiting(IReadOnlyList<string> names)
+    {
+        return names.Count <= 3 ? string.Join(", ", names) : string.Join(", ", names.Take(3)) + $" and {names.Count - 3} more";
     }
 
     /// <summary>
@@ -72,24 +111,25 @@ public partial class OpenSilo
     ///     background,
     ///     schedules the next attempt.
     /// </summary>
-    private async Task RestoreConnectionAsync(ConnectionRecord record, int attempt)
+    /// <returns>True when the connection was brought back.</returns>
+    private async Task<bool> RestoreConnectionAsync(ConnectionRecord record, int attempt)
     {
-        if (IsClosing) return;
+        if (IsClosing) return false;
 
         ShowPending(record, null, false);
 
         IConnector? connector = null;
         string      error;
-        Exception?  failure;
         try
         {
-            var uri = record.SourceUri ??
-                      throw new InvalidOperationException("It was saved without a destination, so it cannot be recreated.");
-            connector = ConnectionRestore.FindConnector(uri, _connectors) ??
-                        throw new InvalidOperationException($"No connector handles \"{uri.Scheme}:\" destinations.");
+            connector = ConnectionRestore.FindConnector(record, _connectors) ??
+                        throw new InvalidOperationException(record.SourceUri is { } uri
+                                                                ? ConnectionRestore.IsConnectorUri(uri)
+                                                                      ? $"The connector for this connection ({Uri.UnescapeDataString(uri.OriginalString[(ConnectionRestore.ConnectorScheme.Length + 1)..])}) is not available."
+                                                                      : $"No connector handles \"{uri.Scheme}:\" destinations."
+                                                                : $"It was saved without a destination, and no connector is called \"{record.DisplayName}\".");
 
-            var connection =
-                await ConnectionCreation.CreateAsync(connector, ConnectionRestore.RequestFor(record, connector), _closing.Token);
+            var connection = await ConnectionRestore.CreateAsync(connector, record, _closing.Token);
             Connections.Add(connection);
             _savedIds[connection] = record.Id;
 
@@ -106,24 +146,24 @@ public partial class OpenSilo
             }
 
             RemovePending(record.Id);
-            return;
+            return true;
         }
         catch (OperationCanceledException) when (_closing.IsCancellationRequested)
         {
-            return;
+            return false;
         }
         catch (Exception ex)
         {
             Log.Warning(ex, "The saved connection {Name} could not be brought back", record.DisplayName);
-            error   = ex.Message;
-            failure = ex;
+            error = ex.Message;
         }
 
-        if (IsClosing) return;
+        if (IsClosing) return false;
 
         bool retry = connector is not null && ConnectionRestore.RetriesInBackground(connector);
-        ShowPending(record, error, retry, failure);
+        ShowPending(record, error, retry);
         if (retry) _ = RetryAfterAsync(record, attempt);
+        return false;
     }
 
     private async Task RetryAfterAsync(ConnectionRecord record, int attempt)
@@ -174,11 +214,11 @@ public partial class OpenSilo
         }
     }
 
-    private void ShowPending(ConnectionRecord record, string? error, bool willRetry, Exception? exception = null)
+    private void ShowPending(ConnectionRecord record, string? error, bool willRetry)
     {
         RemovePending(record.Id);
 
-        var model = new PendingConnection(record, error, willRetry, () => RetryNow(record), () => ForgetPending(record), exception);
+        var model = new PendingConnection(record, error, willRetry, () => RetryNow(record), () => ForgetPending(record));
         var node  = new SiloNode(model, model.Label, model.Uri, model.Icon, null);
         _pending[record.Id] = node;
         Nodes.AddNode(node, null);

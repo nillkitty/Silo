@@ -1,6 +1,6 @@
 ﻿using Silo.Contracts.ConnectorServices;
 
-namespace Silo.Contracts.Providers.Data.Source;
+namespace Silo.Providers.Data.Source;
 
 /// <summary>
 ///     A object which provides access to one or more <see cref="IDataSource" />

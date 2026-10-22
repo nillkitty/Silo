@@ -1,4 +1,4 @@
-﻿namespace Silo.Shell;
+﻿namespace Silo.Providers.Shell;
 
 [Flags]
 public enum ShellConfigurationScope

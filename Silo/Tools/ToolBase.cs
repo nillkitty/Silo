@@ -125,6 +125,25 @@ public abstract class ToolBase : ITool, ICommand, INotifyPropertyChanged
 
     protected abstract UIElement OnBuildContent();
 
+    // --- extra panes ---
+    // A pane tool can let parts of its content be undocked into panes of their own (ContentId "tool:<name>/<key>"). The tool
+    // makes and places them itself; the main window only needs these three to save them with the dock layout and put them back.
+
+    /// <summary>The keys of the parts of this tool that can be panes of their own.</summary>
+    internal virtual IReadOnlyList<string> ExtraPaneKeys => [];
+
+    /// <summary>The ContentId of an extra pane.</summary>
+    internal string ExtraPaneId(string key) => "tool:" + Name + "/" + key;
+
+    /// <summary>A saved layout has the extra pane <paramref name="key" />: the part, taken out of wherever it is now, for the pane to show (null: leave the pane out).</summary>
+    internal virtual UIElement? TakeExtraPaneContent(string key) => null;
+
+    /// <summary>
+    ///     After a layout was put back: the pane object that now shows the part <paramref name="key" />, or null when the layout had none (the
+    ///     part then goes back into the tool's own content).
+    /// </summary>
+    internal virtual void AdoptExtraPane(string key, LayoutAnchorable? pane) { }
+
     private Window WindowWrap(UIElement ctrl)
     {
         ctrl.Required();

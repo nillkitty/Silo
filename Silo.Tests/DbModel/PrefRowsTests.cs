@@ -1,7 +1,6 @@
-﻿using System.Linq;
-using Microsoft.Data.Sqlite;
-using Silo.Contracts.Providers.Data;
+﻿using Microsoft.Data.Sqlite;
 using Silo.DbModel.Sqlite;
+using Silo.Providers.Data;
 
 namespace Silo.Tests.DbModel;
 
@@ -20,7 +19,10 @@ public class PrefRowsTests
     }
 
     [TearDown]
-    public void TearDown() => _conn.Dispose();
+    public void TearDown()
+    {
+        _conn.Dispose();
+    }
 
     private void Exec(string sql)
     {
@@ -36,7 +38,10 @@ public class PrefRowsTests
         return (long)cmd.ExecuteScalar()!;
     }
 
-    private static string? ValueOf(IEnumerable<PreferenceRecord> records, string key) => records.FirstOrDefault(r => r.Key == key)?.Data;
+    private static string? ValueOf(IEnumerable<PreferenceRecord> records, string key)
+    {
+        return records.FirstOrDefault(r => r.Key == key)?.Data;
+    }
 
     [Test]
     public void A_value_is_written_and_read_back()
@@ -52,7 +57,7 @@ public class PrefRowsTests
         PrefRows.Set(_conn, null, Table, null, "silo.a", "true");
 
         Assert.That(PrefRows.Set(_conn, null, Table, null, "silo.a", "true"), Is.False);
-        Assert.That(Count(), Is.EqualTo(1));
+        Assert.That(Count(),                                                  Is.EqualTo(1));
     }
 
     [Test]
@@ -62,7 +67,7 @@ public class PrefRowsTests
 
         Assert.That(PrefRows.Set(_conn, null, Table, null, "silo.a", "false"), Is.True);
 
-        Assert.That(Count(), Is.EqualTo(1));
+        Assert.That(Count(),                                             Is.EqualTo(1));
         Assert.That(ValueOf(PrefRows.Get(_conn, Table, null), "silo.a"), Is.EqualTo("false"));
     }
 
@@ -71,24 +76,24 @@ public class PrefRowsTests
     {
         PrefRows.Set(_conn, null, Table, null, "silo.a", "shared a");
         PrefRows.Set(_conn, null, Table, null, "silo.b", "shared b");
-        PrefRows.Set(_conn, null, Table, 7, "silo.a", "mine a");
+        PrefRows.Set(_conn, null, Table, 7,    "silo.a", "mine a");
 
         var mine = PrefRows.Get(_conn, Table, 7);
 
         Assert.That(ValueOf(mine, "silo.a"), Is.EqualTo("mine a"));
         Assert.That(ValueOf(mine, "silo.b"), Is.EqualTo("shared b"), "no row of their own: the shared one applies");
-        Assert.That(mine, Has.Count.EqualTo(2));
+        Assert.That(mine,                    Has.Count.EqualTo(2));
     }
 
     [Test]
     public void A_users_change_leaves_the_shared_value_and_other_users_alone()
     {
         PrefRows.Set(_conn, null, Table, null, "silo.a", "shared");
-        PrefRows.Set(_conn, null, Table, 7, "silo.a", "mine");
+        PrefRows.Set(_conn, null, Table, 7,    "silo.a", "mine");
 
         Assert.That(ValueOf(PrefRows.Get(_conn, Table, null), "silo.a"), Is.EqualTo("shared"));
         Assert.That(ValueOf(PrefRows.Get(_conn, Table, 8),    "silo.a"), Is.EqualTo("shared"));
-        Assert.That(Count(), Is.EqualTo(2));
+        Assert.That(Count(),                                             Is.EqualTo(2));
     }
 
     [Test]
@@ -97,7 +102,7 @@ public class PrefRowsTests
         PrefRows.Set(_conn, null, Table, null, "silo.a", "same");
 
         Assert.That(PrefRows.Set(_conn, null, Table, 7, "silo.a", "same"), Is.True);
-        Assert.That(Count(), Is.EqualTo(2));
+        Assert.That(Count(),                                               Is.EqualTo(2));
     }
 
     [Test]

@@ -1,6 +1,4 @@
-using Silo.Contracts.Providers.Data;
-
-namespace Silo.Contracts.Providers.Data.Source;
+namespace Silo.Providers.Data.Source;
 
 /// <summary>
 ///     A data source that exposes its content as rows of named columns -- the shape an

@@ -1,4 +1,5 @@
 using Microsoft.Win32;
+using Silo.Providers;
 using Telefrag.DI;
 
 namespace Silo.Connectors.System;

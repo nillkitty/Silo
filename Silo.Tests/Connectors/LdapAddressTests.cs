@@ -3,7 +3,7 @@ using Silo.Connectors.Ldap;
 using Silo.Contracts.ConnectorServices;
 using Silo.Contracts.Core;
 using Silo.Model;
-using Silo.Shell;
+using Silo.Providers;
 using Silo.ViewModel;
 
 namespace Silo.Tests.Connectors;
@@ -12,26 +12,26 @@ public class LdapAddressTests
 {
     // ---- URI -> ADSI path ----------------------------------------------------------------------
 
-    [TestCase("adsi://", "LDAP://")]
-    [TestCase("adsi://dc1.contoso.com", "LDAP://dc1.contoso.com")]
+    [TestCase("adsi://",                                           "LDAP://")]
+    [TestCase("adsi://dc1.contoso.com",                            "LDAP://dc1.contoso.com")]
     [TestCase("adsi://dc1.contoso.com/CN=Users,DC=contoso,DC=com", "LDAP://dc1.contoso.com/CN=Users,DC=contoso,DC=com")]
-    [TestCase("ldap://dc1/dc=x,dc=y", "LDAP://dc1/dc=x,dc=y")]
-    [TestCase("ldap://dc1:389/dc=x", "LDAP://dc1/dc=x")]
-    [TestCase("ldap://dc1:3268/dc=x", "LDAP://dc1:3268/dc=x")]
-    [TestCase("ldaps://dc1/dc=x", "LDAP://dc1:636/dc=x")]
-    [TestCase("ldaps://dc1:3269", "LDAP://dc1:3269")]
-    [TestCase("adsi:///DC=contoso,DC=com", "LDAP://DC=contoso,DC=com")]
-    [TestCase("adsi://dc1/RootDSE", "LDAP://dc1/RootDSE")]
+    [TestCase("ldap://dc1/dc=x,dc=y",                              "LDAP://dc1/dc=x,dc=y")]
+    [TestCase("ldap://dc1:389/dc=x",                               "LDAP://dc1/dc=x")]
+    [TestCase("ldap://dc1:3268/dc=x",                              "LDAP://dc1:3268/dc=x")]
+    [TestCase("ldaps://dc1/dc=x",                                  "LDAP://dc1:636/dc=x")]
+    [TestCase("ldaps://dc1:3269",                                  "LDAP://dc1:3269")]
+    [TestCase("adsi:///DC=contoso,DC=com",                         "LDAP://DC=contoso,DC=com")]
+    [TestCase("adsi://dc1/RootDSE",                                "LDAP://dc1/RootDSE")]
     public void A_uri_is_written_as_the_ADSI_path_it_stands_for(string uri, string path)
     {
         Assert.That(LdapModel.ToAdsPath(new Uri(uri)), Is.EqualTo(path));
     }
 
     [TestCase("adsi://dc1.contoso.com/CN=Users,DC=contoso,DC=com", "ldap://dc1.contoso.com/CN=Users,DC=contoso,DC=com")]
-    [TestCase("adsi://dc1.contoso.com", "ldap://dc1.contoso.com/")]
-    [TestCase("adsi://dc1:3268/DC=contoso", "ldap://dc1:3268/DC=contoso")]
-    [TestCase("ADSI://DC1/dc=x", "ldap://dc1/dc=x")]
-    [TestCase("adsi://bob:secret@dc1/dc=x?cn", "ldap://dc1/dc=x")]
+    [TestCase("adsi://dc1.contoso.com",                            "ldap://dc1.contoso.com/")]
+    [TestCase("adsi://dc1:3268/DC=contoso",                        "ldap://dc1:3268/DC=contoso")]
+    [TestCase("ADSI://DC1/dc=x",                                   "ldap://dc1/dc=x")]
+    [TestCase("adsi://bob:secret@dc1/dc=x?cn",                     "ldap://dc1/dc=x")]
     public void An_adsi_address_is_the_same_address_under_the_ldap_scheme(string adsi, string ldap)
     {
         Assert.That(LdapModel.AdsiToLdap(new Uri(adsi)).AbsoluteUri, Is.EqualTo(ldap));
@@ -46,8 +46,8 @@ public class LdapAddressTests
     [Test]
     public void The_distinguished_name_is_unescaped_and_the_user_info_and_query_are_dropped()
     {
-        Assert.That(LdapModel.ToAdsPath(new Uri("ldap://dc1/CN=Smith%5C,%20John,DC=x")), Is.EqualTo("LDAP://dc1/CN=Smith\\, John,DC=x"));
-        Assert.That(LdapModel.ToAdsPath(new Uri("ldap://bob:secret@dc1/dc=x")),        Is.EqualTo("LDAP://dc1/dc=x"));
+        Assert.That(LdapModel.ToAdsPath(new Uri("ldap://dc1/CN=Smith%5C,%20John,DC=x")),    Is.EqualTo("LDAP://dc1/CN=Smith\\, John,DC=x"));
+        Assert.That(LdapModel.ToAdsPath(new Uri("ldap://bob:secret@dc1/dc=x")),             Is.EqualTo("LDAP://dc1/dc=x"));
         Assert.That(LdapModel.ToAdsPath(new Uri("ldap://dc1/dc=x?cn?sub?(objectClass=*)")), Is.EqualTo("LDAP://dc1/dc=x"));
     }
 
@@ -59,14 +59,14 @@ public class LdapAddressTests
         Assert.That(LdapModel.IsSecure(new Uri("ldap://dc1")),  Is.False);
     }
 
-    [TestCase("LDAP://", "", "")]
-    [TestCase("LDAP://dc1", "dc1", "")]
-    [TestCase("LDAP://dc1:3268", "dc1:3268", "")]
-    [TestCase("LDAP://dc1/CN=Users,DC=x", "dc1", "CN=Users,DC=x")]
-    [TestCase("LDAP://DC=x,DC=y", "", "DC=x,DC=y")]
-    [TestCase("LDAP://RootDSE", "", "RootDSE")]
-    [TestCase("LDAP://dc1/RootDSE", "dc1", "RootDSE")]
-    [TestCase("LDAP://CN=a\\/b,DC=x", "", "CN=a\\/b,DC=x")]
+    [TestCase("LDAP://",                  "",         "")]
+    [TestCase("LDAP://dc1",               "dc1",      "")]
+    [TestCase("LDAP://dc1:3268",          "dc1:3268", "")]
+    [TestCase("LDAP://dc1/CN=Users,DC=x", "dc1",      "CN=Users,DC=x")]
+    [TestCase("LDAP://DC=x,DC=y",         "",         "DC=x,DC=y")]
+    [TestCase("LDAP://RootDSE",           "",         "RootDSE")]
+    [TestCase("LDAP://dc1/RootDSE",       "dc1",      "RootDSE")]
+    [TestCase("LDAP://CN=a\\/b,DC=x",     "",         "CN=a\\/b,DC=x")]
     public void An_ADSI_path_splits_into_the_server_and_the_distinguished_name(string path, string server, string dn)
     {
         var (s, d) = LdapModel.SplitAdsPath(path);
@@ -85,13 +85,13 @@ public class LdapAddressTests
 
     // ---- credentials ---------------------------------------------------------------------------
 
-    [TestCase("bob", "CONTOSO", "CONTOSO\\bob")]
-    [TestCase("bob", null, "bob")]
-    [TestCase("bob", "", "bob")]
+    [TestCase("bob",             "CONTOSO", "CONTOSO\\bob")]
+    [TestCase("bob",             null,      "bob")]
+    [TestCase("bob",             "",        "bob")]
     [TestCase("bob@contoso.com", "CONTOSO", "bob@contoso.com")]
-    [TestCase("CORP\\bob", "CONTOSO", "CORP\\bob")]
-    [TestCase(null, "CONTOSO", null)]
-    [TestCase("  ", "CONTOSO", null)]
+    [TestCase("CORP\\bob",       "CONTOSO", "CORP\\bob")]
+    [TestCase(null,              "CONTOSO", null)]
+    [TestCase("  ",              "CONTOSO", null)]
     public void The_user_name_to_sign_in_as_carries_the_domain_when_it_was_kept_apart(string? user, string? domain, string? expected)
     {
         Assert.That(LdapCredentialSink.Combine(user, domain), Is.EqualTo(expected));
@@ -100,8 +100,9 @@ public class LdapAddressTests
     [Test]
     public void A_saved_credential_hands_its_user_name_and_password_to_the_sink()
     {
-        var credential = new Credential { Name = "Contoso admin", Realm = AuthRealm.Domain, Username = "bob", Domain = "CONTOSO", Password = "hunter2" };
-        var sink       = new LdapCredentialSink();
+        var credential = new Credential
+                         { Name = "Contoso admin", Realm = AuthRealm.Domain, Username = "bob", Domain = "CONTOSO", Password = "hunter2" };
+        var sink = new LdapCredentialSink();
 
         credential.Configure(sink);
 
@@ -136,10 +137,10 @@ public class LdapAddressTests
 
     // ---- the connector ---------------------------------------------------------------------------
 
-    [TestCase("adsi", UriSchemeScope.Private)]
-    [TestCase("ldap", UriSchemeScope.WellKnown)]
+    [TestCase("adsi",  UriSchemeScope.Private)]
+    [TestCase("ldap",  UriSchemeScope.WellKnown)]
     [TestCase("LDAPS", UriSchemeScope.WellKnown)]
-    [TestCase("http", UriSchemeScope.Unknown)]
+    [TestCase("http",  UriSchemeScope.Unknown)]
     public void The_connector_takes_the_ldap_schemes_and_no_other(string scheme, UriSchemeScope expected)
     {
         Assert.That(new LdapConnector().HandlesScheme(scheme), Is.EqualTo(expected));
@@ -151,8 +152,8 @@ public class LdapAddressTests
         var connector = new LdapConnector();
 
         Assert.That(connector.Validate(new Uri("adsi://dc1/DC=contoso,DC=com")), Is.Null);
-        Assert.That(connector.Validate(new Uri("adsi://")), Is.Null, "no host: the current domain");
-        Assert.That(connector.Validate(new Uri("http://dc1/")), Is.Not.Null);
+        Assert.That(connector.Validate(new Uri("adsi://")),                      Is.Null, "no host: the current domain");
+        Assert.That(connector.Validate(new Uri("http://dc1/")),                  Is.Not.Null);
     }
 
     [Test]
@@ -171,11 +172,11 @@ public class LdapAddressTests
         var connection = LdapModel.Create(new LdapConnector(), new ConnectionRequest(new Uri("adsi://dc1.contoso.com/DC=contoso,DC=com")));
         try
         {
-            Assert.That(connection.State, Is.InstanceOf<LdapState.Disconnected>());
-            Assert.That(connection.ConnectionState, Is.False);
-            Assert.That(connection.Name, Is.EqualTo("dc1.contoso.com"));
-            Assert.That(connection.Uri, Is.EqualTo(new Uri("adsi://dc1.contoso.com/DC=contoso,DC=com")));
-            Assert.That(connection.GetHostname(), Is.EqualTo("dc1.contoso.com"));
+            Assert.That(connection.State,            Is.InstanceOf<LdapState.Disconnected>());
+            Assert.That(connection.ConnectionState,  Is.False);
+            Assert.That(connection.Name,             Is.EqualTo("dc1.contoso.com"));
+            Assert.That(connection.Uri,              Is.EqualTo(new Uri("adsi://dc1.contoso.com/DC=contoso,DC=com")));
+            Assert.That(connection.GetHostname(),    Is.EqualTo("dc1.contoso.com"));
             Assert.That(connection.CurrentOperation, Is.Null);
 
             // the details of a connection that has not read its directory say so without reading it
@@ -190,13 +191,13 @@ public class LdapAddressTests
     // ---- which entries can be opened -------------------------------------------------------------
 
     [TestCase("organizationalunit", true)]
-    [TestCase("container", true)]
-    [TestCase("domaindns", true)]
-    [TestCase("builtindomain", true)]
-    [TestCase("user", false)]
-    [TestCase("computer", false)]
-    [TestCase("group", false)]
-    [TestCase("object", false)]
+    [TestCase("container",          true)]
+    [TestCase("domaindns",          true)]
+    [TestCase("builtindomain",      true)]
+    [TestCase("user",               false)]
+    [TestCase("computer",           false)]
+    [TestCase("group",              false)]
+    [TestCase("object",             false)]
     public void Containers_are_read_when_expanded_and_the_rest_are_leaves(string kind, bool expandable)
     {
         Assert.That(LdapModel.HasChildrenOfKind(kind), Is.EqualTo(expandable));
@@ -221,13 +222,6 @@ public class LdapAddressTests
         Assert.DoesNotThrow(() => credential.Configure(new NoPasswordSink()));
     }
 
-    private sealed class NoPasswordSink : ICredentialSink
-    {
-        public void ConfigureFrom(ICredential credential)
-        {
-        }
-    }
-
     // ---- states and their icons ----------------------------------------------------------------
 
     private static IEnumerable<LdapState> States()
@@ -245,7 +239,11 @@ public class LdapAddressTests
     {
         var keys = States().Select(s => s.IconKey).ToList();
 
-        Assert.That(keys, Is.EqualTo(new[] { "StateDisconnected", "StateConnecting", "StateBusy", "StateConnected", "StateFailed", "StateBusy" }));
+        Assert.That(keys,
+                    Is.EqualTo(new[]
+                               {
+                                   "StateDisconnected", "StateConnecting", "StateBusy", "StateConnected", "StateFailed", "StateBusy"
+                               }));
         Assert.That(IconAttribute.KeyOf(typeof(LdapState)), Is.Null, "the base state is not one of them");
     }
 
@@ -263,9 +261,9 @@ public class LdapAddressTests
     [Test]
     public void A_state_says_what_it_is_in_words()
     {
-        Assert.That(new LdapState.Connecting(new Uri("ldap://dc1:389")).DisplayName, Is.EqualTo("Connecting to dc1:389"));
+        Assert.That(new LdapState.Connecting(new Uri("ldap://dc1:389")).DisplayName,             Is.EqualTo("Connecting to dc1:389"));
         Assert.That(new LdapState.Failed(new InvalidOperationException("no route")).DisplayName, Is.EqualTo("Failed: no route"));
-        Assert.That(new LdapState.Connected().DisplayName, Is.EqualTo("Connected"));
+        Assert.That(new LdapState.Connected().DisplayName,                                       Is.EqualTo("Connected"));
     }
 
     private static string? FindNavIcons()
@@ -277,5 +275,12 @@ public class LdapAddressTests
         }
 
         return null;
+    }
+
+    private sealed class NoPasswordSink : ICredentialSink
+    {
+        public void ConfigureFrom(ICredential credential)
+        {
+        }
     }
 }

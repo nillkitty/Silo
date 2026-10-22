@@ -1,4 +1,4 @@
-﻿namespace Silo.Shell;
+﻿namespace Silo.Providers;
 
 /// <summary>
 ///     Wgether to check for and respect existing URI providers for

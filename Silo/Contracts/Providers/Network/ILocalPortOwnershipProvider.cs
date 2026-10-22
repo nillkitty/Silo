@@ -1,7 +1,7 @@
 ﻿using System.Net;
 using System.Net.NetworkInformation;
 
-namespace Silo.Contracts.Providers.Network;
+namespace Silo.Providers.Network;
 
 /// <summary>The transport protocol of a socket.</summary>
 public enum PortProtocol
@@ -28,9 +28,18 @@ public record LocalProcessInfo(int Id, string Name, string? ExecutablePath, stri
 /// <param name="Local">The socket's own address and port.</param>
 /// <param name="Remote">The peer's address and port; null for a listener or a UDP socket.</param>
 /// <param name="State">The TCP connection state; null for UDP.</param>
-/// <param name="ProcessId">The owning process id (0 for sockets the system itself holds, such as TCP connections in TIME_WAIT).</param>
+/// <param name="ProcessId">
+///     The owning process id (0 for sockets the system itself holds, such as TCP connections in
+///     TIME_WAIT).
+/// </param>
 /// <param name="Process">Details of the process; null when the id is 0 or the process could not be looked up.</param>
-public record PortOwner(PortProtocol Protocol, IPEndPoint Local, IPEndPoint? Remote, TcpState? State, int ProcessId, LocalProcessInfo? Process)
+public record PortOwner(
+    PortProtocol      Protocol,
+    IPEndPoint        Local,
+    IPEndPoint?       Remote,
+    TcpState?         State,
+    int               ProcessId,
+    LocalProcessInfo? Process)
 {
     /// <summary>True for a TCP socket that is waiting for connections.</summary>
     public bool IsListener => State == TcpState.Listen;

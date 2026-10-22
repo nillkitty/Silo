@@ -10,17 +10,6 @@ namespace Silo.Connectors;
 /// </summary>
 public class Destination : IDestination
 {
-    /// <summary>Creates an empty destination.</summary>
-    public Destination()
-    {
-    }
-
-    /// <summary>Creates a destination at <paramref name="uri" />.</summary>
-    public Destination(Uri uri)
-    {
-        Uri = uri.Required();
-    }
-
     /// <summary>
     ///     The network address of the destination: the host of <see cref="Uri" /> when that is an IP address, else null.
     ///     Setting it replaces <see cref="Uri" /> with <c>host://address</c>.
@@ -37,6 +26,17 @@ public class Destination : IDestination
     private static string HostText(IPAddress address)
     {
         return address.AddressFamily == AddressFamily.InterNetworkV6 ? $"[{address}]" : address.ToString();
+    }
+
+    /// <summary>Creates an empty destination.</summary>
+    public Destination()
+    {
+    }
+
+    /// <summary>Creates a destination at <paramref name="uri" />.</summary>
+    public Destination(Uri uri)
+    {
+        Uri = uri.Required();
     }
 }
 

@@ -1,12 +1,19 @@
 using System.Globalization;
 using Microsoft.Data.Sqlite;
 using Silo.DbModel.Meta;
+using Silo.Providers.Data;
 using Silo.Providers.Definitions;
 
 namespace Silo.DbModel.Sqlite;
 
-/// <summary>The SQL behind <see cref="ISyntaxStore" />: rows of the <c>MvSyntax</c> table. Kept apart from the provider so it can be tested on its own.</summary>
-/// <remarks>Every method takes the transaction the caller is in (or null): a command on a connection in a transaction has to be given it.</remarks>
+/// <summary>
+///     The SQL behind <see cref="ISyntaxStore" />: rows of the <c>MvSyntax</c> table. Kept apart from the provider so
+///     it can be tested on its own.
+/// </summary>
+/// <remarks>
+///     Every method takes the transaction the caller is in (or null): a command on a connection in a transaction has
+///     to be given it.
+/// </remarks>
 public static class SyntaxRows
 {
     private const string Columns = "[Id], [Name], [Alias], [Description], [Kind], [Parser], [Pattern], [Example], [Flags]";
@@ -19,14 +26,20 @@ public static class SyntaxRows
         return cmd;
     }
 
-    private static object Db(string? text) => text is null ? DBNull.Value : text;
+    private static object Db(string? text)
+    {
+        return text is null ? DBNull.Value : text;
+    }
 
-    private static string? Text(SqliteDataReader r, int i) => r.IsDBNull(i) ? null : r.GetString(i);
+    private static string? Text(SqliteDataReader r, int i)
+    {
+        return r.IsDBNull(i) ? null : r.GetString(i);
+    }
 
     private static SyntaxRecord Read(SqliteDataReader r)
     {
-        return new SyntaxRecord(r.GetInt32(0), r.IsDBNull(1) ? string.Empty : r.GetString(1), Text(r, 2), Text(r, 3), (SyntaxKind)r.GetInt32(4), Text(r, 5), Text(r, 6), Text(r, 7),
-                                (SyntaxFlags)r.GetInt32(8));
+        return new SyntaxRecord(r.GetInt32(0), r.IsDBNull(1) ? string.Empty : r.GetString(1), Text(r, 2), Text(r, 3),
+                                (SyntaxKind)r.GetInt32(4), Text(r, 5), Text(r, 6), Text(r, 7), (SyntaxFlags)r.GetInt32(8));
     }
 
     /// <summary>Every syntax, ordered by name.</summary>
@@ -43,14 +56,14 @@ public static class SyntaxRows
     /// <summary>The syntax whose name, or else whose alias, is the text (any case).</summary>
     public static SyntaxRecord? Find(SqliteConnection conn, SqliteTransaction? tx, string table, string nameOrAlias)
     {
-        return Load(conn, tx, table, "WHERE [Name] = @p COLLATE NOCASE", nameOrAlias).FirstOrDefault()
-               ?? Load(conn, tx, table, "WHERE [Alias] = @p COLLATE NOCASE", nameOrAlias).FirstOrDefault();
+        return Load(conn, tx, table, "WHERE [Name] = @p COLLATE NOCASE",  nameOrAlias).FirstOrDefault() ??
+               Load(conn, tx, table, "WHERE [Alias] = @p COLLATE NOCASE", nameOrAlias).FirstOrDefault();
     }
 
     private static List<SyntaxRecord> Load(SqliteConnection conn, SqliteTransaction? tx, string table, string? where, object? parameter)
     {
-        var result = new List<SyntaxRecord>();
-        using var cmd = Command(conn, tx, $"SELECT {Columns} FROM {table} {where} ORDER BY [Name] COLLATE NOCASE, [Id]");
+        var       result = new List<SyntaxRecord>();
+        using var cmd    = Command(conn, tx, $"SELECT {Columns} FROM {table} {where} ORDER BY [Name] COLLATE NOCASE, [Id]");
         if (parameter is not null) cmd.Parameters.AddWithValue("@p", parameter);
 
         using var r = cmd.ExecuteReader();
@@ -59,7 +72,8 @@ public static class SyntaxRows
     }
 
     /// <summary>
-    ///     Adds the syntax or updates the one it names (see <see cref="ISyntaxStore.SaveSyntax" />). Throws <see cref="DefinitionException" />
+    ///     Adds the syntax or updates the one it names (see <see cref="ISyntaxStore.SaveSyntax" />). Throws
+    ///     <see cref="DefinitionException" />
     ///     when the definition is not acceptable; nothing is written then.
     /// </summary>
     public static SyntaxRecord Save(SqliteConnection conn, SqliteTransaction? tx, string table, SyntaxRecord syntax)
@@ -70,7 +84,9 @@ public static class SyntaxRows
         int id = s.Id;
         if (id > 0)
         {
-            using var update = Command(conn, tx, $"UPDATE {table} SET [Name] = @name, [Alias] = @alias, [Description] = @desc, [Kind] = @kind, [Parser] = @parser, [Pattern] = @pattern, [Example] = @example, [Flags] = @flags WHERE [Id] = @id");
+            using var update =
+                Command(conn, tx,
+                        $"UPDATE {table} SET [Name] = @name, [Alias] = @alias, [Description] = @desc, [Kind] = @kind, [Parser] = @parser, [Pattern] = @pattern, [Example] = @example, [Flags] = @flags WHERE [Id] = @id");
             Bind(update, s);
             update.Parameters.AddWithValue("@id", id);
             if (update.ExecuteNonQuery() == 0) throw new DefinitionException($"The syntax \"{s.Name}\" no longer exists.");
@@ -97,7 +113,9 @@ public static class SyntaxRows
 
     private static int Insert(SqliteConnection conn, SqliteTransaction? tx, string table, SyntaxRecord s)
     {
-        using (var insert = Command(conn, tx, $"INSERT INTO {table} ([Name], [Alias], [Description], [Kind], [Parser], [Pattern], [Example], [Flags]) VALUES (@name, @alias, @desc, @kind, @parser, @pattern, @example, @flags)"))
+        using (var insert =
+               Command(conn, tx,
+                       $"INSERT INTO {table} ([Name], [Alias], [Description], [Kind], [Parser], [Pattern], [Example], [Flags]) VALUES (@name, @alias, @desc, @kind, @parser, @pattern, @example, @flags)"))
         {
             Bind(insert, s);
             insert.ExecuteNonQuery();
@@ -116,7 +134,8 @@ public static class SyntaxRows
     }
 
     /// <summary>
-    ///     Adds each of the syntaxes that is acceptable next to the ones already there (a name or alias that is taken is skipped).
+    ///     Adds each of the syntaxes that is acceptable next to the ones already there (a name or alias that is taken is
+    ///     skipped).
     ///     Returns how many were added. Used to seed a new Silo and to restore the predefined syntaxes.
     /// </summary>
     public static int InsertMissing(SqliteConnection conn, SqliteTransaction? tx, string table, IEnumerable<SyntaxRecord> candidates)

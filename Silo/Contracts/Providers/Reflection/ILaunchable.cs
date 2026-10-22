@@ -1,4 +1,4 @@
-﻿namespace Silo.Contracts.Providers.Reflection;
+﻿namespace Silo.Providers.Reflection;
 
 public interface ILaunchable
 {

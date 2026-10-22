@@ -63,7 +63,8 @@ public static class ConnectorCatalog
         }
         catch (Exception ex)
         {
-            Log.Debug(ex, "Could not ask the component container for {type}", typeof(T).Name);
+            // Not Debug: when this fails, every registered connector is missing from the list (so saved connections cannot be brought back).
+            Log.Warning(ex, "Could not ask the component container for {type}", typeof(T).Name);
             return null;
         }
     }

@@ -1,9 +1,12 @@
-﻿using System.IO;
+﻿using System.Diagnostics;
+using System.IO;
 using Microsoft.Win32;
 using Serilog;
 using Silo.Hosting;
 using Silo.Model;
+using Silo.Ui;
 using Silo.Ui.Windows;
+using System.Windows.Threading;
 
 namespace Silo.Commanding;
 
@@ -38,21 +41,46 @@ public record OpenSiloCommand() : SiloCommand("_Open Silo...", Enabler.Always)
     /// <summary>
     ///     Opens a .silo file or URL and makes it the active Silo -- in this process, or in a new one when it is a Solo
     ///     Silo or a URL (see <see cref="SiloRouting" />). Reports problems to the person instead of throwing. Returns null
-    ///     when nothing was opened here.
+    ///     when nothing was opened here. The status bar says "Opening ..." for as long as it takes (see <see cref="AppStatus" />).
     /// </summary>
-    public static async Task<OpenSilo?> OpenPathAsync(string path)
+    /// <param name="path">The file or URL.</param>
+    /// <param name="operation">
+    ///     The status-bar operation that already tells the person this is going to happen (startup begins one before the window is
+    ///     up); this call ends it. A new one is begun when omitted.
+    /// </param>
+    public static async Task<OpenSilo?> OpenPathAsync(string path, StatusOperation? operation = null)
     {
+        var status = operation ?? AppStatus.Instance.Begin("Opening " + Describe(path));
+        var clock  = Stopwatch.StartNew();
         try
         {
-            return await SiloRouting.OpenAsync(path);
+            // The opening itself holds the UI thread for a while: let the status line show what is happening before it starts.
+            if (Application.Current?.Dispatcher is { } dispatcher && dispatcher.CheckAccess())
+                await System.Windows.Threading.Dispatcher.Yield(DispatcherPriority.Background);
+
+            var silo = await SiloRouting.OpenAsync(path);
+            if (silo is null) status.Dispose(); // handed to another process, or cancelled: those said so themselves
+            else status.Done($"Opened {silo.Name ?? Describe(path)} in {clock.ElapsedMilliseconds} ms");
+            return silo;
         }
         catch (Exception ex)
         {
             Log.Error(ex, "Opening '{path}' failed", path);
+            status.Fail($"The Silo could not be opened: {ex.Message}");
             MessageBox.Show($"The Silo could not be opened:\n{path}\n\n{ex.Message}", AppIdentity.AppName, MessageBoxButton.OK,
                             MessageBoxImage.Error);
             return null;
         }
+    }
+
+    /// <summary>What to call a file or URL in the status bar: the file's name, or the whole address.</summary>
+    private static string Describe(string path)
+    {
+        string trimmed = path.Trim().Trim('"');
+        if (trimmed.Contains("://")) return trimmed;
+
+        string name = Path.GetFileName(trimmed.TrimEnd('/', '\\'));
+        return name.Length > 0 ? name : trimmed;
     }
 }
 

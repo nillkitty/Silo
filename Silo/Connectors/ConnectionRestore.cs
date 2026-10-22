@@ -1,5 +1,6 @@
 ﻿using System.Linq;
 using Silo.Commanding;
+using Silo.Contracts.ConnectorServices;
 using Silo.ViewModel;
 
 namespace Silo.Connectors;
@@ -35,6 +36,67 @@ public static class ConnectionRestore
         var uriConnectors = ConnectorCatalog.UriConnectors(connectors.ToList());
         var found         = UriRules.FindConnector(uri, uriConnectors) ?? UriRules.FindConnector(uri, uriConnectors, UriRules.AnyScope);
         return found as IConnector;
+    }
+
+    /// <summary>The scheme of the destination a connection is saved under when it has none of its own: <c>connector:Full.Type.Name</c>.</summary>
+    public const string ConnectorScheme = "connector";
+
+    /// <summary>
+    ///     What to save as the destination of a connection that has no URI (Runtime, the registry's current user...): it names the connector,
+    ///     which is all it takes to make the connection again.
+    /// </summary>
+    public static Uri UriFor(IConnector connector)
+    {
+        var type = connector.GetType();
+        return new Uri($"{ConnectorScheme}:{Uri.EscapeDataString(type.FullName ?? type.Name)}", UriKind.Absolute);
+    }
+
+    /// <summary>Whether <paramref name="uri" /> is one made by <see cref="UriFor" />.</summary>
+    public static bool IsConnectorUri(Uri? uri)
+    {
+        return uri is { IsAbsoluteUri: true } && string.Equals(uri.Scheme, ConnectorScheme, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    ///     The connector that brings a saved connection back. A saved destination finds it as in <see cref="FindConnector(Uri, IEnumerable{IConnector})" />,
+    ///     or, for a <see cref="UriFor" /> destination, by the connector's type. A connection saved with no destination at all (before those were
+    ///     named) is matched to the connector that has no destination to ask for (connectionless, or connecting by itself) and is called by the same name.
+    /// </summary>
+    public static IConnector? FindConnector(ConnectionRecord record, IEnumerable<IConnector> connectors)
+    {
+        var list = connectors.ToList();
+
+        if (record.SourceUri is { } uri)
+        {
+            if (!IsConnectorUri(uri)) return FindConnector(uri, list);
+
+            string typeName = Uri.UnescapeDataString(uri.OriginalString[(ConnectorScheme.Length + 1)..]);
+            return list.FirstOrDefault(c => string.Equals(c.GetType().FullName, typeName, StringComparison.Ordinal));
+        }
+
+        return list.Where(c => c.Flags.HasFlag(ConnectorSetupFlags.Connectionless) || c is IAutoConnectable)
+                   .FirstOrDefault(c => string.Equals(c.DisplayName, record.DisplayName, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    ///     Makes the connection a saved record stands for. One with a destination is created from it; one without (see <see cref="UriFor" />) is
+    ///     made by the connector itself: its automatic connection, or else an empty request.
+    /// </summary>
+    public static Task<IConnection> CreateAsync(IConnector connector, ConnectionRecord record, CancellationToken cancel)
+    {
+        if (record.SourceUri is not null && !IsConnectorUri(record.SourceUri))
+            return ConnectionCreation.CreateAsync(connector, RequestFor(record, connector), cancel);
+
+        cancel.ThrowIfCancellationRequested();
+        if (connector is IAutoConnectable auto)
+            return Task.FromResult(auto.CreateAutoConnection() ?? throw new InvalidOperationException("The connector could not make its connection."));
+
+        return ConnectionCreation.CreateAsync(connector,
+                                              new ConnectionRequest
+                                              {
+                                                  Connector   = connector,
+                                                  DisplayName = string.IsNullOrWhiteSpace(record.DisplayName) ? null : record.DisplayName
+                                              }, cancel);
     }
 
     /// <summary>The request that recreates a saved connection.</summary>

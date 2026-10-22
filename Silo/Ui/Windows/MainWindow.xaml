@@ -302,8 +302,7 @@
             </xcad:DockingManager.Layout>
         </xcad:DockingManager>
 
-        <StatusBar Grid.Row="3" Grid.Column="0"  Grid.ColumnSpan="2">
-            <StatusBarItem Name="StatusError"></StatusBarItem>
-        </StatusBar>
+        <!-- the status line, the active Silo, how many are open, memory use... (Ui/Controls/AppStatusBar.cs; App.Status reports to it) -->
+        <ui:AppStatusBar x:Name="StatusStrip" Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="2" />
     </Grid>
 </Window>

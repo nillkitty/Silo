@@ -1,4 +1,4 @@
-namespace Silo.Contracts.Providers.Data;
+namespace Silo.Providers.Data;
 
 /// <summary>
 ///     Implemented by a provider that can tell its owner the document changed, so the owner can mark it as having unsaved

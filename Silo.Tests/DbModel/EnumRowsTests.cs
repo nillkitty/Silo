@@ -1,8 +1,7 @@
-using System.Linq;
 using Microsoft.Data.Sqlite;
-using Silo.Contracts.Providers.Data;
 using Silo.DbModel.Meta;
 using Silo.DbModel.Sqlite;
+using Silo.Providers.Data;
 
 namespace Silo.Tests.DbModel;
 
@@ -23,7 +22,10 @@ public class EnumRowsTests
     }
 
     [TearDown]
-    public void TearDown() => _conn.Dispose();
+    public void TearDown()
+    {
+        _conn.Dispose();
+    }
 
     private void Exec(string sql)
     {
@@ -39,27 +41,33 @@ public class EnumRowsTests
         return (long)cmd.ExecuteScalar()!;
     }
 
-    private EnumRecord Save(EnumRecord e) => EnumRows.Save(_conn, null, EnumTable, ValueTable, e);
+    private EnumRecord Save(EnumRecord e)
+    {
+        return EnumRows.Save(_conn, null, EnumTable, ValueTable, e);
+    }
 
-    private static EnumRecord Colors() => new(0, "Colors", "Some colors", EnumType.Integral, EnumFlags.KnownValuesOnly,
-                                              [new EnumValueRecord(0, "Red", "0x1"), new EnumValueRecord(0, "Green", "2", "the green one")]);
+    private static EnumRecord Colors()
+    {
+        return new EnumRecord(0, "Colors", "Some colors", EnumType.Integral, EnumFlags.KnownValuesOnly,
+                              [new EnumValueRecord(0, "Red", "0x1"), new EnumValueRecord(0, "Green", "2", "the green one")]);
+    }
 
     [Test]
     public void A_new_enum_is_stored_with_its_values_in_canonical_form()
     {
         var saved = Save(Colors());
 
-        Assert.That(saved.Id, Is.GreaterThan(0));
-        Assert.That(saved.Name, Is.EqualTo("Colors"));
-        Assert.That(saved.Description, Is.EqualTo("Some colors"));
-        Assert.That(saved.Type, Is.EqualTo(EnumType.Integral));
-        Assert.That(saved.Flags, Is.EqualTo(EnumFlags.KnownValuesOnly));
-        Assert.That(saved.Values.Select(v => v.Name), Is.EqualTo(new[] { "Red", "Green" }));
+        Assert.That(saved.Id,                          Is.GreaterThan(0));
+        Assert.That(saved.Name,                        Is.EqualTo("Colors"));
+        Assert.That(saved.Description,                 Is.EqualTo("Some colors"));
+        Assert.That(saved.Type,                        Is.EqualTo(EnumType.Integral));
+        Assert.That(saved.Flags,                       Is.EqualTo(EnumFlags.KnownValuesOnly));
+        Assert.That(saved.Values.Select(v => v.Name),  Is.EqualTo(new[] { "Red", "Green" }));
         Assert.That(saved.Values.Select(v => v.Value), Is.EqualTo(new[] { "1", "2" }));
-        Assert.That(saved.Values.All(v => v.Id > 0), Is.True);
-        Assert.That(saved.Values[1].Description, Is.EqualTo("the green one"));
-        Assert.That(Count(EnumTable), Is.EqualTo(1));
-        Assert.That(Count(ValueTable), Is.EqualTo(2));
+        Assert.That(saved.Values.All(v => v.Id > 0),   Is.True);
+        Assert.That(saved.Values[1].Description,       Is.EqualTo("the green one"));
+        Assert.That(Count(EnumTable),                  Is.EqualTo(1));
+        Assert.That(Count(ValueTable),                 Is.EqualTo(2));
     }
 
     [Test]
@@ -69,10 +77,11 @@ public class EnumRowsTests
         Save(EnumRecord.Create("apple"));
         Save(EnumRecord.Create("Mango"));
 
-        Assert.That(EnumRows.GetAll(_conn, null, EnumTable, ValueTable).Select(e => e.Name), Is.EqualTo(new[] { "apple", "Mango", "Zebra" }));
+        Assert.That(EnumRows.GetAll(_conn, null, EnumTable, ValueTable).Select(e => e.Name),
+                    Is.EqualTo(new[] { "apple", "Mango", "Zebra" }));
         Assert.That(EnumRows.Find(_conn, null, EnumTable, ValueTable, "MANGO")?.Name, Is.EqualTo("Mango"));
-        Assert.That(EnumRows.Find(_conn, null, EnumTable, ValueTable, "nothing"), Is.Null);
-        Assert.That(EnumRows.Get(_conn, null, EnumTable, ValueTable, 9999), Is.Null);
+        Assert.That(EnumRows.Find(_conn, null, EnumTable, ValueTable, "nothing"),     Is.Null);
+        Assert.That(EnumRows.Get(_conn, null, EnumTable, ValueTable, 9999),           Is.Null);
     }
 
     [Test]
@@ -89,13 +98,13 @@ public class EnumRowsTests
                                Values = [red with { Name = "Crimson" }, new EnumValueRecord(0, "Blue", "4")] // Green is gone, Blue is new
                            });
 
-        Assert.That(changed.Id, Is.EqualTo(first.Id));
-        Assert.That(changed.Name, Is.EqualTo("Hues"));
-        Assert.That(changed.Values.Select(v => v.Name), Is.EqualTo(new[] { "Crimson", "Blue" }));
-        Assert.That(changed.Values[0].Id, Is.EqualTo(red.Id));
+        Assert.That(changed.Id,                                Is.EqualTo(first.Id));
+        Assert.That(changed.Name,                              Is.EqualTo("Hues"));
+        Assert.That(changed.Values.Select(v => v.Name),        Is.EqualTo(new[] { "Crimson", "Blue" }));
+        Assert.That(changed.Values[0].Id,                      Is.EqualTo(red.Id));
         Assert.That(changed.Values.Any(v => v.Id == green.Id), Is.False);
-        Assert.That(Count(EnumTable), Is.EqualTo(1));
-        Assert.That(Count(ValueTable), Is.EqualTo(2));
+        Assert.That(Count(EnumTable),                          Is.EqualTo(1));
+        Assert.That(Count(ValueTable),                         Is.EqualTo(2));
     }
 
     [Test]
@@ -114,11 +123,15 @@ public class EnumRowsTests
         Assert.That(duplicateName!.Message.Contains("already"), Is.True);
 
         Assert.Throws<DefinitionException>(() => Save(EnumRecord.Create("Bad name")));
-        Assert.Throws<DefinitionException>(() => Save(new EnumRecord(0, "Bytes", null, EnumType.Byte, EnumFlags.None, [new EnumValueRecord(0, "Big", "300")])));
+        Assert.Throws<DefinitionException>(() => Save(new EnumRecord(0, "Bytes", null, EnumType.Byte, EnumFlags.None,
+                                                                     [new EnumValueRecord(0, "Big", "300")])));
         Assert.Throws<DefinitionException>(() => Save(new EnumRecord(0, "Twice", null, EnumType.Integral, EnumFlags.None,
-                                                                    [new EnumValueRecord(0, "A", "1"), new EnumValueRecord(0, "B", "0x1")])));
+                                                                     [
+                                                                         new EnumValueRecord(0, "A", "1"),
+                                                                         new EnumValueRecord(0, "B", "0x1")
+                                                                     ])));
 
-        Assert.That(Count(EnumTable), Is.EqualTo(1));
+        Assert.That(Count(EnumTable),  Is.EqualTo(1));
         Assert.That(Count(ValueTable), Is.EqualTo(2));
     }
 
@@ -130,7 +143,7 @@ public class EnumRowsTests
 
         var ex = Assert.Throws<DefinitionException>(() => Save(saved));
         Assert.That(ex!.Message.Contains("no longer exists"), Is.True);
-        Assert.That(Count(EnumTable), Is.EqualTo(0));
+        Assert.That(Count(EnumTable),                         Is.EqualTo(0));
     }
 
     [Test]
@@ -142,8 +155,8 @@ public class EnumRowsTests
         Assert.That(EnumRows.Delete(_conn, null, EnumTable, ValueTable, colors.Id), Is.True);
         Assert.That(EnumRows.Delete(_conn, null, EnumTable, ValueTable, colors.Id), Is.False);
 
-        Assert.That(Count(EnumTable), Is.EqualTo(1));
-        Assert.That(Count(ValueTable), Is.EqualTo(1));
+        Assert.That(Count(EnumTable),                                                      Is.EqualTo(1));
+        Assert.That(Count(ValueTable),                                                     Is.EqualTo(1));
         Assert.That(EnumRows.GetAll(_conn, null, EnumTable, ValueTable)[0].Values[0].Name, Is.EqualTo("Small"));
     }
 
@@ -153,17 +166,17 @@ public class EnumRowsTests
         var colors = Save(Colors());
 
         var blue = EnumRows.SaveValue(_conn, null, EnumTable, ValueTable, colors.Id, new EnumValueRecord(0, "Blue", "4"));
-        Assert.That(blue.Id, Is.GreaterThan(0));
-        Assert.That(blue.Value, Is.EqualTo("4"));
+        Assert.That(blue.Id,                                                             Is.GreaterThan(0));
+        Assert.That(blue.Value,                                                          Is.EqualTo("4"));
         Assert.That(EnumRows.Get(_conn, null, EnumTable, ValueTable, colors.Id)!.Values, Has.Count.EqualTo(3));
 
         var renamed = EnumRows.SaveValue(_conn, null, EnumTable, ValueTable, colors.Id, blue with { Name = "Navy", Value = "0x8" });
-        Assert.That(renamed.Id, Is.EqualTo(blue.Id));
-        Assert.That(renamed.Name, Is.EqualTo("Navy"));
+        Assert.That(renamed.Id,    Is.EqualTo(blue.Id));
+        Assert.That(renamed.Name,  Is.EqualTo("Navy"));
         Assert.That(renamed.Value, Is.EqualTo("8"));
 
-        Assert.That(EnumRows.DeleteValue(_conn, null, ValueTable, blue.Id), Is.True);
-        Assert.That(EnumRows.DeleteValue(_conn, null, ValueTable, blue.Id), Is.False);
+        Assert.That(EnumRows.DeleteValue(_conn, null, ValueTable, blue.Id),              Is.True);
+        Assert.That(EnumRows.DeleteValue(_conn, null, ValueTable, blue.Id),              Is.False);
         Assert.That(EnumRows.Get(_conn, null, EnumTable, ValueTable, colors.Id)!.Values, Has.Count.EqualTo(2));
     }
 
@@ -172,11 +185,16 @@ public class EnumRowsTests
     {
         var colors = Save(Colors());
 
-        Assert.Throws<DefinitionException>(() => EnumRows.SaveValue(_conn, null, EnumTable, ValueTable, colors.Id, new EnumValueRecord(0, "Red", "9")));   // name taken
-        Assert.Throws<DefinitionException>(() => EnumRows.SaveValue(_conn, null, EnumTable, ValueTable, colors.Id, new EnumValueRecord(0, "Other", "2")));  // value taken
-        Assert.Throws<DefinitionException>(() => EnumRows.SaveValue(_conn, null, EnumTable, ValueTable, colors.Id, new EnumValueRecord(0, "Neg", "-1")));   // not a valid Integral
-        Assert.Throws<DefinitionException>(() => EnumRows.SaveValue(_conn, null, EnumTable, ValueTable, colors.Id, new EnumValueRecord(9999, "Ghost", "7"))); // stale id
-        Assert.Throws<DefinitionException>(() => EnumRows.SaveValue(_conn, null, EnumTable, ValueTable, 9999, new EnumValueRecord(0, "Orphan", "7")));      // no such enum
+        Assert.Throws<DefinitionException>(() => EnumRows.SaveValue(_conn, null, EnumTable, ValueTable, colors.Id,
+                                                                    new EnumValueRecord(0, "Red", "9"))); // name taken
+        Assert.Throws<DefinitionException>(() => EnumRows.SaveValue(_conn, null, EnumTable, ValueTable, colors.Id,
+                                                                    new EnumValueRecord(0, "Other", "2"))); // value taken
+        Assert.Throws<DefinitionException>(() => EnumRows.SaveValue(_conn, null, EnumTable, ValueTable, colors.Id,
+                                                                    new EnumValueRecord(0, "Neg", "-1"))); // not a valid Integral
+        Assert.Throws<DefinitionException>(() => EnumRows.SaveValue(_conn, null, EnumTable, ValueTable, colors.Id,
+                                                                    new EnumValueRecord(9999, "Ghost", "7"))); // stale id
+        Assert.Throws<DefinitionException>(() => EnumRows.SaveValue(_conn, null, EnumTable, ValueTable, 9999,
+                                                                    new EnumValueRecord(0, "Orphan", "7"))); // no such enum
 
         Assert.That(Count(ValueTable), Is.EqualTo(2));
     }
@@ -184,12 +202,12 @@ public class EnumRowsTests
     [Test]
     public void Reading_inside_a_transaction_sees_what_the_transaction_wrote()
     {
-        using var tx = _conn.BeginTransaction();
-        var saved = EnumRows.Save(_conn, tx, EnumTable, ValueTable, Colors());
+        using var tx    = _conn.BeginTransaction();
+        var       saved = EnumRows.Save(_conn, tx, EnumTable, ValueTable, Colors());
         Assert.That(EnumRows.Get(_conn, tx, EnumTable, ValueTable, saved.Id)!.Values, Has.Count.EqualTo(2));
         tx.Rollback();
 
-        Assert.That(Count(EnumTable), Is.EqualTo(0));
+        Assert.That(Count(EnumTable),  Is.EqualTo(0));
         Assert.That(Count(ValueTable), Is.EqualTo(0));
     }
 }

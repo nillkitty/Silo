@@ -186,6 +186,19 @@ public static class CollectionFormats
             throw new FormatException("The file is not valid JSON: " + ex.Message, ex);
         }
 
+        return FromJson(token);
+    }
+
+    /// <summary>
+    ///     Reads characters from JSON that was already parsed: an array (or a single value) of code points written as text or numbers, or of objects with
+    ///     <c>codePoint</c> (or <c>character</c>) and optionally <c>label</c>. This is what a YAML file becomes once it is converted to JSON.
+    /// </summary>
+    /// <exception cref="FormatException">An entry is not a code point.</exception>
+    public static IReadOnlyList<CollectedCharacter> FromJson(JToken token)
+    {
+        // an object that wraps the list ({ "characters": [ ... ] }) is read through the list
+        if (token is JObject wrapper && wrapper["characters"] is JArray inner) token = inner;
+
         var result = new List<CollectedCharacter>();
         foreach (var item in token is JArray array ? array : [token])
             switch (item)

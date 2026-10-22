@@ -1,6 +1,8 @@
+using System.Buffers;
 using System.Buffers.Binary;
 using System.Globalization;
 using System.Text.Unicode;
+using Silo.Providers.Data;
 
 namespace Silo.DataDefs;
 
@@ -10,6 +12,14 @@ namespace Silo.DataDefs;
 internal sealed class CharSet
 {
     private readonly List<(char Lo, char Hi)> _ranges = [];
+
+    public bool Contains(char c)
+    {
+        foreach (var (lo, hi) in _ranges)
+            if (c >= lo && c <= hi)
+                return true;
+        return false;
+    }
 
     public CharSet(string spec)
     {
@@ -51,14 +61,6 @@ internal sealed class CharSet
                 _ranges.Add((chars[i].C, chars[i].C));
             }
     }
-
-    public bool Contains(char c)
-    {
-        foreach (var (lo, hi) in _ranges)
-            if (c >= lo && c <= hi)
-                return true;
-        return false;
-    }
 }
 
 /// <summary>
@@ -66,18 +68,6 @@ internal sealed class CharSet
 /// </summary>
 internal sealed class Scope
 {
-    private Scope(byte[]? bytes, string? text, int start, int end, bool open, Scope? parent, int parentStart, int rawLength)
-    {
-        Bytes       = bytes;
-        Text        = text;
-        Start       = start;
-        End         = end;
-        Open        = open;
-        Parent      = parent;
-        ParentStart = parentStart;
-        RawLength   = rawLength;
-    }
-
     public byte[]? Bytes { get; }
 
     public int End { get; }
@@ -131,6 +121,18 @@ internal sealed class Scope
     {
         return Parent is null ? pos : Parent.Abs(ParentStart + Math.Min(pos, RawLength));
     }
+
+    private Scope(byte[]? bytes, string? text, int start, int end, bool open, Scope? parent, int parentStart, int rawLength)
+    {
+        Bytes       = bytes;
+        Text        = text;
+        Start       = start;
+        End         = end;
+        Open        = open;
+        Parent      = parent;
+        ParentStart = parentStart;
+        RawLength   = rawLength;
+    }
 }
 
 /// <summary>
@@ -164,7 +166,7 @@ internal sealed record Inst(int Index, Inst? Outer)
 {
     public int At(int depth)
     {
-        var f = this;
+        var f                                              = this;
         for (int i = 0; i < depth && f is not null; i++) f = f.Outer;
         return f?.Index ?? throw new DefinitionException($"InstanceNum {{{depth}}} refers past the outermost repeater.");
     }
@@ -174,13 +176,13 @@ internal sealed record Inst(int Index, Inst? Outer)
 ///     The state carried along one matching path.
 /// </summary>
 internal readonly record struct St(
-    Caps?                      Caps,
+    Caps?                             Caps,
     IReadOnlyDictionary<string, long> Vars,
-    Inst                       Inst,
-    object?                    Value,
-    (int Start, int End)       ValueAt,
-    Encoding?                  Encoding,
-    int                        Depth);
+    Inst                              Inst,
+    object?                           Value,
+    (int Start, int End)              ValueAt,
+    Encoding?                         Encoding,
+    int                               Depth);
 
 /// <summary>
 ///     One way a part matched: where it ended, and the state after it.
@@ -196,6 +198,12 @@ internal sealed class Runner
 
     private static readonly IReadOnlyDictionary<string, long> NoVars = new Dictionary<string, long>();
 
+    private static readonly Encoding Utf8Strict = new UTF8Encoding(false, true);
+    private static readonly Encoding Utf16LE    = new UnicodeEncoding(false, false, true);
+    private static readonly Encoding Utf16BE    = new UnicodeEncoding(true,  false, true);
+    private static readonly Encoding Utf32LE    = new UTF32Encoding(false, false, true);
+    private static readonly Encoding Utf32BE    = new UTF32Encoding(true,  false, true);
+
     private readonly Dictionary<string, CharSet> _sets = new(StringComparer.Ordinal);
 
     /// <summary>
@@ -205,7 +213,7 @@ internal sealed class Runner
 
     public DefinitionMatch? Run(IDefPart root, Scope scope, int number, bool whole)
     {
-        var st = new St(null, NoVars, new Inst(number, null), null, default, null, 0);
+        var              st      = new St(null, NoVars, new Inst(number, null), null, default, null, 0);
         IEnumerable<Res> results = root is DataDefinition dd ? Seq(dd.Items, 0, scope, scope.Start, st) : M(root, scope, scope.Start, st);
 
         foreach (var r in results)
@@ -215,7 +223,7 @@ internal sealed class Runner
             string name = root switch
                           {
                               DefinitionBase<IDefPart> { Name: { } n } => n,
-                              DataDefinition { ContentType: { } c }    => c,
+                              DataDefinition { ContentType   : { } c } => c,
                               _                                        => string.Empty
                           };
             var node = new CaptureNode(name, r.St.Value, scope.Abs(scope.Start), r.End - scope.Start, scope.IsText, Caps.ToList(r.St.Caps));
@@ -250,14 +258,14 @@ internal sealed class Runner
             yield break;
         }
 
-        var part       = parts[i] ?? throw new DefinitionException($"A definition has an empty item (#{i + 1}).");
+        var part = parts[i] ?? throw new DefinitionException($"A definition has an empty item (#{i + 1}).");
         var (min, max) = Bounds(part, false);
 
         if (min == 1 && max == 1)
         {
             foreach (var r in M(part, s, pos, st))
-            foreach (var x in Seq(parts, i + 1, s, r.End, r.St))
-                yield return x;
+                foreach (var x in Seq(parts, i + 1, s, r.End, r.St))
+                    yield return x;
             yield break;
         }
 
@@ -279,8 +287,8 @@ internal sealed class Runner
         }
 
         for (int k = chain.Count - 1; k >= min; k--)
-        foreach (var x in Seq(parts, i + 1, s, chain[k].End, chain[k].St))
-            yield return x;
+            foreach (var x in Seq(parts, i + 1, s, chain[k].End, chain[k].St))
+                yield return x;
     }
 
     /// <summary>
@@ -319,7 +327,9 @@ internal sealed class Runner
                 memo[(i, j)] = got;
             }
 
-            return got is { } g ? cur with { Caps = Caps.Append(cur.Caps, g.Caps), Vars = g.Vars, Encoding = cur.Encoding ?? g.Encoding } : null;
+            return got is { } g
+                       ? cur with { Caps = Caps.Append(cur.Caps, g.Caps), Vars = g.Vars, Encoding = cur.Encoding ?? g.Encoding }
+                       : null;
         }
 
         var threads = Closure([(0, 0, st)]);
@@ -406,7 +416,7 @@ internal sealed class Runner
                    Rest             => [new Res(s.End, st)],
                    End              => pos == s.End ? [new Res(pos, st)] : [],
                    Skip k           => SkipOf(k, s, pos, st),
-                   Byte b           => Literal(part, [b.Value], s, pos, st),
+                   Byte b           => Literal(part, [b.Value],     s, pos, st),
                    Bytes b          => Literal(part, b.Value ?? [], s, pos, st),
                    Int n            => IntOf(n, s, pos, st),
                    _                => throw new DefinitionException($"{part.GetType().Name} is not a supported definition part.")
@@ -433,11 +443,8 @@ internal sealed class Runner
     {
         foreach (var r in Seq(items, 0, s, pos, st with { Caps = null, Value = null }))
         {
-            object? value = r.St.Value is not null && r.St.ValueAt == (pos, r.End)
-                                 ? r.St.Value
-                                 : (s.IsText
-                                               ? s.Text!.Substring(pos, r.End - pos)
-                                               : s.Bytes.AsSpan(pos, r.End - pos).ToArray());
+            object? value = r.St.Value is not null && r.St.ValueAt == (pos, r.End) ? r.St.Value :
+                            s.IsText ? s.Text!.Substring(pos, r.End - pos) : s.Bytes.AsSpan(pos, r.End - pos).ToArray();
             var node = new CaptureNode(name, value, s.Abs(pos), s.Abs(r.End) - s.Abs(pos), s.IsText, Caps.ToList(r.St.Caps));
             yield return new Res(r.End, r.St with { Caps = new Caps(node, st.Caps), Value = null });
         }
@@ -464,7 +471,8 @@ internal sealed class Runner
             if (c == '{')
             {
                 int close = template.IndexOf('}', i);
-                if (close > i + 1 && int.TryParse(template.AsSpan(i + 1, close - i - 1), NumberStyles.None, CultureInfo.InvariantCulture, out int depth))
+                if (close > i + 1 && int.TryParse(template.AsSpan(i + 1, close - i - 1), NumberStyles.None, CultureInfo.InvariantCulture,
+                                                  out int depth))
                 {
                     sb.Append(inst.At(depth).ToString(CultureInfo.InvariantCulture));
                     i = close;
@@ -481,8 +489,8 @@ internal sealed class Runner
     private IEnumerable<Res> Alternatives(Any a, Scope s, int pos, St st)
     {
         foreach (var child in a.Items)
-        foreach (var r in Seq([child], 0, s, pos, st))
-            yield return r;
+            foreach (var r in Seq([child], 0, s, pos, st))
+                yield return r;
     }
 
     private IEnumerable<Res> NotOf(Not n, Scope s, int pos, St st)
@@ -520,10 +528,10 @@ internal sealed class Runner
         long v = Read(s.Bytes!, pos, n);
 
         if (n.Value is { } eq && v != eq) yield break;
-        if (n.Min is { } min && v < min) yield break;
-        if (n.Max is { } max && v > max) yield break;
+        if (n.Min is { } min  && v < min) yield break;
+        if (n.Max is { } max  && v > max) yield break;
 
-        var vars = st.Vars;
+        var vars                               = st.Vars;
         if (n.Let is { Length: > 0 } let) vars = new Dictionary<string, long>(vars) { [let] = v };
         yield return new Res(pos + n.Size, st with { Vars = vars, Value = v, ValueAt = (pos, pos + n.Size) });
     }
@@ -532,20 +540,20 @@ internal sealed class Runner
     {
         var b = data.AsSpan(pos, n.Size);
         return (n.Size, n.BigEndian, n.Signed) switch
-                 {
-                     (1, _, false)     => b[0],
-                     (1, _, true)      => (sbyte)b[0],
-                     (2, false, false) => BinaryPrimitives.ReadUInt16LittleEndian(b),
-                     (2, false, true)  => BinaryPrimitives.ReadInt16LittleEndian(b),
-                     (2, true, false)  => BinaryPrimitives.ReadUInt16BigEndian(b),
-                     (2, true, true)   => BinaryPrimitives.ReadInt16BigEndian(b),
-                     (4, false, false) => BinaryPrimitives.ReadUInt32LittleEndian(b),
-                     (4, false, true)  => BinaryPrimitives.ReadInt32LittleEndian(b),
-                     (4, true, false)  => BinaryPrimitives.ReadUInt32BigEndian(b),
-                     (4, true, true)   => BinaryPrimitives.ReadInt32BigEndian(b),
-                     (8, false, _)     => BinaryPrimitives.ReadInt64LittleEndian(b),
-                     _                 => BinaryPrimitives.ReadInt64BigEndian(b)
-                 };
+               {
+                   (1, _, false)     => b[0],
+                   (1, _, true)      => (sbyte)b[0],
+                   (2, false, false) => BinaryPrimitives.ReadUInt16LittleEndian(b),
+                   (2, false, true)  => BinaryPrimitives.ReadInt16LittleEndian(b),
+                   (2, true, false)  => BinaryPrimitives.ReadUInt16BigEndian(b),
+                   (2, true, true)   => BinaryPrimitives.ReadInt16BigEndian(b),
+                   (4, false, false) => BinaryPrimitives.ReadUInt32LittleEndian(b),
+                   (4, false, true)  => BinaryPrimitives.ReadInt32LittleEndian(b),
+                   (4, true, false)  => BinaryPrimitives.ReadUInt32BigEndian(b),
+                   (4, true, true)   => BinaryPrimitives.ReadInt32BigEndian(b),
+                   (8, false, _)     => BinaryPrimitives.ReadInt64LittleEndian(b),
+                   _                 => BinaryPrimitives.ReadInt64BigEndian(b)
+               };
     }
 
     private IEnumerable<Res> BlockOf(Block b, Scope s, int pos, St st)
@@ -556,7 +564,8 @@ internal sealed class Runner
                        null => throw new DefinitionException("Block needs a Length."),
                        _ when long.TryParse(b.Length, NumberStyles.Integer, CultureInfo.InvariantCulture, out long l) => l,
                        _ when st.Vars.TryGetValue(b.Length, out long v) => v,
-                       _ => throw new DefinitionException($"Block Length '{b.Length}' is neither a number nor a variable set earlier by Int Let.")
+                       _ => throw new
+                                DefinitionException($"Block Length '{b.Length}' is neither a number nor a variable set earlier by Int Let.")
                    };
         len += b.Adjust;
         if (len < 0 || len > int.MaxValue || Short(s, pos, (int)len)) yield break;
@@ -612,12 +621,6 @@ internal sealed class Runner
         }
     }
 
-    private static readonly Encoding Utf8Strict    = new UTF8Encoding(false, true);
-    private static readonly Encoding Utf16LE = new UnicodeEncoding(false, false, true);
-    private static readonly Encoding Utf16BE = new UnicodeEncoding(true, false, true);
-    private static readonly Encoding Utf32LE = new UTF32Encoding(false, false, true);
-    private static readonly Encoding Utf32BE = new UTF32Encoding(true, false, true);
-
     /// <summary>
     ///     The encodings to try at <paramref name="pos" />, with the length of the byte-order-mark found for each.
     /// </summary>
@@ -643,12 +646,12 @@ internal sealed class Runner
         int sample = Math.Min(b.Length, 256) & ~1, evenZeros = 0, oddZeros = 0;
         for (int i = 0; i < sample; i += 2)
         {
-            if (b[i] == 0) evenZeros++;
+            if (b[i]     == 0) evenZeros++;
             if (b[i + 1] == 0) oddZeros++;
         }
 
-        if (sample >= 4 && oddZeros > sample / 4 && evenZeros == 0) list.Add((Utf16LE, 0));
-        if (sample >= 4 && evenZeros > sample / 4 && oddZeros == 0) list.Add((Utf16BE, 0));
+        if (sample >= 4 && oddZeros  > sample / 4 && evenZeros == 0) list.Add((Utf16LE, 0));
+        if (sample >= 4 && evenZeros > sample / 4 && oddZeros  == 0) list.Add((Utf16BE, 0));
 
         list.Add((Encoding.Latin1, 0));
         return list;
@@ -664,8 +667,8 @@ internal sealed class Runner
         if (ReferenceEquals(encoding, Utf8Strict) || encoding is UTF8Encoding)
         {
             var chars  = new char[count];
-            var status = Utf8.ToUtf16(bytes, chars, out int read, out int written, replaceInvalidSequences: false);
-            return (new string(chars, 0, written), read == count || status == System.Buffers.OperationStatus.NeedMoreData);
+            var status = Utf8.ToUtf16(bytes, chars, out int read, out int written, false);
+            return (new string(chars, 0, written), read == count || status == OperationStatus.NeedMoreData);
         }
 
         if (encoding is UnicodeEncoding or UTF32Encoding)
@@ -698,7 +701,7 @@ internal sealed class Runner
     private IEnumerable<Res> LinesOf(Lines l, Scope s, int pos, St st)
     {
         var  text  = s.Text!;
-        bool lax   = l.Newline == NewLine.None || l.Newline.HasFlag(NewLine.Lax);
+        bool lax   = l.Newline                          == NewLine.None || l.Newline.HasFlag(NewLine.Lax);
         bool crlf  = !lax && (l.Newline & NewLine.CrLf) == NewLine.CrLf;
         var  lines = new List<(int Start, int End, int Next)>();
 
@@ -719,7 +722,7 @@ internal sealed class Runner
             if (term == 0) continue;
             lines.Add((from, i, i + term));
             i    += term - 1;
-            from =  i + 1;
+            from =  i    + 1;
         }
 
         bool unterminated = from < s.End;
@@ -758,14 +761,17 @@ internal sealed class Runner
     {
         string? delim = p.Delimiter is { Length: > 0 } d ? DefText.Unescape(d) : null;
         string? q     = p.Qualifier is { Length: > 0 } qq ? DefText.Unescape(qq) : null;
-        string? esc   = p.Escape is { Length: > 0 } ee ? DefText.Unescape(ee) : null;
+        string? esc   = p.Escape is { Length   : > 0 } ee ? DefText.Unescape(ee) : null;
         int     max   = p.MaxTokens is > 0 and var m ? m : int.MaxValue;
 
         var tokens = new List<(string, int, int, int)>();
         var sb     = new StringBuilder();
         int i      = start;
 
-        bool At(string? s) => s is not null && i + s.Length <= end && string.CompareOrdinal(text, i, s, 0, s.Length) == 0;
+        bool At(string? s)
+        {
+            return s is not null && i + s.Length <= end && string.CompareOrdinal(text, i, s, 0, s.Length) == 0;
+        }
 
         int DelimAt()
         {
@@ -785,16 +791,17 @@ internal sealed class Runner
 
             if (q is not null && At(q))
             {
-                quoted       = true;
-                i           += q.Length;
-                contentStart = i;
+                quoted       =  true;
+                i            += q.Length;
+                contentStart =  i;
             }
 
             while (i < end)
             {
                 if (quoted)
                 {
-                    if (esc is not null && esc == q && i + 2 * q.Length <= end && At(q) && string.CompareOrdinal(text, i + q.Length, q, 0, q.Length) == 0)
+                    if (esc is not null && esc                                    == q && i + 2 * q.Length <= end && At(q) &&
+                        string.CompareOrdinal(text, i + q.Length, q, 0, q.Length) == 0)
                     {
                         sb.Append(q);
                         i += 2 * q.Length;
@@ -817,7 +824,7 @@ internal sealed class Runner
                 {
                     int after = i + esc.Length;
                     string? escaped = new[] { q, esc, delim }.FirstOrDefault(x => x is not null && after + x.Length <= end &&
-                                                                               string.CompareOrdinal(text, after, x, 0, x.Length) == 0);
+                                                                                  string.CompareOrdinal(text, after, x, 0, x.Length) == 0);
                     if (escaped is not null)
                     {
                         sb.Append(escaped);

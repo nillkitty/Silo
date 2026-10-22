@@ -1,4 +1,4 @@
-﻿namespace Silo.Contracts.Providers.Data.Shape;
+﻿namespace Silo.Providers.Data.Shape;
 
 public interface IType
 {

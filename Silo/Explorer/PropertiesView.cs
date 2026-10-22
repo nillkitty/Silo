@@ -1,4 +1,5 @@
 ﻿using System.Windows.Controls;
+using Silo.Design;
 
 namespace Silo.Explorer;
 
@@ -22,8 +23,7 @@ public sealed class PropertiesView : UserControl
             return;
         }
 
-        _body.Children.Add(new TextBlock { Text = node.Header, FontSize = 16, FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap });
-        _body.Children.Add(Muted(node.Kind));
+        _body.Children.Add(Heading(node));
 
         IReadOnlyList<(string Name, string Value)> rows = [];
         try
@@ -40,6 +40,39 @@ public sealed class PropertiesView : UserControl
         var grid = NodeViews.DetailsGrid(rows, new Thickness(0, 10, 0, 0));
         _body.Children.Add(grid);
     }
+
+    /// <summary>The node's icon, large, beside its name and what kind of thing it is.</summary>
+    private static UIElement Heading(ExplorerNode node)
+    {
+        var names = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+        names.Children.Add(new TextBlock { Text = node.Header, FontSize = 16, FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap });
+        names.Children.Add(Muted(node.Kind));
+
+        if (node.Icon is null) return names;
+
+        // the same icon the tree shows, at a fixed larger size, with the realm badge on its corner as in the tree
+        var picture = new Grid { Margin = new Thickness(0, 0, 12, 0), VerticalAlignment = VerticalAlignment.Center };
+        picture.Children.Add(new AppIcon { Icon = node.Icon, Size = IconSize });
+        if (node.Realm != Realm.None)
+            picture.Children.Add(new RealmBadge
+                                 {
+                                     Realm               = node.Realm,
+                                     WorldKey            = node.WorldKey,
+                                     Size                = Math.Max(9, Math.Round(IconSize * 0.6)),
+                                     HorizontalAlignment = HorizontalAlignment.Right,
+                                     VerticalAlignment   = VerticalAlignment.Bottom,
+                                     Margin              = new Thickness(0, 0, -4, -4)
+                                 });
+
+        var row = new DockPanel { LastChildFill = true };
+        DockPanel.SetDock(picture, Dock.Left);
+        row.Children.Add(picture);
+        row.Children.Add(names);
+        return row;
+    }
+
+    /// <summary>The size of the icon in the heading (the tree's own is the person's "Icon Size" setting, 16 by default).</summary>
+    private const double IconSize = 40;
 
     private static TextBlock Muted(string text) => NodeViews.Muted(text);
 }

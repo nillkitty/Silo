@@ -1,4 +1,6 @@
-﻿namespace Silo.Shell;
+﻿using Silo.Providers.Shell;
+
+namespace Silo.Providers;
 
 /// <summary>
 ///     Return value of interrogating an <see cref="IUriProvider" /> as

@@ -1,6 +1,6 @@
 ﻿using System.Windows.Controls;
 
-namespace Silo.Contracts.Providers.Reflection;
+namespace Silo.Providers.Reflection;
 
 public interface IEditorProvider
 {

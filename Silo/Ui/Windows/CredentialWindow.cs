@@ -5,6 +5,7 @@ using System.Windows.Threading;
 using Silo.Credentials;
 using Silo.Crypto;
 using Silo.Model;
+using Silo.Providers.Crypto;
 
 namespace Silo.Ui.Windows;
 
@@ -26,7 +27,6 @@ public sealed class CredentialWindow : Window
     private readonly Button _copy = new() { Content = "Copy", Padding = new Thickness(10, 2, 10, 2), Margin = new Thickness(8, 0, 0, 0) };
     private readonly Credential _credential;
     private readonly TextBox _domain = new();
-    private readonly ComboBox _realm = new();
     private readonly bool _isNew;
 
     private readonly TextBlock _message = new()
@@ -45,7 +45,10 @@ public sealed class CredentialWindow : Window
 
     private readonly PasswordBox _password = new();
     private readonly TextBox     _plain    = new() { Visibility = Visibility.Collapsed };
+    private readonly ComboBox    _realm    = new();
     private readonly string      _savedPassword;
+
+    private readonly Label _secretLabel = new() { Content = "_Password" };
 
     private readonly CredentialService _service;
 
@@ -55,7 +58,6 @@ public sealed class CredentialWindow : Window
                                           Margin  = new Thickness(8, 0, 0, 0)
                                       };
 
-    private readonly Label   _secretLabel = new() { Content = "_Password" };
     private readonly TextBox _user = new();
     private          bool    _revealAllowed;
 
@@ -68,6 +70,8 @@ public sealed class CredentialWindow : Window
 
     /// <summary>A password saved earlier, not changed here: showing or copying it needs a yes.</summary>
     private bool NeedsConfirmation => !_isNew && !_revealAllowed && _savedPassword.Length > 0 && CurrentPassword == _savedPassword;
+
+    private AuthRealm SelectedRealm => _realm.SelectedValue is AuthRealm r ? r : AuthRealm.Conventional;
 
     /// <summary>
     ///     Shows the dialog. With no <paramref name="editId" /> it makes a new credential; with one it edits that credential.
@@ -181,7 +185,7 @@ public sealed class CredentialWindow : Window
 
     private void Save()
     {
-        var c = _credential.Clone();
+        var c     = _credential.Clone();
         var realm = SelectedRealm;
         var uses  = CredentialRules.Uses(realm);
         c.Name     = _name.Text.Trim();
@@ -208,9 +212,10 @@ public sealed class CredentialWindow : Window
         }
     }
 
-    private AuthRealm SelectedRealm => _realm.SelectedValue is AuthRealm r ? r : AuthRealm.Conventional;
-
-    /// <summary>Enables the boxes the realm signs in with and leaves the others alone (their text is kept until Save in case the person changes their mind).</summary>
+    /// <summary>
+    ///     Enables the boxes the realm signs in with and leaves the others alone (their text is kept until Save in case
+    ///     the person changes their mind).
+    /// </summary>
     private void ApplyRealm()
     {
         var uses = CredentialRules.Uses(SelectedRealm);
@@ -220,7 +225,8 @@ public sealed class CredentialWindow : Window
         _plain.IsEnabled    = uses.Secret;
         _show.IsEnabled     = uses.Secret;
         _copy.IsEnabled     = uses.Secret;
-        _secretLabel.Content = "_" + char.ToUpperInvariant(CredentialRules.SecretLabel(SelectedRealm)[0]) + CredentialRules.SecretLabel(SelectedRealm)[1..];
+        _secretLabel.Content = "_" + char.ToUpperInvariant(CredentialRules.SecretLabel(SelectedRealm)[0]) +
+                               CredentialRules.SecretLabel(SelectedRealm)[1..];
     }
 
     private static string? Clean(string text)

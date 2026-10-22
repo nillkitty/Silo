@@ -1,4 +1,6 @@
-﻿namespace Silo.DbModel.Sqlite;
+﻿using Silo.Providers.Data;
+
+namespace Silo.DbModel.Sqlite;
 
 /// <summary>The preferences kept in the Silo (<see cref="IPreferenceStore" />) by the SQLite provider.</summary>
 public sealed partial class SqliteDatabaseProvider : IPreferenceStore
@@ -24,8 +26,8 @@ public sealed partial class SqliteDatabaseProvider : IPreferenceStore
         _gate.Wait();
         try
         {
-            long? uid = CurrentUserId();
-            using var tx = _conn.BeginTransaction();
+            long?     uid = CurrentUserId();
+            using var tx  = _conn.BeginTransaction();
             try
             {
                 changed = PrefRows.Set(_conn, tx, PrefTable, uid, key, data);

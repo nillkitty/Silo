@@ -1,15 +1,17 @@
-﻿using System.Reflection;
+﻿using Serilog;
 using Silo.Connectors.Virtual;
-using Silo.Contracts.Providers.Data.Shape;
 using Silo.Design;
 using Silo.Providers;
+using Silo.Providers.Data;
+using Silo.Providers.Data.Shape;
 using Silo.Unicode;
 using Silo.ViewModel;
 
 namespace Silo.Connectors;
 
 /// <summary>
-///     One thing the Silo keeps in its <c>Stored</c> table (a constant, a shortcut key, a saved character or string...), with
+///     One thing the Silo keeps in its <c>Stored</c> table (a constant, a shortcut key, a saved character or string...),
+///     with
 ///     what the Explorer needs to file it: the type it was written from, if that type is loaded, and the
 ///     <see cref="DataShape" /> of that type. It is also the <see cref="SiloNode.DataContext" /> of its node, so it
 ///     describes itself for the Properties pane.
@@ -18,17 +20,6 @@ public sealed class SavedItem : INodeDetails, IRealmed
 {
     /// <summary>The longest stretch of a value the Properties pane shows.</summary>
     private const int PreviewLength = 400;
-
-    public SavedItem(StoredRecord record, Type? clrType, Uri uri)
-    {
-        Record  = record;
-        ClrType = clrType;
-        Shape   = SavedItems.ShapeOf(clrType);
-        Uri     = uri;
-        TypeLabel = clrType is null
-                        ? SavedItems.UnresolvedLabel(record.TypeName)
-                        : SavedItems.FriendlyName(clrType);
-    }
 
     /// <summary>The type the value was written from; null when it is not loaded (the stored name is only information).</summary>
     public Type? ClrType { get; }
@@ -40,9 +31,6 @@ public sealed class SavedItem : INodeDetails, IRealmed
     /// <summary>The type's readable name: what the type folder is called.</summary>
     public string TypeLabel { get; }
 
-    /// <summary>Only the permanent tier is listed, which is kept in the Silo's own (global) database.</summary>
-    public Realm Realm => Realm.Global;
-
     public Uri? Icon => new(Shape == DataShape.Scalar ? "Record" : "Data1", UriKind.Relative);
 
     public string Name => Record.Key;
@@ -51,15 +39,27 @@ public sealed class SavedItem : INodeDetails, IRealmed
 
     public Uri Uri { get; }
 
+    /// <summary>Only the permanent tier is listed, which is kept in the Silo's own (global) database.</summary>
+    public Realm Realm => Realm.Global;
+
+    public SavedItem(StoredRecord record, Type? clrType, Uri uri)
+    {
+        Record    = record;
+        ClrType   = clrType;
+        Shape     = SavedItems.ShapeOf(clrType);
+        Uri       = uri;
+        TypeLabel = clrType is null ? SavedItems.UnresolvedLabel(record.TypeName) : SavedItems.FriendlyName(clrType);
+    }
+
     public IEnumerable<(string Name, string Value)> GetDetails()
     {
-        yield return ("Key",      Record.Key);
-        yield return ("Type",     ClrType?.FullName ?? Record.TypeName);
-        yield return ("Shape",    Shape.ToString());
-        yield return ("Format",   Record.Format);
-        yield return ("Kept in",  Realms.Describe(Realm));
-        yield return ("Scope",    Record.Scope == StoredScope.Personal ? "Yours" : "The Silo's");
-        yield return ("Created",  Record.Created.ToLocalTime().ToString("g"));
+        yield return ("Key", Record.Key);
+        yield return ("Type", ClrType?.FullName ?? Record.TypeName);
+        yield return ("Shape", Shape.ToString());
+        yield return ("Format", Record.Format);
+        yield return ("Kept in", Realms.Describe(Realm));
+        yield return ("Scope", Record.Scope == StoredScope.Personal ? "Yours" : "The Silo's");
+        yield return ("Created", Record.Created.ToLocalTime().ToString("g"));
         yield return ("Modified", Record.Modified.ToLocalTime().ToString("g"));
 
         string data = Record.Data ?? string.Empty;
@@ -100,7 +100,7 @@ public static class SavedItems
             }
             catch (Exception ex)
             {
-                Serilog.Log.Warning(ex, "Listing the {Scope} stored items failed", scope);
+                Log.Warning(ex, "Listing the {Scope} stored items failed", scope);
                 continue;
             }
 
@@ -129,10 +129,11 @@ public static class SavedItems
         try
         {
             return Type.GetType(typeName,
-                                assemblyResolver: name => AppDomain.CurrentDomain.GetAssemblies()
-                                                                   .FirstOrDefault(a => string.Equals(a.GetName().Name, name.Name, StringComparison.OrdinalIgnoreCase)),
-                                typeResolver: (assembly, name, ignoreCase) => (assembly ?? typeof(object).Assembly).GetType(name, false, ignoreCase),
-                                throwOnError: false);
+                                name => AppDomain.CurrentDomain.GetAssemblies()
+                                                 .FirstOrDefault(a => string.Equals(a.GetName().Name, name.Name,
+                                                                                    StringComparison.OrdinalIgnoreCase)),
+                                (assembly, name, ignoreCase) => (assembly ?? typeof(object).Assembly).GetType(name, false, ignoreCase),
+                                false);
         }
         catch (Exception)
         {
@@ -169,8 +170,8 @@ public static class SavedItems
         if (type.IsArray) return FriendlyName(type.GetElementType()!) + "[]";
         if (!type.IsGenericType) return type.Name;
 
-        string name = type.Name;
-        int    tick = name.IndexOf('`');
+        string name         = type.Name;
+        int    tick         = name.IndexOf('`');
         if (tick >= 0) name = name[..tick];
         return name + "<" + string.Join(", ", type.GetGenericArguments().Select(FriendlyName)) + ">";
     }
@@ -185,8 +186,14 @@ public static class SavedItems
         for (int i = 0; i < typeName.Length; i++)
         {
             char c = typeName[i];
-            if (c == '[') depth++;
-            else if (c == ']') depth--;
+            if (c == '[')
+            {
+                depth++;
+            }
+            else if (c == ']')
+            {
+                depth--;
+            }
             else if (c == ',' && depth == 0)
             {
                 end = i;

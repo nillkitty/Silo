@@ -8,8 +8,60 @@ namespace Silo.Tools.UnicodeExplorer;
 internal static class UiKit
 {
     /// <summary>The fonts glyphs are drawn with: text, symbols, emoji, math, and a few for scripts Segoe UI lacks.</summary>
-    public static readonly FontFamily GlyphFont =
-        new("Segoe UI, Segoe UI Symbol, Segoe UI Emoji, Cambria Math, Segoe UI Historic, Nirmala UI, Malgun Gothic, Microsoft YaHei, Yu Gothic, MS Gothic");
+    public const string GlyphFontNames =
+        "Segoe UI, Segoe UI Symbol, Segoe UI Emoji, Cambria Math, Segoe UI Historic, Nirmala UI, Malgun Gothic, Microsoft YaHei, Yu Gothic, MS Gothic, " +
+        // the rest of what Windows falls back to for scripts those lack, and the usual add-on fonts for symbols and music
+        "Meiryo, Ebrima, Gadugi, Myanmar Text, Leelawadee UI, Mongolian Baiti, Microsoft Himalaya, Microsoft Yi Baiti, Microsoft PhagsPa, Microsoft New Tai Lue, " +
+        "Microsoft Tai Le, Javanese Text, Sylfaen, SimSun-ExtB, MingLiU-ExtB, Noto Sans Symbols, Noto Sans Symbols 2, Noto Sans Math, Noto Music, Arial Unicode MS";
+
+    public static readonly FontFamily GlyphFont = new(GlyphFontNames);
+
+    /// <summary>The color of a palette entry.</summary>
+    public static Color ToColor(Silo.Unicode.CharacterColor color) => (Color)ColorConverter.ConvertFromString(color.Hex);
+
+    /// <summary>The color a cell is tinted with behind its content (see <see cref="Paint" />); null for none.</summary>
+    public static readonly DependencyProperty TintProperty = DependencyProperty.RegisterAttached("Tint", typeof(Brush), typeof(UiKit));
+
+    /// <summary>A translucent brush of the color, for the area behind a character (readable with the text on top, on a dark and a light theme).</summary>
+    public static Brush TintBrush(Color color)
+    {
+        var brush = new SolidColorBrush(Color.FromArgb(0x70, color.R, color.G, color.B));
+        brush.Freeze();
+        return brush;
+    }
+
+    /// <summary>
+    ///     Marks a cell with a color in the way the mode says: the glyph in the color, the area behind it tinted, or a bar along the bottom edge. The
+    ///     cell keeps working as it did. Cells made by <see cref="Cell" /> only.
+    /// </summary>
+    public static void MarkCell(Border cell, Color? color, Silo.Unicode.ColorMode mode = Silo.Unicode.ColorMode.Accent)
+    {
+        if (color is not { } c || cell.Child is null) return;
+
+        switch (mode)
+        {
+            case Silo.Unicode.ColorMode.Glyph:
+                if (GlyphOf(cell) is { } glyph) glyph.Foreground = new SolidColorBrush(c);
+                return;
+            case Silo.Unicode.ColorMode.Background:
+                cell.SetValue(TintProperty, TintBrush(c));
+                Paint(cell, false);
+                return;
+        }
+
+        var old = cell.Child;
+        cell.Child = null;
+        var grid = new Grid();
+        grid.Children.Add(old);
+        grid.Children.Add(new System.Windows.Shapes.Rectangle
+                          {
+                              Height = 4, RadiusX = 1.5, RadiusY = 1.5, VerticalAlignment = VerticalAlignment.Bottom, Margin = new Thickness(5, 0, 5, 2),
+                              Fill = new SolidColorBrush(c), IsHitTestVisible = false
+                          });
+        cell.Child = grid;
+    }
+
+    private static TextBlock? GlyphOf(Border cell) => (cell.Child as StackPanel)?.Children.OfType<TextBlock>().FirstOrDefault();
 
     public static readonly FontFamily Mono = new("Cascadia Mono, Consolas, Courier New");
 
@@ -86,10 +138,11 @@ internal static class UiKit
         return border;
     }
 
-    /// <summary>Shows a cell as selected or not (and hovered).</summary>
+    /// <summary>Shows a cell as selected or not (and hovered); a cell with a <see cref="TintProperty" /> shows it when it is neither.</summary>
     public static void Paint(Border cell, bool selected, bool hot = false)
     {
-        cell.SetResourceReference(Border.BackgroundProperty, selected ? "Theme.Selection" : hot ? "Theme.SurfaceHover" : "Theme.Surface");
+        if (!selected && !hot && cell.GetValue(TintProperty) is Brush tint) cell.Background = tint;
+        else cell.SetResourceReference(Border.BackgroundProperty, selected ? "Theme.Selection" : hot ? "Theme.SurfaceHover" : "Theme.Surface");
         cell.SetResourceReference(Border.BorderBrushProperty, selected ? "Theme.Accent" : "Theme.Border");
     }
 

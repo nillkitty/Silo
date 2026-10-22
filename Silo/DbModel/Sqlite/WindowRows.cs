@@ -1,15 +1,22 @@
 ﻿using System.Globalization;
 using Microsoft.Data.Sqlite;
 using Silo.DbModel.Global;
+using Silo.Providers.Data;
 
 namespace Silo.DbModel.Sqlite;
 
-/// <summary>The SQL behind <see cref="IWindowStore" />: rows of the <c>Window</c> table. Kept apart from the provider so it can be tested on its own.</summary>
+/// <summary>
+///     The SQL behind <see cref="IWindowStore" />: rows of the <c>Window</c> table. Kept apart from the provider so
+///     it can be tested on its own.
+/// </summary>
 public static class WindowRows
 {
     private const string Columns = "X, Y, Width, Height, State, Layout";
 
-    /// <summary>The id of the Silo user with this SID (else this name), or null when the person is not one of the Silo's Users.</summary>
+    /// <summary>
+    ///     The id of the Silo user with this SID (else this name), or null when the person is not one of the Silo's
+    ///     Users.
+    /// </summary>
     public static long? FindUserId(SqliteConnection conn, string userTable, string name, string sid)
     {
         using var cmd = conn.CreateCommand();
@@ -23,8 +30,9 @@ public static class WindowRows
     public static WindowRecord? Get(SqliteConnection conn, string table, long? userId, string type, string uri)
     {
         using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"SELECT {Columns} FROM {table} WHERE [Type] = @type AND [Uri] = @uri AND ([UserId] IS NULL OR [UserId] = @uid) " +
-                          "ORDER BY ([UserId] IS NULL) LIMIT 1";
+        cmd.CommandText =
+            $"SELECT {Columns} FROM {table} WHERE [Type] = @type AND [Uri] = @uri AND ([UserId] IS NULL OR [UserId] = @uid) " +
+            "ORDER BY ([UserId] IS NULL) LIMIT 1";
         cmd.Parameters.AddWithValue("@type", type);
         cmd.Parameters.AddWithValue("@uri",  uri);
         cmd.Parameters.AddWithValue("@uid",  userId is { } id ? id : DBNull.Value);
@@ -49,8 +57,9 @@ public static class WindowRows
             using (var update = conn.CreateCommand())
             {
                 update.Transaction = tx;
-                update.CommandText = $"UPDATE {table} SET X = @x, Y = @y, Width = @w, Height = @h, State = @state, Layout = @layout, Modified = @now " +
-                                     "WHERE [Type] = @type AND [Uri] = @uri AND [UserId] IS @uid";
+                update.CommandText =
+                    $"UPDATE {table} SET X = @x, Y = @y, Width = @w, Height = @h, State = @state, Layout = @layout, Modified = @now " +
+                    "WHERE [Type] = @type AND [Uri] = @uri AND [UserId] IS @uid";
                 Bind(update, w, uid, now);
                 changed = update.ExecuteNonQuery();
             }

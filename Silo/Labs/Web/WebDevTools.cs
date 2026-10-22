@@ -6,20 +6,19 @@ using Serilog;
 namespace Silo.Labs;
 
 /// <summary>
-///     The Chrome DevTools protocol of a WebView2, as the Web Lab's inspectors use it: call a method, enable a domain once, and hear an
+///     The Chrome DevTools protocol of a WebView2, as the Web Lab's inspectors use it: call a method, enable a domain
+///     once, and hear an
 ///     event. The inspectors never touch the <see cref="CoreWebView2" /> themselves.
 /// </summary>
 internal sealed class DevTools
 {
-    private readonly CoreWebView2      _core;
-    private readonly HashSet<string>   _enabled = new(StringComparer.Ordinal);
+    private readonly CoreWebView2    _core;
+    private readonly HashSet<string> _enabled = new(StringComparer.Ordinal);
 
-    public DevTools(CoreWebView2 core)
-    {
-        _core = core;
-    }
-
-    /// <summary>Calls a protocol method (<c>DOM.getDocument</c>) with arguments (an object that writes as JSON); returns its result.</summary>
+    /// <summary>
+    ///     Calls a protocol method (<c>DOM.getDocument</c>) with arguments (an object that writes as JSON); returns its
+    ///     result.
+    /// </summary>
     public async Task<JObject> CallAsync(string method, object? args = null)
     {
         string json   = args is null ? "{}" : JsonConvert.SerializeObject(args);
@@ -27,7 +26,10 @@ internal sealed class DevTools
         return string.IsNullOrWhiteSpace(result) ? new JObject() : JObject.Parse(result);
     }
 
-    /// <summary>As <see cref="CallAsync" />, but a failure (the page went away, the method needs something else) is logged and gives null.</summary>
+    /// <summary>
+    ///     As <see cref="CallAsync" />, but a failure (the page went away, the method needs something else) is logged and
+    ///     gives null.
+    /// </summary>
     public async Task<JObject?> TryCallAsync(string method, object? args = null)
     {
         try
@@ -57,7 +59,10 @@ internal sealed class DevTools
         }
     }
 
-    /// <summary>Hears a protocol event (<c>Network.requestWillBeSent</c>) with its parameters. Subscribe before enabling the domain.</summary>
+    /// <summary>
+    ///     Hears a protocol event (<c>Network.requestWillBeSent</c>) with its parameters. Subscribe before enabling the
+    ///     domain.
+    /// </summary>
     public void On(string eventName, Action<JObject> handler)
     {
         var receiver = _core.GetDevToolsProtocolEventReceiver(eventName);
@@ -72,5 +77,10 @@ internal sealed class DevTools
                                                           Log.Debug(ex, "Handling DevTools event {Event} failed", eventName);
                                                       }
                                                   };
+    }
+
+    public DevTools(CoreWebView2 core)
+    {
+        _core = core;
     }
 }

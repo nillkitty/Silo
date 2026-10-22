@@ -5,7 +5,7 @@ using System.Windows.Data;
 using System.Windows.Threading;
 using Newtonsoft.Json.Linq;
 
-namespace Silo.Labs;
+namespace Silo.Labs.Web;
 
 /// <summary>One node of the page's DOM as the tree shows it.</summary>
 internal sealed class DomNode : INotifyPropertyChanged

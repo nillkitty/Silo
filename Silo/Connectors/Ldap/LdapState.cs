@@ -3,7 +3,7 @@ using Silo.ViewModel;
 
 namespace Silo.Connectors.Ldap;
 
-public abstract record LdapState(string DisplayName) : IDisplayName
+public abstract record LdapState(bool IsConnected, bool IsFailed, string DisplayName) : IDisplayName, IConnectionState
 {
     /// <summary>
     ///     How long it has been since the state was entered
@@ -18,14 +18,17 @@ public abstract record LdapState(string DisplayName) : IDisplayName
     /// </summary>
     public DateTime Time { get; } = DateTime.Now;
 
+    public bool IsDisposed => false;
+
     [Icon("StateDisconnected")]
-    public record Disconnected() : LdapState(nameof(Disconnected));
+    public record Disconnected() : LdapState(false, false, nameof(Disconnected));
 
     [Icon("StateConnecting")]
-    public record Connecting(Uri Target) : LdapState($"Connecting to {Target.Host}:{Target.Port}");
+    public record Connecting(Uri Target) : LdapState(false, false, $"Connecting to {Target.Host}:{Target.Port}");
 
     [Icon("StateBusy")]
-    public record Busy(Connected Inner, string Operation, CancellationToken Cancel) : LdapState($"Busy - {Operation}"), IDisplayName
+    public record Busy(Connected Inner, string Operation, CancellationToken Cancel)
+        : LdapState(true, false, $"Busy - {Operation}"), IDisplayName
     {
         string IDisplayName.DisplayName => ToString();
 
@@ -36,14 +39,14 @@ public abstract record LdapState(string DisplayName) : IDisplayName
     }
 
     [Icon("StateConnected")]
-    public record Connected() : LdapState(nameof(Connected));
+    public record Connected() : LdapState(true, false, nameof(Connected));
 
     [Icon("StateFailed")]
-    public record Failed(Exception Exception) : LdapState($"Failed: {Exception.Message}");
+    public record Failed(Exception Exception) : LdapState(false, true, $"Failed: {Exception.Message}");
 
     // winding down the operation it was busy with: the busy icon
     [Icon("StateBusy")]
-    public record Aborting(Busy Inner) : LdapState("Aborting Operation")
+    public record Aborting(Busy Inner) : LdapState(true, false, "Aborting Operation")
     {
         public override string ToString()
         {

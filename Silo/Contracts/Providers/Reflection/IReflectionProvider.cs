@@ -1,7 +1,7 @@
 ﻿using System.Reflection;
 using Assembly = Silo.DbModel.Global.Assembly;
 
-namespace Silo.Contracts.Providers.Reflection;
+namespace Silo.Providers.Reflection;
 
 public interface IAssemblyReference
 {
@@ -97,6 +97,11 @@ public interface IReflectionProvider
     ///     Event which is raised when new types are loaded
     /// </summary>
     event EventHandler? TypesLoaded;
+
+    /// <summary>
+    ///     Filters an Assembly, Type, or Property.  Returns true if the item should be ignored.
+    /// </summary>
+    bool Filter(object item);
 }
 
 [Flags]

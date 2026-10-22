@@ -1,5 +1,6 @@
 ﻿using Silo.Contracts.ConnectorServices;
 using Silo.Model;
+using Silo.Providers;
 using Silo.ViewModel;
 using Telefrag.DI;
 
@@ -11,16 +12,11 @@ namespace Silo.Connectors.System;
 ///     another one (<c>wmi://server42/...</c>).
 /// </summary>
 [Singleton(typeof(IConnector))]
-public class WmiConnector : ConnectorBase, IUriConnector
+public class WmiConnector : ConnectorBase<WmiModel, WmiState>, IUriConnector
 {
     protected override IConnection OnCreateConnection(ConnectionRequest crq)
     {
         return WmiConnection.Create(this, crq);
-    }
-
-    public override Type GetStateType()
-    {
-        return typeof(WmiState);
     }
 
     public UriSchemeScope HandlesScheme(string scheme)
@@ -182,11 +178,13 @@ public class WmiModel : ModelBase
     }
 }
 
-public abstract record WmiState(string DisplayName) : IDisplayName
+public abstract record WmiState(bool IsConnected, bool IsFailed, string DisplayName) : IDisplayName, IConnectionState
 {
-    public record Ok() : WmiState("OK");
+    bool IConnectionState.IsDisposed => false;
 
-    public record Fail(Exception Exception) : WmiState($"Failed: {Exception.Message}");
+    public record Ok() : WmiState(true, false, "OK");
 
-    public record Pending(string? Message = null) : WmiState(Message ?? "Pending");
+    public record Fail(Exception Exception) : WmiState(false, true, $"Failed: {Exception.Message}");
+
+    public record Pending(string? Message = null) : WmiState(true, false, Message ?? "Pending");
 }

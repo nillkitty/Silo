@@ -1,6 +1,6 @@
 using Silo.DbModel.Meta;
 
-namespace Silo.Contracts.Providers.Data;
+namespace Silo.Providers.Data;
 
 /// <summary>A syntax defined in a Silo.</summary>
 /// <param name="Id">The row's id; 0 for a syntax not saved yet.</param>
@@ -12,19 +12,33 @@ namespace Silo.Contracts.Providers.Data;
 /// <param name="Pattern">The regular expression (<see cref="SyntaxKind.Pattern" />).</param>
 /// <param name="Example">A sample of a valid value.</param>
 /// <param name="Flags">Flags, such as <see cref="SyntaxFlags.Seeded" />.</param>
-public sealed record SyntaxRecord(int Id, string Name, string? Alias, string? Description, SyntaxKind Kind, string? Parser, string? Pattern,
-                                  string? Example, SyntaxFlags Flags = SyntaxFlags.None)
+public sealed record SyntaxRecord(
+    int         Id,
+    string      Name,
+    string?     Alias,
+    string?     Description,
+    SyntaxKind  Kind,
+    string?     Parser,
+    string?     Pattern,
+    string?     Example,
+    SyntaxFlags Flags = SyntaxFlags.None)
 {
-    /// <summary>A new syntax backed by a built-in parser.</summary>
-    public static SyntaxRecord ForParser(string name, string parser, string? alias = null, string? description = null, string? example = null,
-                                         SyntaxFlags flags = SyntaxFlags.None) => new(0, name, alias, description, SyntaxKind.Parser, parser, null, example, flags);
-
-    /// <summary>A new syntax backed by a regular expression.</summary>
-    public static SyntaxRecord ForPattern(string name, string pattern, string? alias = null, string? description = null, string? example = null,
-                                          SyntaxFlags flags = SyntaxFlags.None) => new(0, name, alias, description, SyntaxKind.Pattern, null, pattern, example, flags);
-
     /// <summary>Whether the syntax came with Silo.</summary>
     public bool IsSeeded => (Flags & SyntaxFlags.Seeded) != 0;
+
+    /// <summary>A new syntax backed by a built-in parser.</summary>
+    public static SyntaxRecord ForParser(string  name,           string      parser, string? alias = null, string? description = null,
+                                         string? example = null, SyntaxFlags flags = SyntaxFlags.None)
+    {
+        return new SyntaxRecord(0, name, alias, description, SyntaxKind.Parser, parser, null, example, flags);
+    }
+
+    /// <summary>A new syntax backed by a regular expression.</summary>
+    public static SyntaxRecord ForPattern(string  name,           string      pattern, string? alias = null, string? description = null,
+                                          string? example = null, SyntaxFlags flags = SyntaxFlags.None)
+    {
+        return new SyntaxRecord(0, name, alias, description, SyntaxKind.Pattern, null, pattern, example, flags);
+    }
 }
 
 /// <summary>

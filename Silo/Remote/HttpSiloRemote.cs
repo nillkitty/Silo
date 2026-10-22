@@ -3,8 +3,8 @@ using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using Serilog;
-using Silo.Contracts.Providers.Data;
 using Silo.DbModel.Sqlite;
+using Silo.Providers.Data;
 using Telefrag.DI;
 
 namespace Silo.Remote;
@@ -27,13 +27,7 @@ public sealed class HttpSiloRemote : ISiloRemote
 
     private readonly RemoteSiloCache _cache;
 
-    public HttpSiloRemote(RemoteSiloCache cache)
-    {
-        _cache = cache;
-    }
-
-    public Uri    Uri  => _cache.Uri;
-    public string Kind => "HTTP";
+    public Uri Uri => _cache.Uri;
 
     public bool HasUnpushedChanges
     {
@@ -45,6 +39,8 @@ public sealed class HttpSiloRemote : ISiloRemote
             _cache.Save();
         }
     }
+
+    public string Kind => "HTTP";
 
     private static HttpClient CreateClient()
     {
@@ -88,18 +84,20 @@ public sealed class HttpSiloRemote : ISiloRemote
 
         var tmp = _cache.File + ".download";
         await using (var body = await response.Content.ReadAsStreamAsync(ct))
-        await using (var file = new FileStream(tmp, FileMode.Create, FileAccess.Write, FileShare.None))
         {
-            await body.CopyToAsync(file, ct);
+            await using (var file = new FileStream(tmp, FileMode.Create, FileAccess.Write, FileShare.None))
+            {
+                await body.CopyToAsync(file, ct);
+            }
         }
 
         if (!SiloProbe.Probe(tmp).Exists || new FileInfo(tmp).Length == 0)
         {
-            System.IO.File.Delete(tmp);
+            File.Delete(tmp);
             throw new InvalidDataException($"{Uri} did not return a Silo file.");
         }
 
-        System.IO.File.Move(tmp, _cache.File, true);
+        File.Move(tmp, _cache.File, true);
         _cache.State.ETag         = response.Headers.ETag?.ToString();
         _cache.State.LastModified = response.Content.Headers.LastModified?.UtcDateTime;
         _cache.State.SyncedUtc    = DateTime.UtcNow;
@@ -119,9 +117,15 @@ public sealed class HttpSiloRemote : ISiloRemote
         response.EnsureSuccessStatusCode();
 
         if (_cache.State.ETag is { } known && response.Headers.ETag is { } current) return known != current.ToString();
-        if (_cache.State.LastModified is { } lm && response.Content.Headers.LastModified is { } rlm) return rlm.UtcDateTime > lm.AddSeconds(1);
+        if (_cache.State.LastModified is { } lm && response.Content.Headers.LastModified is { } rlm)
+            return rlm.UtcDateTime > lm.AddSeconds(1);
 
         return false; // the server gives us nothing to compare; assume unchanged
+    }
+
+    public HttpSiloRemote(RemoteSiloCache cache)
+    {
+        _cache = cache;
     }
 
     public async Task PushAsync(string localFile, bool force, CancellationToken ct = default)
@@ -129,7 +133,7 @@ public sealed class HttpSiloRemote : ISiloRemote
         if (!force && await HasRemoteChangedAsync(ct))
             throw new RemoteConflictException($"{Uri} was changed by someone else since this Silo last synced with it.");
 
-        await using var file = new FileStream(localFile, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+        await using var file    = new FileStream(localFile, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
         using var       content = new StreamContent(file);
         content.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
 
@@ -148,7 +152,6 @@ public sealed class HttpSiloRemote : ISiloRemote
         _cache.State.ETag         = response.Headers.ETag?.ToString();
         _cache.State.LastModified = response.Content.Headers.LastModified?.UtcDateTime;
         if (_cache.State.ETag is null && _cache.State.LastModified is null)
-        {
             try
             {
                 using var head     = new HttpRequestMessage(HttpMethod.Head, Uri);
@@ -163,7 +166,6 @@ public sealed class HttpSiloRemote : ISiloRemote
             {
                 /* the upload itself succeeded; validators are a nicety */
             }
-        }
 
         _cache.State.SyncedUtc = DateTime.UtcNow;
         _cache.State.Unpushed  = false;

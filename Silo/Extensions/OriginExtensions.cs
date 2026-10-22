@@ -1,11 +1,9 @@
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
-
-using Silo.Contracts.Providers.Data;
-using Silo.Providers.Document;
-
 using System.Xml;
 using System.Xml.Linq;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+using Silo.Providers.Data;
+using Silo.Providers.Document;
 
 namespace Silo.Providers.Format;
 

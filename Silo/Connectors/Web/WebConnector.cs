@@ -1,5 +1,6 @@
 ﻿using System.Net.Http;
 using Silo.Model;
+using Silo.Providers;
 using Silo.Ui.Windows.Connecting;
 using Telefrag.DI;
 
@@ -12,7 +13,7 @@ namespace Silo.Connectors.Web;
 /// </summary>
 [Singleton(typeof(IUriProvider))]
 [Singleton(typeof(IConnector))]
-public class WebConnector : IConnector, IUriProvider, IUriConnector, IConnectorUi
+public class WebConnector : ConnectorBase<object, ConnectionlessState>, IUriProvider, IUriConnector, IConnectorUi
 {
     public ConnectorSetupFlags Flags     { get; } = ConnectorSetupFlags.AlwaysRequiresConfig | ConnectorSetupFlags.IgnoreIcmpVisibility;
     public Exception?          LastError { get; protected set; }
@@ -26,7 +27,7 @@ public class WebConnector : IConnector, IUriProvider, IUriConnector, IConnectorU
     public bool                     IsPublic               => true;
     public ExistingProviderHandling OtherProvidersHandling => ExistingProviderHandling.Default;
 
-    public IConnection CreateConnection(ConnectionRequest crq)
+    protected override IConnection OnCreateConnection(ConnectionRequest crq)
     {
         var target = crq.RequestedUri ?? throw new DestinationRequiredException("WebConnector requires a destination URI");
         if (HandlesScheme(target.Scheme) == default)
@@ -35,12 +36,7 @@ public class WebConnector : IConnector, IUriProvider, IUriConnector, IConnectorU
         return new WebConnection(this, target, crq);
     }
 
-    public Type GetStateType()
-    {
-        return typeof(IConnectionState);
-    }
-
-    public IConnectorSetup CreateSetup(ConnectorSetupContext context)
+    protected override IConnectorSetup OnCreateSetup(ConnectorSetupContext context)
     {
         return new UriFieldSetup(this, text => UriRules.Check(text, [this], UriRules.AnyScope), "Web address",
                                  "Examples:  https://example.com/    https://api.example.com/v1/items");

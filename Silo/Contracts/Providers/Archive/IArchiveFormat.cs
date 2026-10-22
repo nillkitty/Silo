@@ -1,6 +1,6 @@
 using System.IO;
 
-namespace Silo.Contracts.Providers.Archive;
+namespace Silo.Providers.Archive;
 
 public interface IArchiveFormat
 {

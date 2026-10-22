@@ -19,6 +19,7 @@ using Silo.Explorer;
 using Silo.Hosting;
 using Silo.Model;
 using Silo.Nav;
+using Silo.Providers.Data;
 using Silo.Remote;
 using Silo.Settings;
 using Silo.Tabular;
@@ -52,8 +53,6 @@ public partial class MainWindow : Window, IWindowLayout
     ///     tab takes it out of the same place.
     /// </summary>
     private readonly Dictionary<INodeProvider, NodeHost> _documentNodes = new(ReferenceEqualityComparer.Instance);
-
-    private readonly ExplorerView _explorer = null!;
 
     private readonly AppNavNode     _performanceNode = AppNavTree.BuildPerformance();
     private readonly PropertiesView _properties      = null!;
@@ -90,6 +89,9 @@ public partial class MainWindow : Window, IWindowLayout
 
     /// <summary>The document tabs in the middle of the window (tables, navigation views...).</summary>
     public DocumentTabs Documents { get; } = null!;
+
+    /// <summary>The Explorer tree on the left (what the Node menu is about).</summary>
+    public ExplorerView ExplorerControl { get; } = null!;
 
     // --- dock panes (View menu) ----------------------------------------------------------------
 
@@ -193,8 +195,10 @@ public partial class MainWindow : Window, IWindowLayout
         if (_watched is { } silo)
         {
             bool restore = OpenSilo.OpenSilos.Count <= 1;
+            // the window's own frame is kept apart from any Silo (MainWindowState); the Silo's only stands in until there is one
+            bool frameKept = MainWindowState.HasSaved;
             Dispatcher.BeginInvoke(new Action(() => WindowPlacements.Track(this, silo, WindowPlacements.Main, "silo:main", this, restore,
-                                                                           false)), DispatcherPriority.Loaded);
+                                                                           false, !frameKept)), DispatcherPriority.Loaded);
         }
     }
 
@@ -244,7 +248,12 @@ public partial class MainWindow : Window, IWindowLayout
     protected override async void OnClosing(CancelEventArgs e)
     {
         base.OnClosing(e);
-        if (_closeApproved || e.Cancel || OpenSilo.OpenSilos.Count == 0) return;
+        if (_closeApproved || e.Cancel || OpenSilo.OpenSilos.Count == 0)
+        {
+            // it is going: remember where it was (also when it was maximized or minimized)
+            if (!e.Cancel) MainWindowState.Save(this);
+            return;
+        }
 
         e.Cancel = true; // decided asynchronously below
         if (await App.CloseAllSilosAsync())
@@ -609,7 +618,7 @@ public partial class MainWindow : Window, IWindowLayout
             return;
         }
 
-        if (_explorer.SelectedNode is { } node) ShowNodeView(node, false);
+        if (ExplorerControl.SelectedNode is { } node) ShowNodeView(node, false);
         else App.Status("Select something in the Explorer to see it here");
     }
 
@@ -715,26 +724,34 @@ public partial class MainWindow : Window, IWindowLayout
     {
         InitializeComponent();
 
+        // where it was left: placed before it is shown, so it does not jump; kept again whenever it is maximized or restored
+        MainWindowState.Apply(this);
+        StateChanged += (_, _) =>
+                        {
+                            if (IsLoaded && WindowState != WindowState.Minimized) MainWindowState.Save(this);
+                        };
+
         // Explorer on the left, Properties on the right, documents between them (see the DockHost layout in the XAML)
         Documents                 =  new DocumentTabs(DockHost);
         Documents.ContentOpened   += OnDocumentContentOpened;
         Documents.ContentReleased += OnDocumentContentReleased;
-        _explorer                 =  new ExplorerView { PinnedDocuments = () => Documents.PinnedKeys };
+        ExplorerControl           =  new ExplorerView { PinnedDocuments = () => Documents.PinnedKeys };
 
         // the documents kept open are part of how the Silo's tree is remembered (see ExplorerView)
-        Documents.ContentOpened   += (_, _) => _explorer.DocumentsChanged();
-        Documents.ContentReleased += (_, _) => _explorer.DocumentsChanged();
-        Documents.PinnedChanged   += (_, _) => _explorer.DocumentsChanged();
-        _properties               =  new PropertiesView();
-        ExplorerPane.Content      =  _explorer;
-        PropertiesPane.Content    =  _properties;
-        _explorer.NodeSelected    += OnExplorerSelected;
-        _explorer.NodeOpened      += OnExplorerOpened;
-        _explorer.SelectedNodeRefreshed += (_, node) =>
-                                           {
-                                               _properties.Show(node);
-                                               NodeCommandHub.SetCurrent(node); // the tree was rebuilt: the selected node is a new object
-                                           };
+        Documents.ContentOpened      += (_, _) => ExplorerControl.DocumentsChanged();
+        Documents.ContentReleased    += (_, _) => ExplorerControl.DocumentsChanged();
+        Documents.PinnedChanged      += (_, _) => ExplorerControl.DocumentsChanged();
+        _properties                  =  new PropertiesView();
+        ExplorerPane.Content         =  ExplorerControl;
+        PropertiesPane.Content       =  _properties;
+        ExplorerControl.NodeSelected += OnExplorerSelected;
+        ExplorerControl.NodeOpened   += OnExplorerOpened;
+        ExplorerControl.SelectedNodeRefreshed += (_, node) =>
+                                                 {
+                                                     _properties.Show(node);
+                                                     NodeCommandHub
+                                                        .SetCurrent(node); // the tree was rebuilt: the selected node is a new object
+                                                 };
         App.SiloClosing += OnSiloClosing;
 
         NavTree.ItemsSource       = _topRoots;
@@ -849,6 +866,7 @@ public partial class MainWindow : Window, IWindowLayout
                          { ["explorer"] = ExplorerPane, ["properties"] = PropertiesPane, ["toolbox"] = ToolboxPane };
         var contents = fixedPanes.ToDictionary(p => p.Key, p => p.Value.Content);
         var tools    = ToolBase.PaneTools().ToDictionary(t => "tool:" + t.Name);
+        var extras   = tools.Values.SelectMany(t => t.ExtraPaneKeys.Select(k => (Tool: t, Key: k))).ToDictionary(x => x.Tool.ExtraPaneId(x.Key));
 
         // the tabs are made again by nobody: take them out of the old layout and put them in the new one
         var tabs = DockHost.Layout.Descendents().OfType<LayoutDocument>().Select(d => (Doc: d, d.Content, Selected: d.IsSelected)).ToList();
@@ -856,6 +874,7 @@ public partial class MainWindow : Window, IWindowLayout
 
         var placed      = new Dictionary<string, LayoutAnchorable>();
         var placedTools = new List<(ToolBase Tool, LayoutAnchorable Pane)>();
+        var placedExtra = new Dictionary<string, LayoutAnchorable>();
         try
         {
             var serializer = new XmlLayoutSerializer(DockHost);
@@ -876,6 +895,15 @@ public partial class MainWindow : Window, IWindowLayout
                                                                   placedTools.Add((tool, anchorable));
                                                                   return;
                                                               }
+
+                                                              // a part of a tool undocked into a pane of its own
+                                                              if (extras.TryGetValue(id, out var extra) && !placedExtra.ContainsKey(id) &&
+                                                                  extra.Tool.TakeExtraPaneContent(extra.Key) is { } part)
+                                                              {
+                                                                  e.Content       = part;
+                                                                  placedExtra[id] = anchorable;
+                                                                  return;
+                                                              }
                                                           }
 
                                                           e.Cancel = true; // a document, or something this version does not have
@@ -887,6 +915,7 @@ public partial class MainWindow : Window, IWindowLayout
         catch
         {
             foreach (var tab in tabs) tab.Doc.Content = tab.Content;
+            foreach (var (_, extra) in extras) extra.Tool.AdoptExtraPane(extra.Key, null); // parts that were taken out go back home
             throw;
         }
 
@@ -904,6 +933,7 @@ public partial class MainWindow : Window, IWindowLayout
 
         foreach (var (tool, pane) in placedTools) tool.AdoptPane(pane);
         foreach (var tool in tools.Values.Where(t => placedTools.All(p => p.Tool != t))) tool.ResetPane();
+        foreach (var (id, extra) in extras) extra.Tool.AdoptExtraPane(extra.Key, placedExtra.GetValueOrDefault(id));
 
         Documents.Adopt(tabs);
     }

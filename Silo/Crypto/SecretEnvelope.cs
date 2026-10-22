@@ -1,16 +1,19 @@
 ﻿using System.Security.Cryptography;
-using System.Text;
-using Silo.Contracts.Providers.Crypto;
+using Silo.Providers.Crypto;
 
 namespace Silo.Crypto;
 
 /// <summary>
-///     The bytes of a sealed secret: AES-256-GCM with a fresh random nonce for every seal. Pure, so it can be tested on its own.
+///     The bytes of a sealed secret: AES-256-GCM with a fresh random nonce for every seal. Pure, so it can be tested on
+///     its own.
 /// </summary>
 /// <remarks>
-///     Layout: <c>'S' 'E'</c>, version (1 byte), the id of the data key (4 bytes, little endian), nonce (12), tag (16), cipher text. The
-///     context (what kind of secret it is) is not stored: it is authenticated, so a secret cannot be moved into a place that expects
-///     another kind. The key id says which data key to open it with, so keys can be replaced without losing what was sealed with the old one.
+///     Layout: <c>'S' 'E'</c>, version (1 byte), the id of the data key (4 bytes, little endian), nonce (12), tag (16),
+///     cipher text. The
+///     context (what kind of secret it is) is not stored: it is authenticated, so a secret cannot be moved into a place
+///     that expects
+///     another kind. The key id says which data key to open it with, so keys can be replaced without losing what was
+///     sealed with the old one.
 /// </remarks>
 public static class SecretEnvelope
 {
@@ -22,9 +25,15 @@ public static class SecretEnvelope
     private const int  Header  = 2 + 1 + 4;
 
     /// <summary>A new random data key.</summary>
-    public static byte[] NewKey() => RandomNumberGenerator.GetBytes(KeySize);
+    public static byte[] NewKey()
+    {
+        return RandomNumberGenerator.GetBytes(KeySize);
+    }
 
-    /// <summary>Seals <paramref name="plaintext" /> with the key, saying in the result which key it was (<paramref name="keyId" />).</summary>
+    /// <summary>
+    ///     Seals <paramref name="plaintext" /> with the key, saying in the result which key it was (
+    ///     <paramref name="keyId" />).
+    /// </summary>
     public static byte[] Seal(byte[] key, int keyId, byte[] plaintext, string context)
     {
         CheckKey(key);
@@ -36,7 +45,7 @@ public static class SecretEnvelope
         result[2] = Version;
         BitConverter.TryWriteBytes(result.AsSpan(3, 4), keyId);
 
-        var nonce = result.AsSpan(Header, NonceSize);
+        var nonce = result.AsSpan(Header,             NonceSize);
         var tag   = result.AsSpan(Header + NonceSize, TagSize);
         var data  = result.AsSpan(Header + NonceSize + TagSize);
         RandomNumberGenerator.Fill(nonce);
@@ -60,13 +69,16 @@ public static class SecretEnvelope
     }
 
     /// <summary>Opens a sealed secret.</summary>
-    /// <exception cref="SecretException">The bytes are not a sealed secret, were changed, or were sealed with another key or for another context.</exception>
+    /// <exception cref="SecretException">
+    ///     The bytes are not a sealed secret, were changed, or were sealed with another key or
+    ///     for another context.
+    /// </exception>
     public static byte[] Open(byte[] key, byte[] sealedData, string context)
     {
         CheckKey(key);
         KeyIdOf(sealedData); // checks the shape
 
-        var nonce  = sealedData.AsSpan(Header, NonceSize);
+        var nonce  = sealedData.AsSpan(Header,             NonceSize);
         var tag    = sealedData.AsSpan(Header + NonceSize, TagSize);
         var data   = sealedData.AsSpan(Header + NonceSize + TagSize);
         var result = new byte[data.Length];

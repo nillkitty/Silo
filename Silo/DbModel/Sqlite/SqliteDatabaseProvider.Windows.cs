@@ -1,16 +1,23 @@
 ﻿using System.Security.Principal;
 using Serilog;
+using Silo.Providers.Data;
 
 namespace Silo.DbModel.Sqlite;
 
 /// <summary>The remembered window positions and layout (<see cref="IWindowStore" />) of the SQLite provider.</summary>
-/// <remarks>None of these raise <c>Changed</c>: arranging windows does not make the Silo "modified" (no star, no save prompt).</remarks>
+/// <remarks>
+///     None of these raise <c>Changed</c>: arranging windows does not make the Silo "modified" (no star, no save
+///     prompt).
+/// </remarks>
 public sealed partial class SqliteDatabaseProvider : IWindowStore
 {
     private const string WindowTable = "[main].[Window]";
     private const string UserTable   = "[main].[User]";
 
-    /// <summary>The Silo user this person is, once there is one (see <see cref="IWindowStore" />); the id is looked up each time, users can be added meanwhile.</summary>
+    /// <summary>
+    ///     The Silo user this person is, once there is one (see <see cref="IWindowStore" />); the id is looked up each
+    ///     time, users can be added meanwhile.
+    /// </summary>
     private long? CurrentUserId()
     {
         string name;
@@ -50,8 +57,8 @@ public sealed partial class SqliteDatabaseProvider : IWindowStore
         _gate.Wait();
         try
         {
-            long? uid = CurrentUserId();
-            using var tx = _conn.BeginTransaction();
+            long?     uid = CurrentUserId();
+            using var tx  = _conn.BeginTransaction();
             try
             {
                 WindowRows.Save(_conn, tx, WindowTable, uid, windows);

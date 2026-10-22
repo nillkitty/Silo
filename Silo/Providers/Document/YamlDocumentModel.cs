@@ -1,7 +1,6 @@
-using Silo.Contracts.Providers.Data;
+using Silo.Providers.Data;
 using YamlDotNet.Core;
 using YamlDotNet.Core.Events;
-
 
 namespace Silo.Providers.Document;
 

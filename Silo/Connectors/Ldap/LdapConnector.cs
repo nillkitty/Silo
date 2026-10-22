@@ -1,5 +1,6 @@
 ﻿using System.DirectoryServices;
 using Silo.Contracts.ConnectorServices;
+using Silo.Providers;
 using Telefrag.DI;
 
 namespace Silo.Connectors.Ldap;
@@ -10,7 +11,7 @@ namespace Silo.Connectors.Ldap;
 ///     <c>ldaps://</c> is over TLS; no host means the current domain.
 /// </summary>
 [Singleton(typeof(IConnector))]
-public class LdapConnector : ConnectorBase, IAuthenticatable, IUriConnector
+public class LdapConnector : ConnectorBase<LdapModel, LdapState>, IAuthenticatable, IUriConnector
 {
     public TimeSpan ConnectionStateThreshold { get; set; } = TimeSpan.FromMinutes(5);
     public Uri      DefaultUri               => new("adsi://", UriKind.Absolute);
@@ -29,11 +30,6 @@ public class LdapConnector : ConnectorBase, IAuthenticatable, IUriConnector
     protected override IConnection OnCreateConnection(ConnectionRequest crq)
     {
         return LdapModel.Create(this, crq);
-    }
-
-    public override Type GetStateType()
-    {
-        return typeof(LdapState);
     }
 
 

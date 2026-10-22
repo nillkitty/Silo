@@ -1,6 +1,4 @@
-﻿using Silo.Contracts.Providers.Data.Validation;
-using Silo.Extensions;
-using Silo.Parsing;
+﻿using Silo.Providers.Data.Validation;
 
 namespace Silo.DbModel.Meta;
 
@@ -16,17 +14,17 @@ namespace Silo.DbModel.Meta;
 
 public class Unit : IValidatable
 {
+    public string        Formatter  { get; set; } = string.Empty;
+    public string        Formula    { get; set; } = string.Empty;
     public int           Id         { get; set; }
-    public UnitType      Type       { get; set; }
-    public Unit?         Target     { get; set; }
     public string        Name       { get; set; } = string.Empty;
     public string        NamePlural { get; set; } = string.Empty;
-    public string        Formula    { get; set; } = string.Empty;
+    public bool          Reciprocal { get; set; }
     public UnitRelation? Relation   { get; set; }
-    public string        Formatter  { get; set; } = string.Empty;
     public double?       Scale      { get; set; }
     public string?       Tags       { get; set; }
-    public bool          Reciprocal { get; set; }
+    public Unit?         Target     { get; set; }
+    public UnitType      Type       { get; set; }
 
     public void Validate()
     {
@@ -65,17 +63,17 @@ public enum UnitType
     Conversion,
     Unit,
     Prefix,
-    Suffix,
+    Suffix
 }
 
 public class UnitRelation
 {
     public int           Id         { get; set; }
-    public Unit?         Unit       { get; set; }
     public string        Name       { get; set; } = string.Empty;
-    public double?       Scale      { get; set; }
-    public bool          Reciprocal { get; set; }
     public UnitRelation? Next       { get; set; }
+    public bool          Reciprocal { get; set; }
+    public double?       Scale      { get; set; }
+    public Unit?         Unit       { get; set; }
 }
 
 //public record UnitTag(int Id, Unit Unit, string Tag);

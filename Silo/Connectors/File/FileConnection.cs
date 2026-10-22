@@ -117,7 +117,7 @@ public class FileModel : INodeProvider<FileSystemInfo>, INodeDetails, INodeViewP
     {
         SiloNode node = Kind switch
                         {
-                            FileKind.Missing          => new BlockedNode(this, Path, expand),
+                            FileKind.Missing          => new BlockedNode(new Exception("Missing node"), this, Path, expand),
                             FileKind.File             => MakeFileNode(expand),
                             FileKind.Directory        => new FolderNode(this, expand),
                             FileKind.Volume           => new VolumeNode(this, expand),
@@ -326,16 +326,22 @@ public record PathNode : SiloNode
 }
 
 /// <summary>
-///     An item that is not there (or cannot be read), for any model that describes itself (<see cref="INodeDetails" />: a file, a
-///     registry key...): named after the model (else <paramref name="path" />), with the model's icon (the missing-item icon) and
+///     An item that is not there (or cannot be read), for any model that describes itself (<see cref="INodeDetails" />: a
+///     file, a
+///     registry key...): named after the model (else <paramref name="path" />), with the model's icon (the missing-item
+///     icon) and
 ///     the model as its DataContext.
 /// </summary>
 public record BlockedNode : SiloNode
 {
-    public BlockedNode(INodeDetails model, string path, int? expand = null)
-        : base(model.Required(), $"{model?.Name ?? path} (inaccessible)", model?.Uri, model?.Icon, expand)
+    public Exception Exception { get; }
+
+    public BlockedNode(Exception ex, INodeDetails model, string path, int? expand = null) : base(model.Required(),
+                                                                                                 $"{model?.Name ?? path} (inaccessible)",
+                                                                                                 model?.Uri, model?.Icon, expand)
     {
-        TypeName = "Inaccessible Path";
+        Exception = ex.Required();
+        TypeName  = "Inaccessible Path";
     }
 }
 

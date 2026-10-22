@@ -1,12 +1,13 @@
 using System.Text.RegularExpressions;
-using Silo.Contracts.Providers.Data;
-using Silo.Contracts.Providers.Data.Shape;
 using Silo.DbModel.Meta;
+using Silo.Providers.Data;
+using Silo.Providers.Data.Shape;
 
 namespace Silo.Providers.Definitions;
 
 /// <summary>
-///     A syntax defined in a Silo, working as an <see cref="ISyntax" />: built from its <see cref="SyntaxRecord" />, either on one of the
+///     A syntax defined in a Silo, working as an <see cref="ISyntax" />: built from its <see cref="SyntaxRecord" />,
+///     either on one of the
 ///     built-in parsers (values become real objects) or on a pattern the whole string has to match (values stay strings).
 /// </summary>
 public sealed class StoredSyntax : ISyntax
@@ -16,21 +17,17 @@ public sealed class StoredSyntax : ISyntax
     private readonly SyntaxParser? _parser;
     private readonly Regex?        _pattern;
 
-    private StoredSyntax(SyntaxRecord record, SyntaxParser? parser, Regex? pattern)
-    {
-        Record   = record;
-        _parser  = parser;
-        _pattern = pattern;
-    }
-
     public SyntaxRecord Record { get; }
-
-    public string? DisplayName => Record.Name;
 
     /// <summary>The type of object <see cref="GetValue" /> gives: the parser's, or string for a pattern.</summary>
     public Type ValueType => _parser?.ValueType ?? typeof(string);
 
-    /// <summary>Builds the syntax a record describes. Returns false, with what is wrong, when the parser is unknown or the pattern does not compile.</summary>
+    public string? DisplayName => Record.Name;
+
+    /// <summary>
+    ///     Builds the syntax a record describes. Returns false, with what is wrong, when the parser is unknown or the
+    ///     pattern does not compile.
+    /// </summary>
     public static bool TryCreate(SyntaxRecord record, out StoredSyntax? syntax, out string? error)
     {
         syntax = null;
@@ -47,7 +44,8 @@ public sealed class StoredSyntax : ISyntax
 
                 if (SyntaxParsers.Find(record.Parser) is not { } parser)
                 {
-                    error = $"There is no built-in parser \"{record.Parser.Trim()}\". Known parsers: {string.Join(", ", SyntaxParsers.All.Select(p => p.Key))}.";
+                    error =
+                        $"There is no built-in parser \"{record.Parser.Trim()}\". Known parsers: {string.Join(", ", SyntaxParsers.All.Select(p => p.Key))}.";
                     return false;
                 }
 
@@ -117,9 +115,22 @@ public sealed class StoredSyntax : ISyntax
         return false;
     }
 
-    public bool IsValid(string value) => TryParse(value, out _, out _);
+    private StoredSyntax(SyntaxRecord record, SyntaxParser? parser, Regex? pattern)
+    {
+        Record   = record;
+        _parser  = parser;
+        _pattern = pattern;
+    }
 
-    /// <summary>The string stored for a value: a value of <see cref="ValueType" /> is written canonically, a string is read first and written the same way.</summary>
+    public bool IsValid(string value)
+    {
+        return TryParse(value, out _, out _);
+    }
+
+    /// <summary>
+    ///     The string stored for a value: a value of <see cref="ValueType" /> is written canonically, a string is read
+    ///     first and written the same way.
+    /// </summary>
     public string GetString(object value)
     {
         ArgumentNullException.ThrowIfNull(value);

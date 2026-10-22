@@ -1,7 +1,6 @@
 ﻿using System.IO;
-using System.Threading;
 
-namespace Silo.Contracts.Providers.Data;
+namespace Silo.Providers.Data;
 
 /// <summary>How a .silo file is laid out on disk.</summary>
 public enum SiloStorageFormat
@@ -87,8 +86,8 @@ public sealed record SiloSaveEvent(
 /// </summary>
 public interface ISiloFile
 {
-    /// <summary>The storage format currently in use.</summary>
-    SiloStorageFormat Format { get; }
+    /// <summary>Asked how to proceed when the file changed on disk (or remotely) since it was loaded or last saved.</summary>
+    ISaveConflictResolver? ConflictResolver { get; set; }
 
     /// <summary>
     ///     The path the Silo saves to (the original file; or, for a remote Silo, its local cache file). Changes after a
@@ -96,25 +95,28 @@ public interface ISiloFile
     /// </summary>
     string FilePath { get; }
 
+    /// <summary>The storage format currently in use.</summary>
+    SiloStorageFormat Format { get; }
+
     /// <summary>
     ///     Whether the Silo must open in its own process (a "Solo Silo"). True for an archive that carries an
     ///     <c>assemblies/</c> folder; can also be set by the user to force it.
     /// </summary>
     bool IsSolo { get; set; }
 
-    /// <summary>Size in bytes of the working database(s) -- what the file will weigh once saved, roughly.</summary>
-    long WorkingSizeBytes { get; }
-
-    /// <summary>Asked how to proceed when the file changed on disk (or remotely) since it was loaded or last saved.</summary>
-    ISaveConflictResolver? ConflictResolver { get; set; }
+    /// <summary>True when the last save reached the disk but the push to <see cref="Remote" /> failed.</summary>
+    bool IsUnsynced { get; }
 
     /// <summary>The remote this Silo syncs with after each save, if it came from a URL.</summary>
     ISiloRemote? Remote { get; set; }
 
-    /// <summary>True when the last save reached the disk but the push to <see cref="Remote" /> failed.</summary>
-    bool IsUnsynced { get; }
+    /// <summary>Size in bytes of the working database(s) -- what the file will weigh once saved, roughly.</summary>
+    long WorkingSizeBytes { get; }
 
-    /// <summary>Uploads the file as last saved to <see cref="Remote" /> again (after a failed upload). Throws <see cref="RemoteSyncException" /> if it fails again.</summary>
+    /// <summary>
+    ///     Uploads the file as last saved to <see cref="Remote" /> again (after a failed upload). Throws
+    ///     <see cref="RemoteSyncException" /> if it fails again.
+    /// </summary>
     Task RetryUploadAsync();
 
     /// <summary>Raised after every successful save (also "Save as") with the memorialized event.</summary>
@@ -130,17 +132,17 @@ public interface ISiloFile
 /// <summary>A location a Silo is synced with: pulled when opened, pushed when saved.</summary>
 public interface ISiloRemote
 {
-    /// <summary>Where the Silo lives, e.g. an https URL.</summary>
-    Uri Uri { get; }
-
-    /// <summary>A short name for the kind of remote ("HTTP", "Git").</summary>
-    string Kind { get; }
-
     /// <summary>
     ///     True while the local file holds saved changes that were not uploaded yet. Persisted by the remote itself, so a
     ///     crash or being offline doesn't lose track of it.
     /// </summary>
     bool HasUnpushedChanges { get; set; }
+
+    /// <summary>A short name for the kind of remote ("HTTP", "Git").</summary>
+    string Kind { get; }
+
+    /// <summary>Where the Silo lives, e.g. an https URL.</summary>
+    Uri Uri { get; }
 
     /// <summary>
     ///     Uploads the saved file. Throws <see cref="RemoteConflictException" /> when the remote changed since the last

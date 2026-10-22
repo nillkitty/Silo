@@ -1,13 +1,14 @@
-using System.Linq;
-using Silo.Contracts.Providers.Data;
 using Silo.Explorer;
+using Silo.Providers.Data;
 
 namespace Silo.Tests.Explorer;
 
 public class ExplorerStateSetTests
 {
     private static NodeStateRecord Rec(string key, bool expanded = true, bool open = false, bool selected = false)
-        => new(key, key, expanded, open, selected);
+    {
+        return new NodeStateRecord(key, key, expanded, open, selected);
+    }
 
     private static ExplorerStateSet With(params NodeStateRecord[] records)
     {
@@ -21,8 +22,8 @@ public class ExplorerStateSetTests
     {
         var set = With(Rec("a", open: true));
 
-        Assert.That(set.Take("a"), Is.EqualTo(Rec("a", open: true)));
-        Assert.That(set.Take("a"), Is.Null);
+        Assert.That(set.Take("a"),      Is.EqualTo(Rec("a", open: true)));
+        Assert.That(set.Take("a"),      Is.Null);
         Assert.That(set.IsWaiting("a"), Is.False);
     }
 
@@ -36,30 +37,30 @@ public class ExplorerStateSetTests
     public void Loading_starts_over_and_the_last_record_for_a_key_wins()
     {
         var set = With(Rec("a"), Rec("b"));
-        set.Load([Rec("c", expanded: false), Rec("c", expanded: true)]);
+        set.Load([Rec("c", false), Rec("c", true)]);
 
-        Assert.That(set.Count,                  Is.EqualTo(1));
-        Assert.That(set.Take("c")!.Expanded,    Is.True);
-        Assert.That(set.IsWaiting("a"),         Is.False);
+        Assert.That(set.Count,               Is.EqualTo(1));
+        Assert.That(set.Take("c")!.Expanded, Is.True);
+        Assert.That(set.IsWaiting("a"),      Is.False);
     }
 
     [Test]
     public void Merge_puts_the_live_state_first_and_adds_what_is_still_waiting()
     {
-        var set = With(Rec("waiting"), Rec("live", expanded: false));
+        var set = With(Rec("waiting"), Rec("live", false));
 
-        var merged = set.Merge([Rec("live", expanded: true), Rec("new")]);
+        var merged = set.Merge([Rec("live", true), Rec("new")]);
 
-        Assert.That(merged.Select(r => r.Key), Is.EqualTo(new[] { "live", "new", "waiting" }));
+        Assert.That(merged.Select(r => r.Key),                   Is.EqualTo(new[] { "live", "new", "waiting" }));
         Assert.That(merged.First(r => r.Key == "live").Expanded, Is.True, "the live state replaces the remembered one");
     }
 
     [Test]
     public void Merge_ignores_a_repeated_live_key()
     {
-        var merged = new ExplorerStateSet().Merge([Rec("a", expanded: true), Rec("a", expanded: false)]);
+        var merged = new ExplorerStateSet().Merge([Rec("a", true), Rec("a", false)]);
 
-        Assert.That(merged, Has.Count.EqualTo(1));
+        Assert.That(merged,                   Has.Count.EqualTo(1));
         Assert.That(merged.Single().Expanded, Is.True);
     }
 
@@ -79,7 +80,7 @@ public class ExplorerStateSetTests
 
         int dropped = set.DropUnmatched(["node/silo/file:///c/a"]);
 
-        Assert.That(dropped, Is.EqualTo(2));
+        Assert.That(dropped,                                    Is.EqualTo(2));
         Assert.That(set.IsWaiting("node/silo/file:///c/a"),     Is.True);
         Assert.That(set.IsWaiting("node/silo/file:///c/a/sub"), Is.True);
         Assert.That(set.IsWaiting("node/silo/gone"),            Is.False);

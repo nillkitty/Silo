@@ -1,7 +1,5 @@
-﻿using System.Linq;
-using Silo.Contracts.Providers.Crypto;
-using Silo.Contracts.Providers.Data;
-using Silo.Crypto;
+﻿using Silo.Providers.Crypto;
+using Silo.Providers.Data;
 
 namespace Silo.Tests.Security;
 
@@ -12,9 +10,15 @@ public sealed class InMemorySecretStore : ISecretStore
 
     public List<SecretRecord> Rows { get; } = [];
 
-    public IReadOnlyList<SecretRecord> GetSecrets(string? kind = null) => Rows.Where(r => kind is null || r.Kind == kind).ToList();
+    public IReadOnlyList<SecretRecord> GetSecrets(string? kind = null)
+    {
+        return Rows.Where(r => kind is null || r.Kind == kind).ToList();
+    }
 
-    public SecretRecord? GetSecret(int id) => Rows.FirstOrDefault(r => r.Id == id);
+    public SecretRecord? GetSecret(int id)
+    {
+        return Rows.FirstOrDefault(r => r.Id == id);
+    }
 
     public SecretRecord SaveSecret(SecretRecord secret)
     {
@@ -32,19 +36,21 @@ public sealed class InMemorySecretStore : ISecretStore
         return secret;
     }
 
-    public bool DeleteSecret(int id) => Rows.RemoveAll(r => r.Id == id) > 0;
+    public bool DeleteSecret(int id)
+    {
+        return Rows.RemoveAll(r => r.Id == id) > 0;
+    }
 }
 
 /// <summary>A protector that only scrambles: enough to tell locked bytes from plain ones, and to test several of them.</summary>
 public sealed class ScramblingProtector(string id, byte mask) : ISecretProtector
 {
-    public string Id          => id;
-    public string DisplayName => id;
-    public string Description => "test";
-    public bool   IsAvailable => true;
-
-    public int ProtectCalls   { get; private set; }
-    public int UnprotectCalls { get; private set; }
+    public int    ProtectCalls   { get; private set; }
+    public int    UnprotectCalls { get; private set; }
+    public string Description    => "test";
+    public string DisplayName    => id;
+    public string Id             => id;
+    public bool   IsAvailable    => true;
 
     public byte[] Protect(byte[] data)
     {

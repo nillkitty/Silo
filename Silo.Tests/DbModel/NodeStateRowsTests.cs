@@ -1,7 +1,6 @@
-using System.Linq;
 using Microsoft.Data.Sqlite;
-using Silo.Contracts.Providers.Data;
 using Silo.DbModel.Sqlite;
+using Silo.Providers.Data;
 
 namespace Silo.Tests.DbModel;
 
@@ -20,7 +19,10 @@ public class NodeStateRowsTests
     }
 
     [TearDown]
-    public void TearDown() => _conn.Dispose();
+    public void TearDown()
+    {
+        _conn.Dispose();
+    }
 
     private void Exec(string sql)
     {
@@ -37,7 +39,9 @@ public class NodeStateRowsTests
     }
 
     private static NodeStateRecord Rec(string key, bool expanded = false, bool open = false, bool selected = false)
-        => new(key, "name of " + key, expanded, open, selected);
+    {
+        return new NodeStateRecord(key, "name of " + key, expanded, open, selected);
+    }
 
     [Test]
     public void The_key_survives_the_round_trip_through_the_uri_even_with_awkward_characters()
@@ -57,27 +61,27 @@ public class NodeStateRowsTests
     [Test]
     public void What_was_saved_is_read_back_with_its_flags()
     {
-        NodeStateRows.Save(_conn, null, Table, null, [Rec("a", expanded: true), Rec("b", open: true), Rec("c", selected: true), Rec("d")]);
+        NodeStateRows.Save(_conn, null, Table, null, [Rec("a", true), Rec("b", open: true), Rec("c", selected: true), Rec("d")]);
 
         var read = NodeStateRows.Get(_conn, Table, null);
 
-        Assert.That(read, Is.EqualTo(new[] { Rec("a", expanded: true), Rec("b", open: true), Rec("c", selected: true), Rec("d") }));
+        Assert.That(read, Is.EqualTo(new[] { Rec("a", true), Rec("b", open: true), Rec("c", selected: true), Rec("d") }));
     }
 
     [Test]
     public void Saving_replaces_what_was_saved_before()
     {
-        NodeStateRows.Save(_conn, null, Table, null, [Rec("a", expanded: true), Rec("b", expanded: true)]);
+        NodeStateRows.Save(_conn, null, Table, null, [Rec("a", true), Rec("b", true)]);
         NodeStateRows.Save(_conn, null, Table, null, [Rec("b", open: true)]);
 
         Assert.That(NodeStateRows.Get(_conn, Table, null), Is.EqualTo(new[] { Rec("b", open: true) }));
-        Assert.That(Count(), Is.EqualTo(1));
+        Assert.That(Count(),                               Is.EqualTo(1));
     }
 
     [Test]
     public void Saving_nothing_forgets_everything()
     {
-        NodeStateRows.Save(_conn, null, Table, null, [Rec("a", expanded: true)]);
+        NodeStateRows.Save(_conn, null, Table, null, [Rec("a", true)]);
         NodeStateRows.Save(_conn, null, Table, null, []);
 
         Assert.That(NodeStateRows.Get(_conn, Table, null), Is.Empty);
@@ -86,14 +90,15 @@ public class NodeStateRowsTests
     [Test]
     public void A_users_own_rows_win_over_the_shared_ones_and_leave_them_alone()
     {
-        NodeStateRows.Save(_conn, null, Table, null, [Rec("shared", expanded: true)]);
+        NodeStateRows.Save(_conn, null, Table, null, [Rec("shared", true)]);
         Assert.That(NodeStateRows.Get(_conn, Table, 7).Select(r => r.Key), Is.EqualTo(new[] { "shared" }), "falls back to the shared rows");
 
-        NodeStateRows.Save(_conn, null, Table, 7, [Rec("mine", expanded: true)]);
+        NodeStateRows.Save(_conn, null, Table, 7, [Rec("mine", true)]);
 
-        Assert.That(NodeStateRows.Get(_conn, Table, 7).Select(r => r.Key),   Is.EqualTo(new[] { "mine" }));
+        Assert.That(NodeStateRows.Get(_conn, Table, 7).Select(r => r.Key),    Is.EqualTo(new[] { "mine" }));
         Assert.That(NodeStateRows.Get(_conn, Table, null).Select(r => r.Key), Is.EqualTo(new[] { "shared" }));
-        Assert.That(NodeStateRows.Get(_conn, Table, 8).Select(r => r.Key),   Is.EqualTo(new[] { "shared" }), "another user sees the shared rows, not mine");
+        Assert.That(NodeStateRows.Get(_conn, Table, 8).Select(r => r.Key), Is.EqualTo(new[] { "shared" }),
+                    "another user sees the shared rows, not mine");
     }
 
     [Test]
@@ -101,7 +106,7 @@ public class NodeStateRowsTests
     {
         Exec("INSERT INTO [Node] (Uri, Name, IsVisible, UserId) VALUES ('silo:somewhere-else', 'other', 1, NULL)");
 
-        NodeStateRows.Save(_conn, null, Table, null, [Rec("a", expanded: true)]);
+        NodeStateRows.Save(_conn, null, Table, null, [Rec("a", true)]);
         NodeStateRows.Save(_conn, null, Table, null, []);
 
         Assert.That(Count(), Is.EqualTo(1));
@@ -120,11 +125,11 @@ public class NodeStateRowsTests
     [Test]
     public void A_transaction_that_is_rolled_back_keeps_the_previous_state()
     {
-        NodeStateRows.Save(_conn, null, Table, null, [Rec("a", expanded: true)]);
+        NodeStateRows.Save(_conn, null, Table, null, [Rec("a", true)]);
 
         using (var tx = _conn.BeginTransaction())
         {
-            NodeStateRows.Save(_conn, tx, Table, null, [Rec("z", expanded: true)]);
+            NodeStateRows.Save(_conn, tx, Table, null, [Rec("z", true)]);
             tx.Rollback();
         }
 

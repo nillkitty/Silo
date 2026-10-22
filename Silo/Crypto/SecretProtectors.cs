@@ -1,5 +1,5 @@
-﻿using System.Linq;
-using Silo.Contracts.Providers.Crypto;
+﻿using Serilog;
+using Silo.Providers.Crypto;
 
 namespace Silo.Crypto;
 
@@ -19,7 +19,7 @@ public static class SecretProtectors
         }
         catch (Exception ex)
         {
-            Serilog.Log.Warning(ex, "The secret protectors could not be listed");
+            Log.Warning(ex, "The secret protectors could not be listed");
         }
 
         if (list.All(p => p.Id != DefaultId)) list.Add(new DpapiSecretProtector());

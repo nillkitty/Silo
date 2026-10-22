@@ -1,4 +1,6 @@
-﻿namespace Silo.DbModel.Sqlite;
+﻿using Silo.Providers.Data;
+
+namespace Silo.DbModel.Sqlite;
 
 /// <summary>The secrets kept in the Silo (<see cref="ISecretStore" />) by the SQLite provider.</summary>
 public sealed partial class SqliteDatabaseProvider : ISecretStore
@@ -37,8 +39,8 @@ public sealed partial class SqliteDatabaseProvider : ISecretStore
         _gate.Wait();
         try
         {
-            long? uid = CurrentUserId();
-            using var tx = _conn.BeginTransaction();
+            long?     uid = CurrentUserId();
+            using var tx  = _conn.BeginTransaction();
             try
             {
                 if (secret.Id == 0)

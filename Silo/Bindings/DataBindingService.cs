@@ -1,15 +1,15 @@
-using System.Collections.Concurrent;
 using System.Collections.Specialized;
-using System.Threading;
 using Serilog;
 using Silo.Drawio;
 using Silo.Model;
+using Silo.Providers.Data;
 using DataBinding = Silo.DbModel.Global.DataBinding;
 
 namespace Silo.Bindings;
 
 /// <summary>
-///     Raised whenever a Silo's data bindings are created, changed or deleted, so the Explorer and the sampler stay current.
+///     Raised whenever a Silo's data bindings are created, changed or deleted, so the Explorer and the sampler stay
+///     current.
 /// </summary>
 public static class DataBindingEvents
 {
@@ -38,30 +38,15 @@ public sealed class DataBindingService : IDiagramDataProvider
 {
     private static readonly TimeSpan MinInterval = TimeSpan.FromMilliseconds(100);
 
-    private readonly object                                   _gate    = new();
-    private readonly ILogger                                  _log     = Log.ForContext<DataBindingService>();
-    private readonly Dictionary<(OpenSilo, int), Poller>      _pollers = new();
-    private          Dictionary<string, Poller>               _byName  = new(StringComparer.OrdinalIgnoreCase);
-    private          bool                                     _started;
-
-    private DataBindingService()
-    {
-    }
+    private readonly object                              _gate    = new();
+    private readonly ILogger                             _log     = Log.ForContext<DataBindingService>();
+    private readonly Dictionary<(OpenSilo, int), Poller> _pollers = new();
+    private          Dictionary<string, Poller>          _byName  = new(StringComparer.OrdinalIgnoreCase);
+    private          bool                                _started;
 
     public static DataBindingService Current { get; } = new();
 
-    public event Action? Changed;
-
     public string Scheme => "bind";
-
-    /// <summary>The value of the binding named <paramref name="path" />.</summary>
-    public bool TryGet(string path, out object? value)
-    {
-        value = null;
-        if (!TryGetSample(path, out var sample) || sample.Error is not null) return false;
-        value = sample.Value;
-        return true;
-    }
 
     /// <summary>The latest reading of the binding named <paramref name="name" /> (in the Silo whose binding wins that name).</summary>
     public bool TryGetSample(string name, out BindingSample sample)
@@ -101,7 +86,7 @@ public sealed class DataBindingService : IDiagramDataProvider
         {
             foreach (var p in _pollers.Values) p.Dispose();
             _pollers.Clear();
-            _byName = new Dictionary<string, Poller>(StringComparer.OrdinalIgnoreCase);
+            _byName  = new Dictionary<string, Poller>(StringComparer.OrdinalIgnoreCase);
             _started = false;
         }
 
@@ -137,7 +122,7 @@ public sealed class DataBindingService : IDiagramDataProvider
         {
             if (!_started) return;
 
-            var keep = new HashSet<(OpenSilo, int)>();
+            var keep   = new HashSet<(OpenSilo, int)>();
             var byName = new Dictionary<string, Poller>(StringComparer.OrdinalIgnoreCase);
 
             foreach (var (silo, binding) in wanted)
@@ -172,26 +157,32 @@ public sealed class DataBindingService : IDiagramDataProvider
         Changed?.Invoke();
     }
 
+    private DataBindingService()
+    {
+    }
+
+    public event Action? Changed;
+
+    /// <summary>The value of the binding named <paramref name="path" />.</summary>
+    public bool TryGet(string path, out object? value)
+    {
+        value = null;
+        if (!TryGetSample(path, out var sample) || sample.Error is not null) return false;
+        value = sample.Value;
+        return true;
+    }
+
     /// <summary>Samples one binding on its own timer, off the UI thread.</summary>
     private sealed class Poller : IDisposable
     {
-        private readonly DataBinding    _binding;
-        private readonly ILogger        _log;
-        private readonly Action         _onChange;
-        private readonly Timer          _timer;
+        private readonly DataBinding     _binding;
+        private readonly ILogger         _log;
+        private readonly Action          _onChange;
+        private readonly Timer           _timer;
+        private          int             _busy;
+        private          bool            _disposed;
+        private          string?         _lastError;
         private          IBindingReader? _reader;
-        private          int            _busy;
-        private          bool           _disposed;
-        private          string?        _lastError;
-
-        public Poller(DataBinding binding, Action onChange, ILogger log)
-        {
-            _binding  = binding.Clone();
-            _onChange = onChange;
-            _log      = log;
-            var every = binding.Interval < MinInterval ? MinInterval : binding.Interval;
-            _timer = new Timer(_ => Tick(), null, TimeSpan.Zero, every);
-        }
 
         public BindingSample? Sample { get; private set; }
 
@@ -218,7 +209,8 @@ public sealed class DataBindingService : IDiagramDataProvider
                     error = ex.Message;
                     _reader?.Dispose();
                     _reader = null; // try opening again next time
-                    if (error != _lastError) _log.Warning("Data binding {name} ({source}) failed: {error}", _binding.Name, _binding.Source, error);
+                    if (error != _lastError)
+                        _log.Warning("Data binding {name} ({source}) failed: {error}", _binding.Name, _binding.Source, error);
                 }
 
                 _lastError = error;
@@ -230,6 +222,15 @@ public sealed class DataBindingService : IDiagramDataProvider
             {
                 Interlocked.Exchange(ref _busy, 0);
             }
+        }
+
+        public Poller(DataBinding binding, Action onChange, ILogger log)
+        {
+            _binding  = binding.Clone();
+            _onChange = onChange;
+            _log      = log;
+            var every = binding.Interval < MinInterval ? MinInterval : binding.Interval;
+            _timer = new Timer(_ => Tick(), null, TimeSpan.Zero, every);
         }
 
         public void Dispose()

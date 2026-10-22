@@ -1,12 +1,15 @@
 ﻿using System.Collections;
+using System.Collections.ObjectModel;
 using System.Reflection;
 using System.Text.RegularExpressions;
 using Silo.DbModel;
+using Silo.Providers.Reflection;
 
 namespace Silo.Contracts.Core;
 
 /// <summary>
-///     One placeholder handed to <see cref="IPlaceholderPopulationDialog.AddPlaceholder" />: the placeholder, the template that
+///     One placeholder handed to <see cref="IPlaceholderPopulationDialog.AddPlaceholder" />: the placeholder, the template
+///     that
 ///     defined it, and whether the person has to fill it in.
 /// </summary>
 public sealed record PlaceholderRequest(Placeholder Placeholder, SiloTemplate? Source, bool IsRequired);
@@ -18,11 +21,14 @@ public sealed record PlaceholderRequest(Placeholder Placeholder, SiloTemplate? S
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct, Inherited = false)]
 public sealed class ComponentInfoAttribute(string name) : Attribute
 {
-    /// <summary>The name shown to the person, e.g. <c>Local Directory</c>.</summary>
-    public string Name { get; } = name;
-
     /// <summary>A sentence or two on what the component does; shown as its tooltip.</summary>
     public string? Description { get; set; }
+
+    /// <summary>A single character from the Segoe MDL2 Assets font (e.g. <c>""</c> for a folder) to draw as the icon.</summary>
+    public string? Glyph { get; set; }
+
+    /// <summary>Keeps the component out of pickers (for a base class or a component that is only built in code).</summary>
+    public bool Hidden { get; set; }
 
     /// <summary>
     ///     Where to load an icon from: an absolute URI (<c>pack://application:,,,/Silo;component/Resources/folder.png</c>)
@@ -30,11 +36,8 @@ public sealed class ComponentInfoAttribute(string name) : Attribute
     /// </summary>
     public string? Icon { get; set; }
 
-    /// <summary>A single character from the Segoe MDL2 Assets font (e.g. <c>""</c> for a folder) to draw as the icon.</summary>
-    public string? Glyph { get; set; }
-
-    /// <summary>Keeps the component out of pickers (for a base class or a component that is only built in code).</summary>
-    public bool Hidden { get; set; }
+    /// <summary>The name shown to the person, e.g. <c>Local Directory</c>.</summary>
+    public string Name { get; } = name;
 }
 
 /// <summary>A component that can be picked: the type to build and how to present it.</summary>
@@ -49,6 +52,43 @@ public sealed record ComponentInfo(Type Type, string Name, string? Description, 
 /// <summary>One placeholder, worked out for the dialog: what it stands for and whether that is one thing or a list.</summary>
 public sealed class PlaceholderSlot
 {
+    /// <summary>The description shown to the person, with the line breaks a XAML attribute tends to carry flattened.</summary>
+    public string? Description => string.IsNullOrWhiteSpace(Placeholder.Description)
+                                      ? null
+                                      : Regex.Replace(Placeholder.Description, @"\s+", " ").Trim();
+
+    /// <summary>The type each chosen component must be assignable to: <see cref="Type" /> itself, or a list's item type.</summary>
+    public Type? ElementType { get; }
+
+    /// <summary>True if the placeholder takes an ordered list of components rather than one.</summary>
+    public bool IsList { get; }
+
+    /// <summary>
+    ///     Whether there is anything to pick: a placeholder that does not say what type it stands for cannot be filled in
+    ///     here.
+    /// </summary>
+    public bool IsPickable => ElementType is not null;
+
+    /// <summary>Whether the person must fill it in (a list must then have at least one entry); otherwise it can be left empty.</summary>
+    public bool IsRequired { get; }
+
+    /// <summary>The placeholder being filled in.</summary>
+    public Placeholder Placeholder { get; }
+
+    /// <summary>The template that defined the placeholder, if known.</summary>
+    public SiloTemplate? Source { get; }
+
+    /// <summary>The step's title: the placeholder's name, or failing that its type.</summary>
+    public string Title { get; }
+
+    /// <summary>The type the placeholder stands for (<see cref="Placeholder.PlaceholderForType" />); null if it does not say.</summary>
+    public Type? Type { get; }
+
+    /// <summary>"Type needed" text: <c>IObservableDataSource</c>, or <c>list of IDataTransform</c>.</summary>
+    public string TypeLabel => ElementType is null ? "(not specified)" :
+                               IsList              ? "list of " + PlaceholderComponents.TypeLabel(ElementType) :
+                                                     PlaceholderComponents.TypeLabel(ElementType);
+
     public PlaceholderSlot(Placeholder placeholder, SiloTemplate? source = null, bool isRequired = true)
     {
         Placeholder = placeholder;
@@ -57,51 +97,29 @@ public sealed class PlaceholderSlot
         var type = placeholder.PlaceholderForType;
 
         var isList = false;
-        Type        = type;
+        Type = type;
         ElementType = type is null ? null : PlaceholderComponents.ElementTypeOf(type, out isList);
-        IsList      = type is not null && isList;
-        Title = !string.IsNullOrWhiteSpace(placeholder.Name)
-                    ? placeholder.Name!.Trim()
-                    : type is null
-                        ? "Placeholder"
-                        : PlaceholderComponents.Humanize(PlaceholderComponents.TypeLabel(ElementType ?? type));
+        IsList = type is not null && isList;
+        Title = !string.IsNullOrWhiteSpace(placeholder.Name) ? placeholder.Name!.Trim() :
+                type is null ? "Placeholder" : PlaceholderComponents.Humanize(PlaceholderComponents.TypeLabel(ElementType ?? type));
     }
-
-    /// <summary>The placeholder being filled in.</summary>
-    public Placeholder Placeholder { get; }
-
-    /// <summary>The template that defined the placeholder, if known.</summary>
-    public SiloTemplate? Source { get; }
-
-    /// <summary>Whether the person must fill it in (a list must then have at least one entry); otherwise it can be left empty.</summary>
-    public bool IsRequired { get; }
-
-    /// <summary>The type the placeholder stands for (<see cref="Placeholder.PlaceholderForType" />); null if it does not say.</summary>
-    public Type? Type { get; }
-
-    /// <summary>The type each chosen component must be assignable to: <see cref="Type" /> itself, or a list's item type.</summary>
-    public Type? ElementType { get; }
-
-    /// <summary>True if the placeholder takes an ordered list of components rather than one.</summary>
-    public bool IsList { get; }
-
-    /// <summary>Whether there is anything to pick: a placeholder that does not say what type it stands for cannot be filled in here.</summary>
-    public bool IsPickable => ElementType is not null;
-
-    /// <summary>The step's title: the placeholder's name, or failing that its type.</summary>
-    public string Title { get; }
-
-    /// <summary>"Type needed" text: <c>IObservableDataSource</c>, or <c>list of IDataTransform</c>.</summary>
-    public string TypeLabel => ElementType is null ? "(not specified)" : IsList ? "list of " + PlaceholderComponents.TypeLabel(ElementType) : PlaceholderComponents.TypeLabel(ElementType);
-
-    /// <summary>The description shown to the person, with the line breaks a XAML attribute tends to carry flattened.</summary>
-    public string? Description => string.IsNullOrWhiteSpace(Placeholder.Description) ? null : Regex.Replace(Placeholder.Description, @"\s+", " ").Trim();
 }
 
-/// <summary>The logic behind the placeholder dialog: ordering the steps, finding the components, building the values. No UI in here.</summary>
+/// <summary>
+///     The logic behind the placeholder dialog: ordering the steps, finding the components, building the values. No
+///     UI in here.
+/// </summary>
 public static class PlaceholderComponents
 {
-    private static readonly MethodInfo GetConstructableMethod = typeof(IReflectionProvider).GetMethod(nameof(IReflectionProvider.GetConstructable))!;
+    private static readonly MethodInfo GetConstructableMethod =
+        typeof(IReflectionProvider).GetMethod(nameof(IReflectionProvider.GetConstructable))!;
+
+    private static readonly HashSet<Type> ListDefinitions =
+    [
+        typeof(IEnumerable<>), typeof(ICollection<>), typeof(IList<>),
+        typeof(IReadOnlyCollection<>), typeof(IReadOnlyList<>),
+        typeof(List<>), typeof(Collection<>), typeof(ObservableCollection<>)
+    ];
 
     /// <summary>
     ///     Turns placeholders into steps, in the order they should be asked: a placeholder's
@@ -120,7 +138,8 @@ public static class PlaceholderComponents
 
             if (by.TryGetValue(p, out var first))
             {
-                if (r.IsRequired && !first.IsRequired) by[p] = first with { IsRequired = true }; // asked twice: required if either asked for it
+                if (r.IsRequired && !first.IsRequired)
+                    by[p] = first with { IsRequired = true }; // asked twice: required if either asked for it
                 continue;
             }
 
@@ -152,8 +171,9 @@ public static class PlaceholderComponents
             var match = entry switch
                         {
                             Placeholder other => all.FirstOrDefault(x => ReferenceEquals(x, other)),
-                            string name       => all.FirstOrDefault(x => !ReferenceEquals(x, p) && string.Equals(x.Name, name, StringComparison.OrdinalIgnoreCase)),
-                            _                 => null
+                            string name => all.FirstOrDefault(x => !ReferenceEquals(x, p) &&
+                                                                   string.Equals(x.Name, name, StringComparison.OrdinalIgnoreCase)),
+                            _ => null
                         };
             if (match is not null && !ReferenceEquals(match, p)) yield return match;
         }
@@ -164,21 +184,28 @@ public static class PlaceholderComponents
         switch (value)
         {
             case null: yield break;
-            case string s: yield return s; yield break;
-            case Placeholder p: yield return p; yield break;
+            case string s:
+                yield return s;
+                yield break;
+            case Placeholder p:
+                yield return p;
+                yield break;
             case IEnumerable many:
                 foreach (var item in many)
-                foreach (var inner in Flatten(item))
-                    yield return inner;
+                    foreach (var inner in Flatten(item))
+                        yield return inner;
 
                 yield break;
-            default: yield return value; yield break;
+            default:
+                yield return value;
+                yield break;
         }
     }
 
     /// <summary>
     ///     What each chosen component must be assignable to: the item type if <paramref name="type" /> is a list
-    ///     (<c>T[]</c>, <c>IEnumerable&lt;T&gt;</c>, <c>List&lt;T&gt;</c>, <see cref="IDataTransformGroup" />...), else the type itself.
+    ///     (<c>T[]</c>, <c>IEnumerable&lt;T&gt;</c>, <c>List&lt;T&gt;</c>, <see cref="IDataTransformGroup" />...), else the
+    ///     type itself.
     /// </summary>
     public static Type ElementTypeOf(Type type, out bool isList)
     {
@@ -188,7 +215,7 @@ public static class PlaceholderComponents
         if (type.IsGenericType && ListDefinitions.Contains(type.GetGenericTypeDefinition())) return type.GetGenericArguments()[0];
 
         for (var b = type.BaseType; b is not null; b = b.BaseType)
-            if (b.IsGenericType && (b.GetGenericTypeDefinition() == typeof(List<>) || b.GetGenericTypeDefinition() == typeof(System.Collections.ObjectModel.Collection<>)))
+            if (b.IsGenericType && (b.GetGenericTypeDefinition() == typeof(List<>) || b.GetGenericTypeDefinition() == typeof(Collection<>)))
                 return b.GetGenericArguments()[0];
 
         if (typeof(IDataTransformGroup).IsAssignableFrom(type)) return typeof(IDataTransform);
@@ -203,12 +230,6 @@ public static class PlaceholderComponents
         ElementTypeOf(type, out var isList);
         return isList;
     }
-
-    private static readonly HashSet<Type> ListDefinitions =
-    [
-        typeof(IEnumerable<>), typeof(ICollection<>), typeof(IList<>), typeof(IReadOnlyCollection<>), typeof(IReadOnlyList<>),
-        typeof(List<>), typeof(System.Collections.ObjectModel.Collection<>), typeof(System.Collections.ObjectModel.ObservableCollection<>)
-    ];
 
     /// <summary>
     ///     Makes the value for a list placeholder out of the chosen components, as the type the placeholder asks for: an
@@ -234,21 +255,15 @@ public static class PlaceholderComponents
             return group;
         }
 
-        var listType = typeof(List<>).MakeGenericType(element);
+        var    listType = typeof(List<>).MakeGenericType(element);
         object list;
         if (placeholderType.IsAssignableFrom(listType))
-        {
             list = Activator.CreateInstance(listType)!;
-        }
-        else if (!placeholderType.IsInterface && !placeholderType.IsAbstract && placeholderType.GetConstructor(Type.EmptyTypes) is not null &&
-                 typeof(IList).IsAssignableFrom(placeholderType))
-        {
+        else if (!placeholderType.IsInterface                                && !placeholderType.IsAbstract &&
+                 placeholderType.GetConstructor(Type.EmptyTypes) is not null && typeof(IList).IsAssignableFrom(placeholderType))
             list = Activator.CreateInstance(placeholderType)!;
-        }
         else
-        {
             list = Activator.CreateInstance(listType)!;
-        }
 
         var target = (IList)list;
         foreach (var item in items) target.Add(item);
@@ -292,17 +307,17 @@ public static class PlaceholderComponents
         var info = type.GetCustomAttribute<ComponentInfoAttribute>(false);
         if (info?.Hidden == true) return null;
 
-        Uri? icon = null;
+        Uri? icon                                                                                                   = null;
         if (!string.IsNullOrWhiteSpace(info?.Icon) && Uri.TryCreate(info.Icon, UriKind.Absolute, out var uri)) icon = uri;
 
-        return new ComponentInfo(type, !string.IsNullOrWhiteSpace(info?.Name) ? info.Name.Trim() : Humanize(type.Name), info?.Description?.Trim(), icon,
-                                 string.IsNullOrEmpty(info?.Glyph) ? null : info.Glyph);
+        return new ComponentInfo(type, !string.IsNullOrWhiteSpace(info?.Name) ? info.Name.Trim() : Humanize(type.Name),
+                                 info?.Description?.Trim(), icon, string.IsNullOrEmpty(info?.Glyph) ? null : info.Glyph);
     }
 
     /// <summary>"LocalDirectorySource" becomes "Local Directory Source"; a generic type's arity suffix is dropped.</summary>
     public static string Humanize(string name)
     {
-        var tick = name.IndexOf('`');
+        var tick            = name.IndexOf('`');
         if (tick >= 0) name = name[..tick];
 
         name = name.Replace('_', ' ').Trim();
@@ -310,13 +325,16 @@ public static class PlaceholderComponents
         return name.Length == 0 ? "(unnamed)" : name;
     }
 
-    /// <summary>A short, readable type name for "Type needed": <c>IObservableDataSource</c>, <c>IEnumerable&lt;IDataTransform&gt;</c>.</summary>
+    /// <summary>
+    ///     A short, readable type name for "Type needed": <c>IObservableDataSource</c>,
+    ///     <c>IEnumerable&lt;IDataTransform&gt;</c>.
+    /// </summary>
     public static string TypeLabel(Type type)
     {
         if (!type.IsGenericType) return type.IsArray ? TypeLabel(type.GetElementType()!) + "[]" : type.Name;
 
-        var name = type.Name;
-        var tick = name.IndexOf('`');
+        var name            = type.Name;
+        var tick            = name.IndexOf('`');
         if (tick >= 0) name = name[..tick];
         return name + "<" + string.Join(", ", type.GetGenericArguments().Select(TypeLabel)) + ">";
     }

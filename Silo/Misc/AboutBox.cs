@@ -77,7 +77,7 @@ public static class AboutBox
         {
             StackPanel p = new();
             p.Children.Add(MainSection);
-            var ext = App.Instance!.Components.Resolve<IEnumerable<IAboutBox>>()?.ToList();
+            var ext = App.Resolve<IEnumerable<IAboutBox>>()?.ToList();
             if (ext is [..])
                 foreach (var e in ext)
                     if (e?.AboutContent is Control extCtrl)

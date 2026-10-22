@@ -1,5 +1,6 @@
 using System.IO;
 using System.Windows.Markup;
+using Silo.Providers.Data;
 
 namespace Silo;
 
@@ -29,8 +30,8 @@ public interface IHasArity
 /// </remarks>
 public class DataDefinition : DefinitionBase<IDefPart>, IHasArity, IDataSpec
 {
-    public Arity   Arity       { get; set; }
     public string? ContentType { get; set; }
+    public Arity   Arity       { get; set; }
 
     /// <inheritdoc />
     public bool? MatchesData(Stream stream)
@@ -105,6 +106,11 @@ public abstract class DefinitionBase<TContract> : IDefPart
 /// </summary>
 public class Byte : IDefPart
 {
+    /// <summary>
+    ///     The byte to match
+    /// </summary>
+    public byte Value { get; set; }
+
     public Byte()
     {
     }
@@ -113,11 +119,6 @@ public class Byte : IDefPart
     {
         Value = value;
     }
-
-    /// <summary>
-    ///     The byte to match
-    /// </summary>
-    public byte Value { get; set; }
 }
 
 /// <summary>
@@ -127,15 +128,6 @@ public class Byte : IDefPart
 [ContentProperty(nameof(Hex))]
 public class Bytes : IDefPart
 {
-    public Bytes()
-    {
-    }
-
-    public Bytes(byte[] value)
-    {
-        Value = value;
-    }
-
     /// <summary>
     ///     The bytes to match, as text: each character (after <c>\</c> escapes such as <c>\x03</c>) is one byte, e.g.
     ///     <c>PK\x03\x04</c>
@@ -160,4 +152,13 @@ public class Bytes : IDefPart
     ///     The bytes to match
     /// </summary>
     public byte[]? Value { get; set; }
+
+    public Bytes()
+    {
+    }
+
+    public Bytes(byte[] value)
+    {
+        Value = value;
+    }
 }

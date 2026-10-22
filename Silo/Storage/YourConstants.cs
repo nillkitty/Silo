@@ -1,7 +1,8 @@
 ﻿using System.Text.RegularExpressions;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
-using Silo.Contracts.Providers.Data;
 using Silo.Expressions;
+using Silo.Providers.Data;
 using Silo.Unicode;
 
 namespace Silo.Storage;
@@ -13,16 +14,18 @@ namespace Silo.Storage;
 /// <param name="Modified">When it was last saved (UTC).</param>
 public sealed record ConstantValue(string Name, IReadOnlyList<CodePoint> CodePoints, bool IsList, DateTime Modified)
 {
-    /// <summary>The characters written one after the other: what <c>${your:name}</c> comes to.</summary>
-    public string Text => CodePoint.ToText(CodePoints);
-
     /// <summary>The name as it is used in an expression: <c>your:green</c>.</summary>
     public string FullName => YourConstants.Prefix + ":" + Name;
+
+    /// <summary>The characters written one after the other: what <c>${your:name}</c> comes to.</summary>
+    public string Text => CodePoint.ToText(CodePoints);
 }
 
 /// <summary>
-///     The person's own constants (<c>your:green='🟢'</c>, <c>your:mychars='▶√®™▼▽'</c>), kept in the personal part of the Silo as <c>Stored&lt;CodePoint&gt;</c> and
-///     <c>Stored&lt;CodePoint[]&gt;</c>. They are variables of the <c>your</c> namespace for <see cref="Template" /> and expressions: see <see cref="AsScope" />.
+///     The person's own constants (<c>your:green='🟢'</c>, <c>your:mychars='▶√®™▼▽'</c>), kept in the personal part of the
+///     Silo as <c>Stored&lt;CodePoint&gt;</c> and
+///     <c>Stored&lt;CodePoint[]&gt;</c>. They are variables of the <c>your</c> namespace for <see cref="Template" /> and
+///     expressions: see <see cref="AsScope" />.
 /// </summary>
 public sealed class YourConstants
 {
@@ -33,20 +36,26 @@ public sealed class YourConstants
 
     private readonly Func<IStoredStore?> _store;
 
-    /// <param name="store">Where the personal part of the Silo is, asked each time; null for nowhere.</param>
-    public YourConstants(Func<IStoredStore?> store)
-    {
-        _store = store ?? throw new ArgumentNullException(nameof(store));
-    }
-
     /// <summary>The constants of the active Silo.</summary>
     public static YourConstants Default { get; } = new(static () => Stored.DefaultStore());
 
-    /// <summary>Whether this can be the name of a constant: a letter or underscore, then letters, digits and underscores (at most 64).</summary>
-    public static bool IsValidName(string? name) => name is not null && NamePattern.IsMatch(name);
+    /// <summary>Whether a Silo is open to keep constants in.</summary>
+    public bool IsAvailable => _store() is not null;
+
+    /// <summary>
+    ///     Whether this can be the name of a constant: a letter or underscore, then letters, digits and underscores (at
+    ///     most 64).
+    /// </summary>
+    public static bool IsValidName(string? name)
+    {
+        return name is not null && NamePattern.IsMatch(name);
+    }
 
     /// <summary>What a constant is stored under: <c>your:green</c>.</summary>
-    public static string KeyFor(string name) => Prefix + ":" + name;
+    public static string KeyFor(string name)
+    {
+        return Prefix + ":" + name;
+    }
 
     /// <summary>Every constant, ordered by name. Items that are stored under <c>your:</c> but cannot be read are left out.</summary>
     public IReadOnlyList<ConstantValue> List()
@@ -55,7 +64,7 @@ public sealed class YourConstants
         if (store is null) return [];
 
         var result = new List<ConstantValue>();
-        foreach (var record in store.ListStored(Prefix + ":", StoredScope.Personal))
+        foreach (var record in store.ListStored(Prefix + ":"))
             if (TryRead(record, out var value))
                 result.Add(value!);
 
@@ -67,16 +76,22 @@ public sealed class YourConstants
     {
         if (!IsValidName(name)) return null;
 
-        var record = _store()?.GetStored(KeyFor(name), StoredScope.Personal);
+        var record = _store()?.GetStored(KeyFor(name));
         return record is not null && TryRead(record, out var value) ? value : null;
     }
 
     /// <summary>Saves a constant for one character (<c>Stored&lt;CodePoint&gt;</c>), replacing any constant of that name.</summary>
     /// <exception cref="ArgumentException">The name cannot be a constant's.</exception>
     /// <exception cref="InvalidOperationException">No Silo is open.</exception>
-    public void SetCodePoint(string name, CodePoint codePoint) => OneStored(name).Set(codePoint);
+    public void SetCodePoint(string name, CodePoint codePoint)
+    {
+        OneStored(name).Set(codePoint);
+    }
 
-    /// <summary>Saves a constant for a list of characters (<c>Stored&lt;CodePoint[]&gt;</c>), replacing any constant of that name.</summary>
+    /// <summary>
+    ///     Saves a constant for a list of characters (<c>Stored&lt;CodePoint[]&gt;</c>), replacing any constant of that
+    ///     name.
+    /// </summary>
     /// <exception cref="ArgumentException">The name cannot be a constant's, or there are no characters.</exception>
     /// <exception cref="InvalidOperationException">No Silo is open.</exception>
     public void SetCodePoints(string name, IEnumerable<CodePoint> codePoints)
@@ -87,26 +102,38 @@ public sealed class YourConstants
     }
 
     /// <summary>Removes the constant; false if there was none.</summary>
-    public bool Delete(string name) => IsValidName(name) && OneStored(name).Delete();
-
-    /// <summary>Whether a Silo is open to keep constants in.</summary>
-    public bool IsAvailable => _store() is not null;
+    public bool Delete(string name)
+    {
+        return IsValidName(name) && OneStored(name).Delete();
+    }
 
     /// <summary>
-    ///     The constants as variables of an expression: <c>${your:green}</c> is the character, <c>${your:mychars}</c> the list written out as text. The
+    ///     The constants as variables of an expression: <c>${your:green}</c> is the character, <c>${your:mychars}</c> the list
+    ///     written out as text. The
     ///     scope reads the Silo each time, so a constant saved a moment ago is there. Names are not case sensitive.
     /// </summary>
     /// <param name="parent">Another scope for the variables that are not <c>your:</c> ones; null for none.</param>
-    public VariableScope AsScope(IVariableScope? parent = null) => new VariableScope(parent).AddNamespace(Prefix, new Namespace(this));
+    public VariableScope AsScope(IVariableScope? parent = null)
+    {
+        return new VariableScope(parent).AddNamespace(Prefix, new Namespace(this));
+    }
 
-    private Stored<CodePoint> OneStored(string name) => new(Checked(name), StoredScope.Personal, _store);
+    private Stored<CodePoint> OneStored(string name)
+    {
+        return new Stored<CodePoint>(Checked(name), StoredScope.Personal, _store);
+    }
 
-    private Stored<CodePoint[]> ManyStored(string name) => new(Checked(name), StoredScope.Personal, _store);
+    private Stored<CodePoint[]> ManyStored(string name)
+    {
+        return new Stored<CodePoint[]>(Checked(name), StoredScope.Personal, _store);
+    }
 
     private static string Checked(string name)
     {
         if (!IsValidName(name))
-            throw new ArgumentException($"\"{name}\" cannot be the name of a constant: start with a letter or underscore, then letters, digits and underscores (up to 64).", nameof(name));
+            throw new
+                ArgumentException($"\"{name}\" cannot be the name of a constant: start with a letter or underscore, then letters, digits and underscores (up to 64).",
+                                  nameof(name));
         return KeyFor(name);
     }
 
@@ -136,10 +163,16 @@ public sealed class YourConstants
                     return false;
             }
         }
-        catch (Newtonsoft.Json.JsonException)
+        catch (JsonException)
         {
             return false;
         }
+    }
+
+    /// <param name="store">Where the personal part of the Silo is, asked each time; null for nowhere.</param>
+    public YourConstants(Func<IStoredStore?> store)
+    {
+        _store = store ?? throw new ArgumentNullException(nameof(store));
     }
 
     private sealed class Namespace(YourConstants owner) : IVariableScope

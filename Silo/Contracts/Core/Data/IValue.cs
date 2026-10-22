@@ -1,5 +1,5 @@
 ﻿using Silo.Contracts.ConnectorServices;
-using Silo.Contracts.Providers.Data.Shape;
+using Silo.Providers.Data.Shape;
 
 namespace Silo.Contracts.Core.Data;
 

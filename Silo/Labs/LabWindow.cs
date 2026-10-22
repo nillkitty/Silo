@@ -34,6 +34,9 @@ public sealed class LabWindow : Window, IWindowLayout, ILabHost
     private const string InspectorPrefix = "inspector:";
     private const string MainId          = "main";
     private const int    LogLimit        = 500;
+    private const double LaneWidth       = 270;
+    private const double MainMinWidth    = 520;
+    private const double BottomHeight    = 250;
 
     private readonly List<KeyBinding>                      _bindings   = [];
     private readonly Dictionary<string, LabInspector>      _inspectors = new(StringComparer.OrdinalIgnoreCase);
@@ -53,13 +56,21 @@ public sealed class LabWindow : Window, IWindowLayout, ILabHost
     private readonly TextBox        _logText = new() { IsReadOnly = true, FontFamily = new FontFamily("Cascadia Mono, Consolas, Courier New"), VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Auto, TextWrapping = TextWrapping.NoWrap };
     private readonly Popup          _logPopup = new() { StaysOpen = false, Placement = PlacementMode.Top, AllowsTransparency = false };
 
-    private UIElement _main = null!;
+    private readonly List<SharedPane> _shared = [];
+    private readonly Button           _problemsButton = new() { Visibility = Visibility.Collapsed, Background = Brushes.Transparent, BorderThickness = new Thickness(0), Padding = new Thickness(8, 0, 8, 0), Cursor = Cursors.Hand };
+
+    private ILabProblems? _problems;
+    private bool          _problemsAutoShown;
+    private bool          _problemsPending;
+    private UIElement     _main = null!;
     private int       _historyIndex;
     private string?   _completionBase;
     private string?   _lastCompletion;
     private int       _completionIndex;
     private bool      _closed;
     private bool      _restoredLayout;
+    private bool      _lanes;
+    private UIElement? _topBar;
 
     public LabWindow(ILabSession session)
     {
@@ -71,23 +82,35 @@ public sealed class LabWindow : Window, IWindowLayout, ILabHost
         MinWidth  = 640;
         MinHeight = 400;
         Title     = session.Title;
+        if (LabWindowIcon.For(session.Lab.IconKey) is { } icon) Icon = icon;
 
         SetResourceReference(BackgroundProperty, "Theme.Background");
         SetResourceReference(ForegroundProperty, "Theme.Text");
 
         session.Attach(this);
-        _main = session.BuildMainView();
+        _main   = session.BuildMainView();
+        _topBar = session.BuildTopBar();
 
+        // the library leads its side; the Lab's own panes follow; then what every window has
+        AddLibrary();
         foreach (var inspector in session.Inspectors) _inspectors[inspector.Id] = inspector;
+        AddCommonPanes();
         if (session.Lab.Parameters.Count > 0) _inspectors[LabParametersInspector.InspectorId] = new LabParametersInspector(session.Lab.Parameters);
 
+        EnsureWidth();
         Content = BuildUi();
         BuildDefaultLayout();
         RebuildActions();
 
         _session.PropertyChanged += OnSessionPropertyChanged;
-        _session.ValueChanged    += (_, _) => Dispatcher.InvokeAsync(ShowValue);
+        _session.ValueChanged    += (_, _) => Dispatcher.InvokeAsync(() =>
+                                                                      {
+                                                                          ShowValue();
+                                                                          PokeLibrary();
+                                                                      });
         _session.ActionsChanged  += (_, _) => Dispatcher.InvokeAsync(RebuildActions);
+        WireProblems();
+        if (_session is ILabLive live) live.Changed += (_, _) => Dispatcher.InvokeAsync(PokeLibrary);
         _session.Lab.Parameters.Changed += OnParametersChanged;
         AppTheme.Instance.PropertyChanged += OnThemeChanged;
 
@@ -96,9 +119,13 @@ public sealed class LabWindow : Window, IWindowLayout, ILabHost
         Print($"{session.Lab.Name}. Type help for the commands.");
 
         // the place the Lab's windows were left in; this window is the layout it keeps and restores
-        WindowPlacements.Track(this, App.Instance?.ActiveSilo, PlacementType, $"silo:lab/{session.Lab.Id}", this);
+        WindowPlacements.Track(this, App.Instance?.ActiveSilo, PlacementType, session.LayoutVersion > 1 ? $"silo:lab/{session.Lab.Id}/v{session.LayoutVersion}" : $"silo:lab/{session.Lab.Id}", this);
 
-        Loaded  += (_, _) => SyncShown();
+        Loaded  += (_, _) =>
+                   {
+                       SyncShown();
+                       UpdateProblems();
+                   };
         Closed  += OnClosed;
     }
 
@@ -109,11 +136,116 @@ public sealed class LabWindow : Window, IWindowLayout, ILabHost
 
     internal IEnumerable<string> InspectorIds => _inspectors.Keys.OrderBy(k => k, StringComparer.OrdinalIgnoreCase);
 
+    // ---- the panes every window has ---------------------------------------------------------------
+
+    private void AddLibrary()
+    {
+        if (_session is not ILabLibrary library) return;
+
+        var pane = new LabLibraryInspector(library);
+        _shared.Add(pane);
+        _inspectors[pane.Id] = pane;
+    }
+
+    private void AddCommonPanes()
+    {
+        var recent = new LabRecentInspector(_session, OpenRecent);
+        _shared.Add(recent);
+        _inspectors[recent.Id] = recent;
+
+        if (_session is ILabPresets { PresetKinds.Count: > 0 } presets)
+        {
+            var pane = new LabPresetsInspector(_session, presets);
+            _shared.Add(pane);
+            _inspectors[pane.Id] = pane;
+        }
+
+        if (_session is ILabProblems problems)
+        {
+            var pane = new LabProblemsInspector(problems);
+            _shared.Add(pane);
+            _inspectors[pane.Id] = pane;
+        }
+    }
+
+    private void PokeLibrary()
+    {
+        foreach (var pane in _shared.OfType<LabLibraryInspector>()) pane.Poke();
+    }
+
+    private async void OpenRecent(string text)
+    {
+        try
+        {
+            if (_session is ILabRecent recent) await recent.OpenRecentAsync(text);
+            else if (_session.TryParseValue(text, out var value)) await _session.OpenAsync(value);
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Opening {Text} again in {Lab} failed", text, _session.Lab.Name);
+            SetOutput(ex.Message, true);
+            (_session as ILabProblems)?.ReportProblem(LabProblemSeverity.Error, "Recent", ex.Message, text);
+        }
+    }
+
+    // ---- problems -------------------------------------------------------------------------------
+
+    private void WireProblems()
+    {
+        if (_session is not ILabProblems problems) return;
+
+        _problems = problems;
+        problems.ProblemsChanged += (_, _) => Dispatcher.InvokeAsync(UpdateProblems);
+
+        // a Lab that checks its value as it is edited says it changed
+        if (_session is ILabLive live) live.Changed += (_, _) => Dispatcher.InvokeAsync(UpdateProblems);
+        _problemsButton.Click += (_, _) => ShowInspector(LabProblemsInspector.InspectorId);
+    }
+
+    /// <summary>Counts the problems for the status bar and the pane; the pane opens the first time there is one (and stays closed if the person closes it).</summary>
+    private void UpdateProblems()
+    {
+        if (_closed || _problems is null || _problemsPending) return;
+
+        _problemsPending = true;
+        Dispatcher.InvokeAsync(() =>
+                               {
+                                   _problemsPending = false;
+                                   if (_closed || _problems is null) return;
+
+                                   var list     = _problems.ProblemList;
+                                   int errors   = list.Count(p => p.Severity == LabProblemSeverity.Error);
+                                   int warnings = list.Count(p => p.Severity == LabProblemSeverity.Warning);
+
+                                   _problemsButton.Visibility = list.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+                                   var text = new TextBlock { Text = list.Count.ToString(), VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(4, 0, 0, 0) };
+                                   var row  = new StackPanel { Orientation = Orientation.Horizontal };
+                                   if (LabUi.Icon(errors > 0 ? "StateFailed" : "Check", 13) is { } glyph)
+                                   {
+                                       glyph.Foreground = errors > 0 ? LabUi.Red : LabUi.Amber;
+                                       row.Children.Add(glyph);
+                                   }
+
+                                   row.Children.Add(text);
+                                   _problemsButton.Content = row;
+                                   _problemsButton.ToolTip = list.Count == 0 ? null : $"{errors} error(s), {warnings} warning(s), {list.Count - errors - warnings} note(s): click to see them";
+
+                                   if (list.Count > 0 && !_problemsAutoShown && IsLoaded)
+                                   {
+                                       _problemsAutoShown = true;
+                                       ShowInspector(LabProblemsInspector.InspectorId);
+                                   }
+
+                                   if (_inspectors.TryGetValue(LabProblemsInspector.InspectorId, out var pane) && pane is SharedPane shared) shared.Poke();
+                               }, DispatcherPriority.Background);
+    }
+
     // ---- building ---------------------------------------------------------------------------
 
     private UIElement BuildUi()
     {
         var root = new Grid();
+        root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
@@ -123,15 +255,21 @@ public sealed class LabWindow : Window, IWindowLayout, ILabHost
         Grid.SetRow(menu, 0);
         root.Children.Add(menu);
 
+        if (_topBar is not null)
+        {
+            Grid.SetRow(_topBar, 1);
+            root.Children.Add(_topBar);
+        }
+
         var bar = BuildToolbar();
-        Grid.SetRow(bar, 1);
+        Grid.SetRow(bar, 2);
         root.Children.Add(bar);
 
-        Grid.SetRow(_dock, 2);
+        Grid.SetRow(_dock, 3);
         root.Children.Add(_dock);
 
         var status = BuildStatusBar();
-        Grid.SetRow(status, 3);
+        Grid.SetRow(status, 4);
         root.Children.Add(status);
 
         InputBindings.Add(new KeyBinding(new DelegateCommand(_ => { _valueBox.Focus(); _valueBox.SelectAll(); }), Key.L, ModifierKeys.Control));
@@ -144,8 +282,17 @@ public sealed class LabWindow : Window, IWindowLayout, ILabHost
         var menu = new Menu();
 
         // an empty menu item cannot open, so each holds a stand-in that is replaced when it opens
+        AddMenu(menu, "_File", FillFileMenu);
+        if (OwnMenu("edit") is not null || Sorted(LabMenuPlace.Edit).Count > 0) AddMenu(menu, "_Edit", FillEditMenu);
+        foreach (var own in LabMenus.SafeMenus(_session).Where(m => !IsMenu(m, "file") && !IsMenu(m, "edit")))
+        {
+            var captured = own;
+            AddMenu(menu, captured.Header, item => LabMenus.Fill(item, captured.Items));
+        }
+
         AddMenu(menu, "_Lab",   FillLabMenu);
-        AddMenu(menu, "_Value", FillValueMenu);
+        // a Lab whose value actions all live in its own menus (the Parser Lab) has nothing for a Value menu
+        if (Remaining(LabMenus.Safe(() => _session.ValueActions).OfType<ProvidedCommand>()).Any()) AddMenu(menu, "_Value", FillValueMenu);
         AddMenu(menu, "Vie_w",  FillViewMenu);
         return menu;
 
@@ -164,48 +311,107 @@ public sealed class LabWindow : Window, IWindowLayout, ILabHost
         }
     }
 
-    private void FillLabMenu(MenuItem menu)
+    private static bool IsMenu(LabMenu menu, string name) => string.Equals(menu.Header.Replace("_", string.Empty), name, StringComparison.OrdinalIgnoreCase);
+
+    private LabMenu? OwnMenu(string name) => LabMenus.SafeMenus(_session).FirstOrDefault(m => IsMenu(m, name));
+
+    /// <summary>The global and value actions that go in this menu by what they are, in order with a separator between the kinds (when the Lab makes no menu of its own for it).</summary>
+    private List<ProvidedCommand?> Sorted(LabMenuPlace place)
     {
-        AddCommands(menu, _session.GlobalActions);
+        var all = LabMenus.Safe(() => _session.GlobalActions).Concat(LabMenus.Safe(() => _session.ValueActions)).OfType<ProvidedCommand>();
+        return LabMenus.Ranked(all.Select(c => (Command: c, Class: LabMenus.Classify(c))).Where(t => t.Class.Place == place).Select(t => (t.Command, t.Class.Rank)));
+    }
+
+    /// <summary>The actions of the Lab menu or the Value menu: the ones the File and Edit menus did not take.</summary>
+    private IEnumerable<ProvidedCommand> Remaining(IEnumerable<ProvidedCommand> actions)
+    {
+        bool ownFile = OwnMenu("file") is not null;
+        bool ownEdit = OwnMenu("edit") is not null;
+        var  inMenus = new HashSet<string>(LabMenus.SafeMenus(_session).SelectMany(m => m.Items).OfType<ProvidedCommand>().Select(c => c.Id), StringComparer.OrdinalIgnoreCase);
+        foreach (var action in actions)
+        {
+            if (inMenus.Contains(action.Id)) continue;
+
+            // what the File and Edit menus took (by what it is) is not listed again; a Lab that makes its own File or Edit lists what it wants there
+            var place = LabMenus.Classify(action).Place;
+            if (place == LabMenuPlace.File && !ownFile) continue;
+            if (place == LabMenuPlace.Edit && !ownEdit) continue;
+            yield return action;
+        }
+    }
+
+    private void FillFileMenu(MenuItem menu)
+    {
+        LabMenus.Fill(menu, OwnMenu("file")?.Items ?? Sorted(LabMenuPlace.File));
         if (menu.Items.Count > 0) menu.Items.Add(new Separator());
 
-        var newWindow = new MenuItem { Header = $"_New {_session.Lab.Name} Window" };
+        var newWindow = new MenuItem { Header = $"_New {_session.Lab.Name} Window", Icon = LabUi.Icon("TbNew") };
         newWindow.Click += (_, _) => LabHost.Open(_session.Lab);
         menu.Items.Add(newWindow);
 
-        var close = new MenuItem { Header = "_Close" };
+        menu.Items.Add(new Separator());
+        var close = new MenuItem { Header = "_Close", Icon = LabUi.Icon("TbCloseSilo") };
         close.Click += (_, _) => Close();
         menu.Items.Add(close);
     }
 
+    private void FillEditMenu(MenuItem menu)
+    {
+        LabMenus.Fill(menu, OwnMenu("edit")?.Items ?? Sorted(LabMenuPlace.Edit));
+        if (menu.Items.Count == 0) menu.Items.Add(new MenuItem { Header = "(nothing to edit)", IsEnabled = false });
+    }
+
+    private void FillLabMenu(MenuItem menu)
+    {
+        AddCommands(menu, Remaining(LabMenus.Safe(() => _session.GlobalActions).OfType<ProvidedCommand>()));
+        if (menu.Items.Count == 0) menu.Items.Add(new MenuItem { Header = "(no actions)", IsEnabled = false });
+    }
+
     private void FillValueMenu(MenuItem menu)
     {
-        AddCommands(menu, _session.ValueActions);
+        AddCommands(menu, Remaining(LabMenus.Safe(() => _session.ValueActions).OfType<ProvidedCommand>()));
         if (menu.Items.Count == 0) menu.Items.Add(new MenuItem { Header = "(no actions)", IsEnabled = false });
     }
 
     private void FillViewMenu(MenuItem menu)
     {
-        foreach (var id in InspectorIds)
+        // the panes of the things the Lab works with and keeps come first, then (after a line) the views of what is going on
+        int problems = _problems?.ProblemList.Count ?? 0;
+        var listed = _inspectors.Values.Where(i => i.Id != LabProblemsInspector.InspectorId || problems > 0 || IsInspectorOpen(i.Id))
+                                .OrderBy(i => i.Title, StringComparer.CurrentCultureIgnoreCase)
+                                .ToList();
+
+        void AddPanes(IEnumerable<LabInspector> panes)
         {
-            var inspector = _inspectors[id];
-            var item = new MenuItem { Header = inspector.Title.Replace("_", "__"), IsCheckable = true, IsChecked = IsInspectorOpen(id) };
-            item.Icon = ToolbarIcons.Find(inspector.IconKey) is { } geometry ? new AppIcon { Icon = geometry, Size = 16 } : null;
-            item.Click += (_, _) =>
-                          {
-                              // IsCheckable has already flipped the mark: it says what the person asked for
-                              if (item.IsChecked) ShowInspector(id);
-                              else HideInspector(id);
-                          };
-            menu.Items.Add(item);
+            foreach (var inspector in panes)
+            {
+                string id    = inspector.Id;
+                string title = id == LabProblemsInspector.InspectorId && problems > 0 ? $"{inspector.Title} ({problems})" : inspector.Title;
+                var    item  = new MenuItem { Header = title.Replace("_", "__"), IsCheckable = true, IsChecked = IsInspectorOpen(id) };
+                item.Icon = ToolbarIcons.Find(inspector.IconKey) is { } geometry ? new AppIcon { Icon = geometry, Size = 16 } : null;
+                item.Click += (_, _) =>
+                              {
+                                  // IsCheckable has already flipped the mark: it says what the person asked for
+                                  if (item.IsChecked) ShowInspector(id);
+                                  else HideInspector(id);
+                              };
+                menu.Items.Add(item);
+            }
         }
 
+        var entities = listed.Where(i => i.Kind == LabPaneKind.Entity).ToList();
+        var others   = listed.Where(i => i.Kind != LabPaneKind.Entity).ToList();
+        AddPanes(entities);
+        if (entities.Count > 0 && others.Count > 0) menu.Items.Add(new Separator());
+        AddPanes(others);
+
         menu.Items.Add(new Separator());
-        var reset = new MenuItem { Header = "_Reset Layout", ToolTip = "Put the panes back where a new window has them" };
+        var reset = new MenuItem { Header = "_Reset Layout", ToolTip = "Put the panes back where a new window has them", Icon = LabUi.Icon("Refresh") };
         reset.Click += (_, _) => ResetLayout();
         menu.Items.Add(reset);
 
-        var terminal = new MenuItem { Header = "Terminal _Log", InputGestureText = "Ctrl+`" };
+        menu.Items.Add(new Separator());
+        var terminal = new MenuItem { Header = "Terminal _Log", InputGestureText = "Ctrl+`", Icon = LabUi.Icon("Terminal") };
         terminal.Click += (_, _) => ShowLog();
         menu.Items.Add(terminal);
     }
@@ -289,6 +495,9 @@ public sealed class LabWindow : Window, IWindowLayout, ILabHost
         _outputText.ToolTip     = "Click to open the terminal log";
         _outputText.MouseLeftButtonUp += (_, _) => ShowLog();
 
+        DockPanel.SetDock(_problemsButton, Dock.Right);
+        _problemsButton.SetResourceReference(ForegroundProperty, "Theme.Text");
+        dock.Children.Add(_problemsButton);
         dock.Children.Add(_statusText);
         dock.Children.Add(_outputText);
         dock.Children.Add(prompt);
@@ -315,7 +524,7 @@ public sealed class LabWindow : Window, IWindowLayout, ILabHost
         FillBar(_contextBar, SafeActions(() => _session.ContextActions), 4);
         FillBar(_valueBar,   SafeActions(() => _session.ValueActions),   0);
 
-        foreach (var action in SafeActions(() => _session.GlobalActions).Concat(SafeActions(() => _session.ContextActions)).Concat(SafeActions(() => _session.ValueActions)))
+        foreach (var action in LabMenus.All(_session))
         {
             if (string.IsNullOrWhiteSpace(action.Gesture)) continue;
 
@@ -359,13 +568,22 @@ public sealed class LabWindow : Window, IWindowLayout, ILabHost
                          {
                              Command          = action.Command,
                              CommandParameter = action.Parameter,
-                             Padding          = new Thickness(7, 3, 7, 3),
+                             Padding          = new Thickness(7, 3, 8, 3),
                              Margin           = new Thickness(0, 0, 3, 0),
                              MinWidth         = 28,
                              ToolTip          = string.IsNullOrEmpty(action.ToolTip) ? header : $"{header}: {action.ToolTip}"
                          };
 
-            button.Content = ToolbarIcons.Find(action.IconKey) is { } geometry ? (object)new AppIcon { Icon = geometry, Size = 16 } : header;
+            // every button has an icon and its text, never one without the other
+            var content = new StackPanel { Orientation = Orientation.Horizontal };
+            if (LabUi.Icon(LabMenus.IconFor(action), 14) is { } glyph)
+            {
+                glyph.Margin = new Thickness(0, 0, 5, 0);
+                content.Children.Add(glyph);
+            }
+
+            content.Children.Add(new TextBlock { Text = header, VerticalAlignment = VerticalAlignment.Center });
+            button.Content = content;
             bar.Children.Add(button);
         }
 
@@ -411,26 +629,80 @@ public sealed class LabWindow : Window, IWindowLayout, ILabHost
         if (e.PropertyName == nameof(AppTheme.IsEffectivelyDark)) Dispatcher.InvokeAsync(ApplyDockTheme);
     }
 
-    /// <summary>The arrangement of a new window: the main view in the middle, each inspector that starts open tabbed on its side.</summary>
+    /// <summary>How many lanes (columns, or sections along the bottom) the visible-by-default inspectors have on a side.</summary>
+    private int LaneCount(LabDock dock) => _inspectors.Values.Where(i => i.Dock == dock && i.VisibleByDefault).Select(i => i.Lane).Distinct().Count();
+
+    /// <summary>How wide the window needs to be for every lane to have a column of its own.</summary>
+    private double WidthForLanes() => (LaneCount(LabDock.Left) + LaneCount(LabDock.Right)) * LaneWidth + MainMinWidth;
+
+    /// <summary>A Lab with several lanes opens wider (as far as the screen allows) so that they can sit side by side.</summary>
+    private void EnsureWidth()
+    {
+        double need = WidthForLanes();
+        if (LaneCount(LabDock.Left) + LaneCount(LabDock.Right) <= 2) return;
+
+        double room = SystemParameters.WorkArea.Width - 24;
+        if (Width < need) Width = Math.Min(need + 40, room);
+    }
+
+    /// <summary>The lane a pane is in now: its own when the window is wide enough for the lanes, else all of a side share one.</summary>
+    private int LaneOf(LabInspector inspector) => _lanes ? inspector.Lane : 0;
+
+    /// <summary>
+    ///     The arrangement of a new window: the main view in the middle; the left and right inspectors in a column per lane (all of a
+    ///     side tabbed together when the window is too narrow for that); the bottom ones side by side under the main view.
+    /// </summary>
     private void BuildDefaultLayout()
     {
         foreach (var pane in _panes.Values) pane.Content = null;
         _panes.Clear();
         foreach (var document in _dock.Layout.Descendents().OfType<LayoutDocument>()) document.Content = null;
 
+        _lanes = Width >= WidthForLanes() - 1;
+
         var main = new LayoutDocument { Title = _session.Lab.Name, ContentId = MainId, Content = _main, CanClose = false, CanFloat = false };
         var docs = new LayoutDocumentPane();
         docs.Children.Add(main);
 
-        var left  = new LayoutAnchorablePane { DockWidth = new GridLength(300) };
-        var right = new LayoutAnchorablePane { DockWidth = new GridLength(380) };
-        foreach (var inspector in _inspectors.Values.Where(i => i.VisibleByDefault))
-            (inspector.Dock == LabDock.Left ? left : right).Children.Add(MakePane(inspector));
+        var shown = _inspectors.Values.Where(i => i.VisibleByDefault).ToList();
+
+        List<LayoutAnchorablePane> Panes(LabDock dock, double single, double many)
+        {
+            var groups = shown.Where(i => i.Dock == dock).GroupBy(LaneOf).OrderBy(g => g.Key).ToList();
+            var panes  = new List<LayoutAnchorablePane>();
+            foreach (var group in groups)
+            {
+                var pane = new LayoutAnchorablePane();
+                if (dock == LabDock.Bottom) pane.DockWidth = new GridLength(1, GridUnitType.Star);
+                else pane.DockWidth = new GridLength(groups.Count > 1 ? many : single);
+                foreach (var inspector in group) pane.Children.Add(MakePane(inspector));
+                panes.Add(pane);
+            }
+
+            return panes;
+        }
+
+        var left   = Panes(LabDock.Left, 300, LaneWidth);
+        var right  = Panes(LabDock.Right, 380, LaneWidth + 30);
+        var bottom = Panes(LabDock.Bottom, 0, 0);
+
+        // the middle: the main view, with the bottom panes side by side under it
+        ILayoutPanelElement middle = docs;
+        if (bottom.Count > 0)
+        {
+            var below = new LayoutPanel { Orientation = Orientation.Horizontal, DockHeight = new GridLength(BottomHeight) };
+            foreach (var pane in bottom) below.Children.Add(pane);
+
+            var column = new LayoutPanel { Orientation = Orientation.Vertical };
+            column.Children.Add(docs);
+            column.Children.Add(below);
+            middle = column;
+        }
 
         var panel = new LayoutPanel { Orientation = Orientation.Horizontal };
-        if (left.Children.Count > 0) panel.Children.Add(left);
-        panel.Children.Add(docs);
-        if (right.Children.Count > 0) panel.Children.Add(right);
+        foreach (var pane in left) panel.Children.Add(pane);
+        panel.Children.Add(middle);
+        foreach (var pane in right) panel.Children.Add(pane);
 
         _dock.Layout = new LayoutRoot { RootPanel = panel };
     }
@@ -497,7 +769,7 @@ public sealed class LabWindow : Window, IWindowLayout, ILabHost
         if (pane.Root is null)
         {
             // tab it with an open inspector of the same side, else give it a column of its own
-            var sibling = _inspectors.Values.Where(i => i.Dock == inspector.Dock && !ReferenceEquals(i, inspector))
+            var sibling = _inspectors.Values.Where(i => i.Dock == inspector.Dock && LaneOf(i) == LaneOf(inspector) && !ReferenceEquals(i, inspector))
                                      .Select(i => _panes.GetValueOrDefault(i.Id))
                                      .FirstOrDefault(p => p is { Root: not null } && p.Parent is LayoutAnchorablePane);
 
@@ -507,8 +779,12 @@ public sealed class LabWindow : Window, IWindowLayout, ILabHost
             }
             else
             {
-                pane.AddToLayout(_dock, inspector.Dock == LabDock.Left ? AnchorableShowStrategy.Left : AnchorableShowStrategy.Right);
-                if (pane.Parent is LayoutAnchorablePane own) own.DockWidth = new GridLength(inspector.Dock == LabDock.Left ? 300 : 380);
+                pane.AddToLayout(_dock, inspector.Dock switch { LabDock.Left => AnchorableShowStrategy.Left, LabDock.Bottom => AnchorableShowStrategy.Bottom, _ => AnchorableShowStrategy.Right });
+                if (pane.Parent is LayoutAnchorablePane own)
+                {
+                    if (inspector.Dock == LabDock.Bottom) own.DockHeight = new GridLength(BottomHeight);
+                    else own.DockWidth = new GridLength(inspector.Dock == LabDock.Left ? 300 : 380);
+                }
             }
         }
         else if (!pane.IsVisible)
@@ -560,6 +836,7 @@ public sealed class LabWindow : Window, IWindowLayout, ILabHost
         foreach (var pane in _panes.Values) pane.Content = null;
         foreach (var document in _dock.Layout.Descendents().OfType<LayoutDocument>()) document.Content = null;
 
+        _lanes = Width >= WidthForLanes() - 1;
         var placed = new Dictionary<string, LayoutAnchorable>(StringComparer.OrdinalIgnoreCase);
         try
         {
@@ -694,6 +971,7 @@ public sealed class LabWindow : Window, IWindowLayout, ILabHost
         {
             Print("error: " + ex.Message);
             SetOutput(ex.Message, true);
+            (_session as ILabProblems)?.ReportProblem(LabProblemSeverity.Error, "Terminal", ex.Message, line);
         }
     }
 

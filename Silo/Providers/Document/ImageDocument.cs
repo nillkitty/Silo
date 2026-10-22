@@ -1,6 +1,7 @@
 ﻿using System.IO;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using Silo.Providers.Data.Source;
 using Telefrag.DI;
 
 namespace Silo.Providers.Document;
@@ -13,18 +14,39 @@ public class ImageDocument(IDocumentProvider<ImageSource> provider, Uri uri) : D
 ///     format, each
 ///     giving its names. Reading is the same for all of them.
 /// </summary>
-[Transient(typeof(IDocumentProvider<ImageSource>))]
-public abstract class ImageFormat : IFileFormat, IDocumentProvider<ImageSource>
+public abstract class ImageFormat : IImageFormat
 {
-    public abstract string ContentType { get; }
-
     public abstract string DisplayName { get; }
 
     public abstract string FileExtension { get; }
+    public abstract string ContentType   { get; }
 
     public IEnumerable<DataVerb> GetSupportedVerbs()
     {
         throw new NotImplementedException();
+    }
+
+    /// <inheritdoc />
+    public virtual BitmapEncoder? CreateEncoder()
+    {
+        return null;
+    }
+
+    /// <summary>
+    ///     Writes the frames as one picture of this format (a still format takes the first frame only, as the encoder does: an
+    ///     animated GIF and
+    ///     a multi-page TIFF take all of them). Throws <see cref="NotSupportedException" /> for a format with no encoder.
+    /// </summary>
+    public void Write(Stream stream, IEnumerable<ImageSource> documents)
+    {
+        stream.Required();
+        var encoder = CreateEncoder() ?? throw new NotSupportedException($"{DisplayName} can be read but not written.");
+        foreach (var image in documents)
+            if (image is BitmapSource bitmap)
+                encoder.Frames.Add(BitmapFrame.Create(bitmap));
+
+        if (encoder.Frames.Count == 0) throw new InvalidOperationException("There is no picture to write.");
+        encoder.Save(stream);
     }
 
     /// <summary>
@@ -58,34 +80,59 @@ public abstract class ImageFormat : IFileFormat, IDocumentProvider<ImageSource>
     }
 }
 
+[Singleton(typeof(IImageFormat))]
 public class JpegFormat : ImageFormat
 {
     public override string ContentType   { get; } = "image/jpeg";
     public override string DisplayName   { get; } = "JPEG Image";
     public override string FileExtension { get; } = "jpg,jpeg";
+
+    public override BitmapEncoder? CreateEncoder()
+    {
+        return new JpegBitmapEncoder();
+    }
 }
 
+[Singleton(typeof(IImageFormat))]
 public class BmpFormat : ImageFormat
 {
     public override string ContentType   { get; } = "image/bmp";
     public override string DisplayName   { get; } = "Bitmap Image";
     public override string FileExtension { get; } = "bmp";
+
+    public override BitmapEncoder? CreateEncoder()
+    {
+        return new BmpBitmapEncoder();
+    }
 }
 
+[Singleton(typeof(IImageFormat))]
 public class PngFormat : ImageFormat
 {
     public override string ContentType   { get; } = "image/png";
     public override string DisplayName   { get; } = "PNG Image";
     public override string FileExtension { get; } = "png";
+
+    public override BitmapEncoder? CreateEncoder()
+    {
+        return new PngBitmapEncoder();
+    }
 }
 
+[Singleton(typeof(IImageFormat))]
 public class GifFormat : ImageFormat
 {
     public override string ContentType   { get; } = "image/gif";
     public override string DisplayName   { get; } = "GIF Image";
     public override string FileExtension { get; } = "gif";
+
+    public override BitmapEncoder? CreateEncoder()
+    {
+        return new GifBitmapEncoder();
+    }
 }
 
+[Singleton(typeof(IImageFormat))]
 public class IconFormat : ImageFormat
 {
     public override string ContentType   { get; } = "image/x-icon";
@@ -93,17 +140,29 @@ public class IconFormat : ImageFormat
     public override string FileExtension { get; } = "ico";
 }
 
+[Singleton(typeof(IImageFormat))]
 public class TiffFormat : ImageFormat
 {
     public override string ContentType   { get; } = "image/tiff";
     public override string DisplayName   { get; } = "TIFF Image";
     public override string FileExtension { get; } = "tif,tiff";
+
+    public override BitmapEncoder? CreateEncoder()
+    {
+        return new TiffBitmapEncoder();
+    }
 }
 
 /// <summary>Windows Media Photo, also called HD Photo and JPEG XR.</summary>
+[Singleton(typeof(IImageFormat))]
 public class WmpFormat : ImageFormat
 {
     public override string ContentType   { get; } = "image/vnd.ms-photo";
     public override string DisplayName   { get; } = "Windows Media Photo";
     public override string FileExtension { get; } = "wdp,hdp,jxr";
+
+    public override BitmapEncoder? CreateEncoder()
+    {
+        return new WmpBitmapEncoder();
+    }
 }

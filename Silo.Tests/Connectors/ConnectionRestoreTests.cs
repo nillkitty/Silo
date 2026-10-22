@@ -1,7 +1,5 @@
-using System.Linq;
 using Silo.Connectors;
 using Silo.Connectors.File;
-using Silo.Contracts.Providers.Data;
 
 namespace Silo.Tests.Connectors;
 
@@ -21,7 +19,7 @@ public class ConnectionRestoreTests
         for (int attempt = 0; attempt < 100; attempt++)
             Assert.That(ConnectionRestore.RetryDelay(attempt), Is.LessThanOrEqualTo(ConnectionRestore.LongestRetry));
 
-        Assert.That(ConnectionRestore.RetryDelay(50),  Is.EqualTo(ConnectionRestore.LongestRetry));
+        Assert.That(ConnectionRestore.RetryDelay(50),           Is.EqualTo(ConnectionRestore.LongestRetry));
         Assert.That(ConnectionRestore.RetryDelay(int.MaxValue), Is.EqualTo(ConnectionRestore.LongestRetry));
     }
 
@@ -34,7 +32,7 @@ public class ConnectionRestoreTests
     [Test]
     public void The_request_carries_the_saved_destination_connector_and_name()
     {
-        var uri = new Uri("file:///C:/data");
+        var uri     = new Uri("file:///C:/data");
         var request = ConnectionRestore.RequestFor(new ConnectionRecord(3, "My data", uri), new FileConnector());
 
         Assert.That(request.DisplayName, Is.EqualTo("My data"));
@@ -72,17 +70,17 @@ public class ConnectionRestoreTests
     [Test]
     public void A_connection_that_is_not_back_says_so_and_offers_to_try_again_and_to_forget()
     {
-        var record = new ConnectionRecord(5, "Server", new Uri("file:///C:/data"));
+        var record  = new ConnectionRecord(5, "Server", new Uri("file:///C:/data"));
         int retried = 0, forgotten = 0;
         var pending = new PendingConnection(record, "unreachable", true, () => retried++, () => forgotten++);
 
-        Assert.That(pending.Label,  Is.EqualTo("Server (not connected)"));
-        Assert.That(pending.Failed, Is.True);
+        Assert.That(pending.Label,                            Is.EqualTo("Server (not connected)"));
+        Assert.That(pending.Failed,                           Is.True);
         Assert.That(pending.GetDetails().Select(d => d.Name), Does.Contain("Problem"));
 
         var commands = pending.GetCommands().ToList();
         Assert.That(commands.Select(c => c.Id), Is.EqualTo(new[] { "connection.retry", "connection.forget" }));
-        Assert.That(commands[1].IsDestructive, Is.True);
+        Assert.That(commands[1].IsDestructive,  Is.True);
 
         commands[0].Command.Execute(null);
         commands[1].Command.Execute(null);
@@ -94,8 +92,8 @@ public class ConnectionRestoreTests
     {
         var pending = new PendingConnection(new ConnectionRecord(5, "Server", null), null, false, () => { }, () => { });
 
-        Assert.That(pending.Label,  Is.EqualTo("Server (connecting...)"));
-        Assert.That(pending.Failed, Is.False);
+        Assert.That(pending.Label,                                          Is.EqualTo("Server (connecting...)"));
+        Assert.That(pending.Failed,                                         Is.False);
         Assert.That(pending.GetCommands().First().Command.CanExecute(null), Is.False);
     }
 

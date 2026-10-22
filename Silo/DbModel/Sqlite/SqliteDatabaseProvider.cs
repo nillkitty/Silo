@@ -3,9 +3,10 @@ using System.Security.Principal;
 using Microsoft.Data.Sqlite;
 using Newtonsoft.Json;
 using Serilog;
-using Silo.Contracts.Providers.Data;
 using Silo.DbModel.Global;
 using Silo.DbModel.Worlds;
+using Silo.Providers.Data;
+using Silo.Providers.Data.Validation;
 
 namespace Silo.DbModel.Sqlite;
 
@@ -44,23 +45,22 @@ namespace Silo.DbModel.Sqlite;
 /// </remarks>
 public sealed partial class SqliteDatabaseProvider : IDatabaseProvider, IDatabaseChanges, ISiloFile, IDisposable
 {
-    private static readonly JsonSerializerSettings JsonSettings = new()
-                                                                  {
-                                                                      ReferenceLoopHandling = ReferenceLoopHandling.Ignore,
-                                                                      NullValueHandling     = NullValueHandling.Include
-                                                                  };
-
     /// <summary>
     ///     SQLite allows 10 attached databases by default; x, u and y use three, leaving this many for Worlds in the archive
     ///     layout. (The simple layout has no such limit.)
     /// </summary>
     internal const int MaxArchiveWorlds = 7;
 
-    private readonly SemaphoreSlim              _gate = new(1, 1);
+    private static readonly JsonSerializerSettings JsonSettings = new()
+                                                                  {
+                                                                      ReferenceLoopHandling = ReferenceLoopHandling.Ignore,
+                                                                      NullValueHandling     = NullValueHandling.Include
+                                                                  };
+
+    private readonly SemaphoreSlim              _gate         = new(1, 1);
     private readonly Dictionary<string, string> _worldAliases = new();
     private          SqliteConnection           _conn;
     private          SiloLayout                 _layout;
-    private          string                     _siloPath;
     private          string                     _tempDir;
 
     /// <summary>The qualified physical table name for a logical (alias, table), per the storage format in use.</summary>
@@ -130,7 +130,10 @@ public sealed partial class SqliteDatabaseProvider : IDatabaseProvider, IDatabas
 
     // ------------------------------------------------------------------------------------------
 
-    /// <summary>Walks the same entity graph an upsert will, making sure every World-family entity's World is attached and has its tables.</summary>
+    /// <summary>
+    ///     Walks the same entity graph an upsert will, making sure every World-family entity's World is attached and has
+    ///     its tables.
+    /// </summary>
     private void ProvisionWorlds(object item, HashSet<object> visited)
     {
         if (!visited.Add(item)) return;
@@ -202,7 +205,7 @@ public sealed partial class SqliteDatabaseProvider : IDatabaseProvider, IDatabas
             var setClause = string.Join(", ", colNames.Where(c => c != "Id").Select(c => $"[{c}]=excluded.[{c}]"));
 
             cmd.CommandText = $"INSERT INTO {T(alias, info.TableName)} ({string.Join(", ", colNames.Select(c => $"[{c}]"))}) " +
-                              $"VALUES ({string.Join(", ",                                   colNames.Select(c => "@" + c))}) "  +
+                              $"VALUES ({string.Join(", ",                                 colNames.Select(c => "@" + c))}) "  +
                               (setClause.Length > 0 ? $"ON CONFLICT([Id]) DO UPDATE SET {setClause}" : "ON CONFLICT([Id]) DO NOTHING");
 
             foreach (var (k, v) in cols)
@@ -223,7 +226,7 @@ public sealed partial class SqliteDatabaseProvider : IDatabaseProvider, IDatabas
 
             var colNames = values.Keys.ToList();
             cmd.CommandText = $"INSERT INTO {T(alias, info.TableName)} ({string.Join(", ", colNames.Select(c => $"[{c}]"))}) " +
-                              $"VALUES ({string.Join(", ",                                   colNames.Select(c => "@" + c))})";
+                              $"VALUES ({string.Join(", ",                                 colNames.Select(c => "@" + c))})";
 
             foreach (var (k, v) in values)
                 cmd.Parameters.AddWithValue("@" + k, v ?? DBNull.Value);
@@ -274,14 +277,14 @@ public sealed partial class SqliteDatabaseProvider : IDatabaseProvider, IDatabas
     {
         var key = item switch
                   {
-                      World w         => w.Key,
-                      WorldType wt    => wt.World?.Key,
-                      WorldField wf   => wf.World?.Key,
-                      WorldMapping wm => wm.World?.Key,
-                      WorldSync ws    => ws.World?.Key,
-                      FieldMapping fm => fm.Field?.World?.Key,
+                      World w          => w.Key,
+                      WorldType wt     => wt.World?.Key,
+                      WorldField wf    => wf.World?.Key,
+                      WorldMapping wm  => wm.World?.Key,
+                      WorldSync ws     => ws.World?.Key,
+                      FieldMapping fm  => fm.Field?.World?.Key,
                       AuthoredTable at => at.World?.Key,
-                      _               => null
+                      _                => null
                   };
 
         if (key is null)
@@ -302,8 +305,9 @@ public sealed partial class SqliteDatabaseProvider : IDatabaseProvider, IDatabas
         }
 
         if (_worldAliases.Count >= MaxArchiveWorlds)
-            throw new InvalidOperationException($"An archive-format Silo can hold at most {MaxArchiveWorlds} Worlds (SQLite attaches at most 10 " +
-                                                "database files to one connection). Remove a World or combine connectors.");
+            throw new
+                InvalidOperationException($"An archive-format Silo can hold at most {MaxArchiveWorlds} Worlds (SQLite attaches at most 10 " +
+                                          "database files to one connection). Remove a World or combine connectors.");
 
         var fileName = $"w-{sanitized}.db";
         SqliteConnectionFactory.Attach(_conn, Path.Combine(_tempDir, fileName), alias);
@@ -326,7 +330,7 @@ public sealed partial class SqliteDatabaseProvider : IDatabaseProvider, IDatabas
     {
         _conn        = conn.Required();
         _tempDir     = tempDir.Required();
-        _siloPath    = siloPath.Required();
+        FilePath    = siloPath.Required();
         _layout      = layout.Required();
         _workingFile = workingFile;
         _disk        = disk;

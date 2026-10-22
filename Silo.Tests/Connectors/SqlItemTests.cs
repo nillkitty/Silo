@@ -1,4 +1,5 @@
-﻿using System.Text.RegularExpressions;
+﻿using System.IO;
+using System.Text.RegularExpressions;
 using Silo.Connectors.Sql;
 
 namespace Silo.Tests.Connectors;
@@ -7,12 +8,12 @@ public class SqlItemTests
 {
     // ---- the product's name for a server version ------------------------------------------------
 
-    [TestCase("8.00.2039", "2000")]
-    [TestCase("9.00.5000", "2005")]
+    [TestCase("8.00.2039",  "2000")]
+    [TestCase("9.00.5000",  "2005")]
     [TestCase("10.00.6000", "2008")]
     [TestCase("10.50.6000", "2008 R2")]
-    [TestCase("11.0.7001", "2012")]
-    [TestCase("12.0.6024", "2014")]
+    [TestCase("11.0.7001",  "2012")]
+    [TestCase("12.0.6024",  "2014")]
     [TestCase("13.00.6300", "2016")]
     [TestCase("14.00.3465", "2017")]
     [TestCase("15.00.4435", "2019")]
@@ -34,9 +35,9 @@ public class SqlItemTests
     [Test]
     public void No_version_is_an_empty_name_and_not_a_failure()
     {
-        Assert.That(SqlNames.ProductVersion(null),  Is.Empty);
-        Assert.That(SqlNames.ProductVersion(""),    Is.Empty);
-        Assert.That(SqlNames.ProductVersion("  "),  Is.Empty);
+        Assert.That(SqlNames.ProductVersion(null), Is.Empty);
+        Assert.That(SqlNames.ProductVersion(""),   Is.Empty);
+        Assert.That(SqlNames.ProductVersion("  "), Is.Empty);
     }
 
     // ---- icons ---------------------------------------------------------------------------------
@@ -46,7 +47,7 @@ public class SqlItemTests
     {
         foreach (var kind in Enum.GetValues<SqlItemKind>())
         {
-            Assert.That(SqlItem.IconKeyOf(kind, true), Is.Not.Empty, kind.ToString());
+            Assert.That(SqlItem.IconKeyOf(kind, true),  Is.Not.Empty,                kind.ToString());
             Assert.That(SqlItem.IconKeyOf(kind, false), Is.EqualTo("FsFileMissing"), kind.ToString());
         }
     }

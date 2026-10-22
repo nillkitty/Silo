@@ -4,6 +4,7 @@ using System.Numerics;
 using System.Reflection;
 using System.Runtime.Loader;
 using Serilog;
+using Silo.Providers.Reflection;
 using Telefrag.DI;
 using AssemblyEntity = Silo.DbModel.Global.Assembly;
 using IoFile = System.IO.File;
@@ -26,8 +27,13 @@ namespace Silo.Providers;
 ///         preceded the call. <see cref="TypesLoaded" /> is raised from whichever thread did the indexing.
 ///     </para>
 ///     <para>
-///         <see cref="Filters" /> narrow what <see cref="GetConstructable{TType}" /> offers (it feeds pickers such as the
-///         default-provider prompts). <see cref="GetTypes" /> and <see cref="FindType" /> are never filtered: asking for
+///         Filters narrow what <see cref="GetConstructable{TType}" /> offers (it feeds pickers such as the
+///         default-provider prompts) and answer <see cref="Filter" />. They are the ones added with
+///         <see cref="AddFilter" /> (see
+///         <see cref="Filters" />) and the ones registered in the component container (<see cref="IAssemblyFilter" />,
+///         <see cref="ITypeFilter" />, <see cref="IPropertyFilter" /> and the other kinds); the container's are asked for
+///         once, the first
+///         time they are needed. <see cref="GetTypes" /> and <see cref="FindType" /> are never filtered: asking for
 ///         a type by name, or for everything, means exactly that. Assembly filters get the
 ///         <see cref="System.Reflection.Assembly" /> or, when they are written against the Silo assembly record
 ///         (<see cref="AssemblyEntity" />, as <see cref="IAssemblyFilter" /> is), a record describing it.
@@ -39,8 +45,11 @@ namespace Silo.Providers;
 [Singleton(typeof(IReflectionProvider))]
 public sealed class AppDomainReflectionProvider : IReflectionProvider, IDisposable
 {
-    private static readonly ILogger     Logger = Log.ForContext<AppDomainReflectionProvider>();
-    private readonly        List<Entry> _all   = [];
+    private static readonly ILogger Logger = Log.ForContext<AppDomainReflectionProvider>();
+
+    // set while this thread is asking the container for filters, so a filter that uses the provider in its constructor does not send it round again
+    [ThreadStatic] private static bool        _collecting;
+    private readonly              List<Entry> _all = [];
 
     private readonly Dictionary<ReflectedAssembly, IndexedAssembly>         _assemblies    = [];
     private readonly Dictionary<string, List<Entry>>                        _byFullName    = new(StringComparer.OrdinalIgnoreCase);
@@ -55,6 +64,9 @@ public sealed class AppDomainReflectionProvider : IReflectionProvider, IDisposab
     private bool             _disposed;
     private int              _drainScheduled;
     private bool             _initialized;
+
+    // the filters registered in the component container, asked for once (null until then; not kept while there is no app, as in tests)
+    private volatile IReadOnlyList<IReflectionFilter>? _registered;
 
     /// <summary>
     ///     The classifier used to categorize types: the registered <see cref="ITypeClassifier" />, or the namespace-based
@@ -332,6 +344,118 @@ public sealed class AppDomainReflectionProvider : IReflectionProvider, IDisposab
         return false;
     }
 
+    /// <summary>
+    ///     The filters that apply: those added with <see cref="AddFilter" />, then those registered in the container,
+    ///     each once.
+    /// </summary>
+    private IReflectionFilter[] AllFilters()
+    {
+        IReflectionFilter[] added;
+        lock (_lock)
+        {
+            added = _filters.ToArray();
+        }
+
+        var registered = Registered();
+        if (registered.Count == 0) return added;
+
+        var all = new List<IReflectionFilter>(added);
+        foreach (var filter in registered)
+            if (!all.Any(f => ReferenceEquals(f, filter)))
+                all.Add(filter);
+
+        return all.ToArray();
+    }
+
+    /// <summary>
+    ///     The filters registered in the component container, of every filter kind (assembly, type, interface, property,
+    ///     event, method, constructor, field).
+    /// </summary>
+    private IReadOnlyList<IReflectionFilter> Registered()
+    {
+        if (_registered is { } known) return known;
+        if (_collecting || App.Instance is null) return [];
+
+        _collecting = true;
+        try
+        {
+            var found = new List<IReflectionFilter>();
+            CollectRegistered<IAssemblyFilter>(found);
+            CollectRegistered<ITypeFilter>(found);
+            CollectRegistered<IInterfaceFilter>(found);
+            CollectRegistered<IPropertyFilter>(found);
+            CollectRegistered<IEventFilter>(found);
+            CollectRegistered<IMethodFilter>(found);
+            CollectRegistered<IConstructorFilter>(found);
+            CollectRegistered<IFieldFilter>(found);
+            return _registered = found;
+        }
+        finally
+        {
+            _collecting = false;
+        }
+    }
+
+    private static void CollectRegistered<TFilter>(List<IReflectionFilter> into) where TFilter : class, IReflectionFilter
+    {
+        try
+        {
+            foreach (var filter in App.Resolve<IEnumerable<TFilter>>() ?? [])
+                if (filter is not null && !into.Any(f => ReferenceEquals(f, filter)))
+                    into.Add(filter);
+        }
+        catch (Exception ex)
+        {
+            Logger.Warning(ex, "The registered {filter}s could not be collected", typeof(TFilter).Name);
+        }
+    }
+
+    /// <summary>
+    ///     Whether any of <paramref name="filters" /> ignores <paramref name="item" />: an assembly, a type, or a member
+    ///     (property, event, method, constructor, field).
+    /// </summary>
+    private bool IsFilteredItem(object item, IReflectionFilter[] filters)
+    {
+        switch (item)
+        {
+            case Type type:
+                // a type is also judged by the filters of the assembly it comes from, as in GetConstructable
+                return IsFiltered(type, filters, []);
+
+            case ReflectedAssembly or AssemblyEntity:
+            {
+                var described = item as AssemblyEntity ?? Describe((ReflectedAssembly)item);
+                foreach (var filter in filters)
+                    try
+                    {
+                        var kind = filter.TypeFiltered;
+                        if (kind == typeof(AssemblyEntity)    && filter.IsIgnore(described)) return true;
+                        if (kind == typeof(ReflectedAssembly) && item is ReflectedAssembly && filter.IsIgnore(item)) return true;
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Warning(ex, "A reflection filter failed on assembly {assembly}; it is kept", described.AssemblyName);
+                    }
+
+                return false;
+            }
+
+            default:
+                foreach (var filter in filters)
+                    try
+                    {
+                        if (filter is not IInterfaceFilter && filter.TypeFiltered.IsInstanceOfType(item) && filter.IsIgnore(item))
+                            return true;
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Warning(ex, "A reflection filter failed on {item}; it is kept", item);
+                    }
+
+                return false;
+        }
+    }
+
     private static Type? Pick(Dictionary<string, List<Entry>> index, string key, TypeCategory category)
     {
         if (!index.TryGetValue(key, out var bucket)) return null;
@@ -522,16 +646,30 @@ public sealed class AppDomainReflectionProvider : IReflectionProvider, IDisposab
 
         var candidates = _constructable.GetOrAdd((typeof(TType), category), key => FindConstructable(key.Item1, key.Item2));
 
-        IReflectionFilter[] filters;
-        lock (_lock)
-        {
-            filters = _filters.ToArray();
-        }
-
+        var filters = AllFilters();
         if (filters.Length == 0) return [.. candidates];
 
         var assemblyVerdicts = new Dictionary<(IReflectionFilter, ReflectedAssembly), bool>();
         return candidates.Where(t => !IsFiltered(t, filters, assemblyVerdicts)).ToList();
+    }
+
+    /// <summary>
+    ///     Asks the filters -- those added with <see cref="AddFilter" /> and those registered in the container -- whether
+    ///     <paramref name="item" /> is to be ignored. An <see cref="System.Reflection.Assembly" /> is judged by the
+    ///     <see cref="IAssemblyFilter" />s, a <see cref="Type" /> by the <see cref="ITypeFilter" />s (and the
+    ///     <see cref="IInterfaceFilter" />s,
+    ///     when it is an interface) and by the assembly filters of the assembly it comes from, and a
+    ///     <see cref="System.Reflection.PropertyInfo" /> by the <see cref="IPropertyFilter" />s; the other member kinds
+    ///     likewise by their own
+    ///     filters. A filter that throws is logged and does not ignore the item. Null, and anything else, is not ignored.
+    /// </summary>
+    /// <returns>True when the item should be ignored.</returns>
+    public bool Filter(object item)
+    {
+        if (item is null) return false;
+
+        var filters = AllFilters();
+        return filters.Length != 0 && IsFilteredItem(item, filters);
     }
 
     public List<Type> GetTypes(TypeCategory category = TypeCategory.All)

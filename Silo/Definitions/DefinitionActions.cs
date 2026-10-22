@@ -1,12 +1,14 @@
-using EnumType = Silo.DbModel.Meta.EnumType;
 using Silo.Model;
+using Silo.Providers.Data;
 using Silo.Providers.Definitions;
 using Silo.Ui.Windows;
+using EnumType = Silo.DbModel.Meta.EnumType;
 
 namespace Silo.Definitions;
 
 /// <summary>
-///     What can be done to the enums and syntaxes of a Silo from the screens (the lists and the Explorer's menus): create, edit, delete, and for enums
+///     What can be done to the enums and syntaxes of a Silo from the screens (the lists and the Explorer's menus): create,
+///     edit, delete, and for enums
 ///     add, change and remove a single value. A change that cannot be made says why in the status bar or a message.
 /// </summary>
 public static class DefinitionActions
@@ -62,7 +64,10 @@ public static class DefinitionActions
         return store;
     }
 
-    private static void Problem(string title, string text) => MessageBox.Show(text, title, MessageBoxButton.OK, MessageBoxImage.Warning);
+    private static void Problem(string title, string text)
+    {
+        MessageBox.Show(text, title, MessageBoxButton.OK, MessageBoxImage.Warning);
+    }
 
     // ---- enums ---------------------------------------------------------------------------------------------------
 
@@ -88,11 +93,13 @@ public static class DefinitionActions
     {
         if (EnumsOf(silo) is not { } store) return;
 
-        var e = store.GetEnum(id);
+        var    e    = store.GetEnum(id);
         string name = e?.Name ?? "this enum";
-        string values = e is { Values.Count: > 0 } ? $" and its {e.Values.Count} value{(e.Values.Count == 1 ? string.Empty : "s")}" : string.Empty;
-        if (MessageBox.Show($"Delete the enum \"{name}\"{values} from this Silo?\n\nAnything that refers to enum:{name} will no longer find it.", "Delete enum",
-                            MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
+        string values = e is { Values.Count: > 0 }
+                            ? $" and its {e.Values.Count} value{(e.Values.Count == 1 ? string.Empty : "s")}"
+                            : string.Empty;
+        if (MessageBox.Show($"Delete the enum \"{name}\"{values} from this Silo?\n\nAnything that refers to enum:{name} will no longer find it.",
+                            "Delete enum", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
 
         try
         {
@@ -139,7 +146,8 @@ public static class DefinitionActions
         string? label = PromptDialog.Ask("Edit value", $"Label of this value of \"{e.Name}\":", "Next", current.Name);
         if (label is null) return;
 
-        string? value = PromptDialog.Ask("Edit value", $"Value of \"{label}\" ({ValueHint(e.Type)}):", "Save", current.Value ?? string.Empty);
+        string? value = PromptDialog.Ask("Edit value", $"Value of \"{label}\" ({ValueHint(e.Type)}):", "Save",
+                                         current.Value ?? string.Empty);
         if (value is null) return;
 
         SaveValue(store, enumId, current with { Name = label, Value = value });
@@ -170,7 +178,8 @@ public static class DefinitionActions
         if (EnumsOf(silo) is not { } store) return;
 
         var value = store.GetEnum(enumId)?.Values.FirstOrDefault(v => v.Id == valueId);
-        if (MessageBox.Show($"Delete the value \"{value?.Name ?? "this value"}\" from this enum?", "Delete value", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
+        if (MessageBox.Show($"Delete the value \"{value?.Name ?? "this value"}\" from this enum?", "Delete value", MessageBoxButton.YesNo,
+                            MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
 
         try
         {
@@ -186,16 +195,19 @@ public static class DefinitionActions
     }
 
     /// <summary>What a value of the enum type looks like, short enough to follow a question.</summary>
-    public static string ValueHint(EnumType type) => type switch
+    public static string ValueHint(EnumType type)
     {
-        EnumType.Integral => "a whole number, or hex like 0x1F",
-        EnumType.Signed   => "a whole number",
-        EnumType.Float    => "a number",
-        EnumType.Byte     => "0 to 255",
-        EnumType.Bool     => "true or false",
-        EnumType.Guid     => "a guid",
-        _                 => "text"
-    };
+        return type switch
+               {
+                   EnumType.Integral => "a whole number, or hex like 0x1F",
+                   EnumType.Signed   => "a whole number",
+                   EnumType.Float    => "a number",
+                   EnumType.Byte     => "0 to 255",
+                   EnumType.Bool     => "true or false",
+                   EnumType.Guid     => "a guid",
+                   _                 => "text"
+               };
+    }
 
     // ---- syntaxes ------------------------------------------------------------------------------------------------
 
@@ -221,11 +233,13 @@ public static class DefinitionActions
     {
         if (SyntaxesOf(silo) is not { } store) return;
 
-        var s = store.GetSyntax(id);
+        var    s    = store.GetSyntax(id);
         string name = s?.Name ?? "this syntax";
-        string predefined = s is { IsSeeded: true } ? "\n\nIt is one of the predefined syntaxes; Restore Defaults brings it back." : string.Empty;
-        if (MessageBox.Show($"Delete the syntax \"{name}\" from this Silo?\n\nAnything that refers to syntax:{name} will no longer find it.{predefined}", "Delete syntax",
-                            MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
+        string predefined = s is { IsSeeded: true }
+                                ? "\n\nIt is one of the predefined syntaxes; Restore Defaults brings it back."
+                                : string.Empty;
+        if (MessageBox.Show($"Delete the syntax \"{name}\" from this Silo?\n\nAnything that refers to syntax:{name} will no longer find it.{predefined}",
+                            "Delete syntax", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
 
         try
         {
@@ -256,7 +270,9 @@ public static class DefinitionActions
             return;
         }
 
-        App.Status(added == 0 ? "All the predefined syntaxes are already there" : $"Restored {added} predefined {(added == 1 ? "syntax" : "syntaxes")}");
+        App.Status(added == 0
+                       ? "All the predefined syntaxes are already there"
+                       : $"Restored {added} predefined {(added == 1 ? "syntax" : "syntaxes")}");
         if (added > 0) DefinitionEvents.RaiseChanged();
     }
 }

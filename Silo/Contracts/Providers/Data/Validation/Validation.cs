@@ -1,6 +1,6 @@
 ﻿using System.ComponentModel.DataAnnotations;
 
-namespace Silo.Contracts.Providers.Data.Validation;
+namespace Silo.Providers.Data.Validation;
 
 /// <summary>
 ///     An object which has a Validate method

@@ -1,7 +1,5 @@
-using System.Windows;
 using System.Windows.Controls;
-
-using Silo.Contracts.Providers.Data.Source;
+using Silo.Providers.Data.Source;
 
 namespace Silo.Views;
 
@@ -27,12 +25,12 @@ public class EntityListView : UserControl
         var root = new DockPanel();
 
         var header = new TextBlock
-        {
-            Text       = entityName,
-            FontSize   = 18,
-            FontWeight = FontWeights.SemiBold,
-            Margin     = new Thickness(12, 12, 12, 8)
-        };
+                     {
+                         Text       = entityName,
+                         FontSize   = 18,
+                         FontWeight = FontWeights.SemiBold,
+                         Margin     = new Thickness(12, 12, 12, 8)
+                     };
         DockPanel.SetDock(header, Dock.Top);
         root.Children.Add(header);
 

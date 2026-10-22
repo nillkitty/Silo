@@ -9,8 +9,10 @@ namespace Silo.Assets;
 
 /// <summary>
 ///     Indexes the resources in all of the app's own (first-party) assemblies -- not Microsoft's,
-///     not third-party packages -- once at startup (<see cref="Build" />, called from
-///     <c>App.OnStartup</c>), so consumers such as the Icon Viewer can just query it.
+///     not third-party packages -- once at startup, so consumers such as the Icon Viewer can just query it.
+///     The slow part, reading the assemblies, runs in the background (<see cref="BuildAssembliesAsync" />, started
+///     from <c>App.OnStartup</c>); the quick part, the application's resource dictionary, is read on the UI thread
+///     (<see cref="BuildDictionary" />). <see cref="Entries" /> waits for the background part when it has not finished.
 /// </summary>
 /// <remarks>
 ///     <para>
@@ -32,7 +34,11 @@ public sealed class ResourceIndex : IResourceIndex
     private readonly HashSet<Assembly>   _indexedAssemblies = [];
     private readonly object              _lock              = new();
 
-    private          bool                         _built;
+    // set while this thread is the one indexing the assemblies, so a Changed handler reading Entries does not wait for itself
+    [ThreadStatic] private static bool _indexing;
+
+    private          Task?                        _assemblies;
+    private          bool                         _dictionaryBuilt;
     private volatile IReadOnlyList<ResourceEntry> _snapshot = [];
 
     /// <summary>
@@ -43,7 +49,24 @@ public sealed class ResourceIndex : IResourceIndex
 
     public static ResourceIndex Instance { get; } = new();
 
-    public IReadOnlyList<ResourceEntry> Entries => _snapshot;
+    /// <summary>
+    ///     Every indexed resource. When the assemblies are still being read in the background this waits for that to finish
+    ///     (it never needs the UI thread, so waiting on it is safe from anywhere).
+    /// </summary>
+    public IReadOnlyList<ResourceEntry> Entries
+    {
+        get
+        {
+            if (!_indexing) _assemblies?.Wait();
+            return _snapshot;
+        }
+    }
+
+    /// <summary>
+    ///     Completes when the first-party assemblies have been indexed (completed already when <see cref="BuildAssembliesAsync" />
+    ///     has not been called). Never faults.
+    /// </summary>
+    public Task AssembliesReady => _assemblies ?? Task.CompletedTask;
 
     /// <summary>
     ///     Whether <paramref name="assembly" /> is one of the app's own, per <see cref="FirstPartyPrefixes" />.
@@ -64,30 +87,71 @@ public sealed class ResourceIndex : IResourceIndex
     }
 
     /// <summary>
-    ///     Indexes every first-party assembly already loaded, plus the application's resource
-    ///     dictionary, and starts indexing first-party assemblies loaded from here on. Does
-    ///     nothing if already called. Call on the UI thread, after the application's resources
-    ///     (and theme dictionaries) are in place.
+    ///     Indexes everything now, on the calling thread: the assemblies (see <see cref="BuildAssembliesAsync" />), then the
+    ///     application's resource dictionary (see <see cref="BuildDictionary" />). Does nothing for a part already done. Call on
+    ///     the UI thread, after the application's resources (and theme dictionaries) are in place.
     /// </summary>
     public void Build()
     {
+        BuildAssembliesAsync().Wait();
+        BuildDictionary();
+    }
+
+    /// <summary>
+    ///     Starts indexing every first-party assembly already loaded -- the manifest resources and the compiled-resource keys,
+    ///     which is where the time goes -- on a background thread, and starts indexing first-party assemblies loaded from here
+    ///     on. Safe to call from any thread, and more than once: later calls return the same task. The task never faults.
+    /// </summary>
+    public Task BuildAssembliesAsync()
+    {
         lock (_lock)
         {
-            if (_built) return;
-            _built = true;
+            return _assemblies ??= Task.Run(BuildAssemblies);
+        }
+    }
+
+    private void BuildAssemblies()
+    {
+        _indexing = true;
+        try
+        {
+            AppDomain.CurrentDomain.AssemblyLoad += OnAssemblyLoad;
+
+            List<ResourceEntry> found = [];
+            foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
+                if (IsFirstParty(asm) && MarkIndexed(asm))
+                    IndexAssembly(asm, found);
+
+            Add(found);
+            Log.Debug("Resource index of the assemblies built:  {count} resources", _snapshot.Count);
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Indexing the resources of the assemblies failed");
+        }
+        finally
+        {
+            _indexing = false;
+        }
+    }
+
+    /// <summary>
+    ///     Indexes the application's resource dictionary (its keyed entries, theme dictionaries included). Does nothing if
+    ///     already called. Call on the UI thread, after the application's resources and theme are in place; it is quick.
+    /// </summary>
+    public void BuildDictionary()
+    {
+        lock (_lock)
+        {
+            if (_dictionaryBuilt) return;
+            _dictionaryBuilt = true;
         }
 
-        AppDomain.CurrentDomain.AssemblyLoad += OnAssemblyLoad;
-
         List<ResourceEntry> found = [];
-        foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
-            if (IsFirstParty(asm) && MarkIndexed(asm))
-                IndexAssembly(asm, found);
-
         IndexDictionary(Application.Current?.Resources, found, []);
 
         Add(found);
-        Log.Debug("Resource index built:  {count} resources", _snapshot.Count);
+        Log.Debug("Resource index of the dictionary built:  {count} resources", _snapshot.Count);
     }
 
     /// <summary>

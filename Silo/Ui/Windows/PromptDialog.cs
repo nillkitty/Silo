@@ -1,6 +1,7 @@
-﻿using System.Windows.Controls;
+﻿using System.IO;
+using System.Windows.Controls;
+using Silo.Providers.Data;
 using Telefrag.DI;
-using Silo.Contracts.Providers.Data;
 
 namespace Silo.Ui.Windows;
 
@@ -11,7 +12,10 @@ namespace Silo.Ui.Windows;
 /// </summary>
 public static class PromptDialog
 {
-    /// <summary>Shows the prompt. Returns the index of the button pressed (the last button if the window is closed) and the check box state.</summary>
+    /// <summary>
+    ///     Shows the prompt. Returns the index of the button pressed (the last button if the window is closed) and the
+    ///     check box state.
+    /// </summary>
     public static (int Button, bool Checked) Show(string title, string message, string[] buttons, string? checkBoxText = null)
     {
         var (button, isChecked, _) = ShowCore(title, message, buttons, checkBoxText, null);
@@ -26,7 +30,8 @@ public static class PromptDialog
     }
 
     /// <summary>
-    ///     The window the prompt belongs to: the one the person is working in (a tool can float in a window of its own, possibly kept above the others,
+    ///     The window the prompt belongs to: the one the person is working in (a tool can float in a window of its own,
+    ///     possibly kept above the others,
     ///     and a prompt owned by the main window would open behind it), else the main window.
     /// </summary>
     private static Window? PromptOwner()
@@ -35,13 +40,14 @@ public static class PromptDialog
         if (app is null) return null;
 
         foreach (Window w in app.Windows)
-            if (w.IsActive && w.IsVisible) return w;
+            if (w.IsActive && w.IsVisible)
+                return w;
 
         return app.MainWindow is { IsVisible: true } main ? main : null;
     }
 
-    private static (int Button, bool Checked, string? Text) ShowCore(string title, string message, string[] buttons, string? checkBoxText,
-                                                                      string? input)
+    private static (int Button, bool Checked, string? Text) ShowCore(string  title, string message, string[] buttons, string? checkBoxText,
+                                                                     string? input)
     {
         var chosen = buttons.Length - 1;
         var window = new Window
@@ -56,7 +62,7 @@ public static class PromptDialog
                      };
         if (window.Owner is null) window.WindowStartupLocation = WindowStartupLocation.CenterScreen;
 
-        var panel = new StackPanel { Margin = new Thickness(16) };
+        var panel = new StackPanel { Margin     = new Thickness(16) };
         panel.Children.Add(new TextBlock { Text = message, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 12) });
 
         TextBox? entry = null;
@@ -64,7 +70,11 @@ public static class PromptDialog
         {
             entry = new TextBox { Text = input, MinWidth = 380, Margin = new Thickness(0, 0, 0, 12) };
             panel.Children.Add(entry);
-            window.Loaded += (_, _) => { entry.Focus(); entry.SelectAll(); };
+            window.Loaded += (_, _) =>
+                             {
+                                 entry.Focus();
+                                 entry.SelectAll();
+                             };
         }
 
         CheckBox? box = null;
@@ -81,14 +91,14 @@ public static class PromptDialog
             var b = new Button
                     {
                         Content   = buttons[i],
-                        Padding   = new Thickness(14, 4, 14, 4),
-                        Margin    = new Thickness(i == 0 ? 0 : 8, 0, 0, 0),
+                        Padding   = new Thickness(14,             4, 14, 4),
+                        Margin    = new Thickness(i == 0 ? 0 : 8, 0, 0,  0),
                         IsDefault = i == 0,
                         IsCancel  = i == buttons.Length - 1
                     };
             b.Click += (_, _) =>
                        {
-                           chosen = index;
+                           chosen              = index;
                            window.DialogResult = true;
                        };
             row.Children.Add(b);
@@ -103,27 +113,22 @@ public static class PromptDialog
 
 /// <summary>
 ///     Asks the person what to do when a Silo's file (or its remote copy) changed underneath it. Offers "Don't ask me
-///     again", which the caller stores as the author-mode conflict setting (<see cref="Silo.Settings.SiloFileSettings" />).
+///     again", which the caller stores as the author-mode conflict setting (<see cref="Silo.Settings.SiloFileSettings" />
+///     ).
 /// </summary>
 [Singleton(typeof(ISaveConflictResolver))]
 public class SaveConflictPrompt : ISaveConflictResolver
 {
-    public Task<SaveConflictAnswer> ResolveAsync(SaveConflict conflict)
-    {
-        var dispatcher = Application.Current.Dispatcher;
-        return dispatcher.InvokeAsync(() => Ask(conflict)).Task;
-    }
-
     private static SaveConflictAnswer Ask(SaveConflict c)
     {
-        string title, message;
+        string   title, message;
         string[] buttons;
         if (c.Kind == SaveConflictKind.FileChangedOnDisk)
         {
             title = "File changed";
-            message = $"{System.IO.Path.GetFileName(c.Location)} was changed by another program" +
-                      (c.TheirsUtc is { } t ? $" (modified {t.ToLocalTime():g})" : "") +
-                      " after you opened it" + (c.KnownUtc is { } k ? $" (it was last written {k.ToLocalTime():g})" : "") +
+            message = $"{Path.GetFileName(c.Location)} was changed by another program" +
+                      (c.TheirsUtc is { } t ? $" (modified {t.ToLocalTime():g})" : "") + " after you opened it" +
+                      (c.KnownUtc is { } k ? $" (it was last written {k.ToLocalTime():g})" : "") +
                       ".\n\nOverwrite replaces their version with yours. Save a copy keeps their version and saves yours next to it as a " +
                       "\"conflicted copy\", which you then keep working on.";
             buttons = ["Overwrite", "Save a copy", "Cancel"];
@@ -131,12 +136,14 @@ public class SaveConflictPrompt : ISaveConflictResolver
         else
         {
             title = "Remote copy changed";
-            message = $"{c.Location} was changed by someone else since you last synced.\n\nReplace remote uploads your version over theirs. " +
-                      "Keep mine here leaves the remote copy alone; your changes stay saved on this computer and are not uploaded.";
+            message =
+                $"{c.Location} was changed by someone else since you last synced.\n\nReplace remote uploads your version over theirs. " +
+                "Keep mine here leaves the remote copy alone; your changes stay saved on this computer and are not uploaded.";
             buttons = ["Replace remote", "Keep mine here", "Cancel"];
         }
 
-        var (button, remember) = PromptDialog.Show(title, message, buttons, "Don't ask me again (change this later in the Author design menu)");
+        var (button, remember) =
+            PromptDialog.Show(title, message, buttons, "Don't ask me again (change this later in the Author design menu)");
         var choice = button switch
                      {
                          0 => SaveConflictChoice.Overwrite,
@@ -144,5 +151,11 @@ public class SaveConflictPrompt : ISaveConflictResolver
                          _ => SaveConflictChoice.Cancel
                      };
         return new SaveConflictAnswer(choice, remember);
+    }
+
+    public Task<SaveConflictAnswer> ResolveAsync(SaveConflict conflict)
+    {
+        var dispatcher = Application.Current.Dispatcher;
+        return dispatcher.InvokeAsync(() => Ask(conflict)).Task;
     }
 }

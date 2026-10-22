@@ -73,6 +73,10 @@ public sealed partial class UnicodeExplorerView
                                               _trayScroll.ContextMenu!.Items.Clear();
                                               _trayScroll.ContextMenu.Items.Add(UiKit.Item("Paste text", PasteIntoTray));
                                               _trayScroll.ContextMenu.Items.Add(UiKit.Item("Open…", OpenIntoTray));
+                                              _trayScroll.ContextMenu.Items.Add(UiKit.Rule());
+                                              _trayScroll.ContextMenu.Items.Add(IsCollectionUndocked
+                                                                                    ? UiKit.Item("Dock Collection in Explorer", DockCollection)
+                                                                                    : UiKit.Item("Undock Collection", UndockCollection, CanUndockCollection));
                                           };
         RefreshTray();
         return root;
@@ -111,12 +115,6 @@ public sealed partial class UnicodeExplorerView
         SelectTray(_tray.Count - 1);
         _trayScroll.ScrollToEnd();
         SaveTray();
-    }
-
-    private void AddPageToTray()
-    {
-        int first = _page * _pageSize;
-        AddMany(_results.Skip(first).Take(_pageSize).Where(IsCollectable), "this page");
     }
 
     private void AddAllResultsToTray()
@@ -277,6 +275,7 @@ public sealed partial class UnicodeExplorerView
             var info  = _db?.Get(item.CodePoint);
             var cell  = UiKit.Cell(info?.Glyph ?? item.CodePoint.Text, 20, TrayCell, TrayCell, string.IsNullOrEmpty(item.Label) ? null : item.Label);
             cell.ToolTip = $"{item.CodePoint.Hex}  {info?.Name ?? string.Empty}" + (string.IsNullOrEmpty(item.Label) ? string.Empty : $"\nLabel: {item.Label}");
+            UiKit.MarkCell(cell, ColorOfCodePoint(item.CodePoint.Value), _settings.ColorMode);
             cell.MouseEnter += (_, _) => UiKit.Paint(cell, _traySel.Contains(index), hot: true);
             cell.MouseLeave += (_, _) => UiKit.Paint(cell, _traySel.Contains(index));
             cell.MouseLeftButtonDown += (_, e) =>
@@ -300,6 +299,7 @@ public sealed partial class UnicodeExplorerView
         _trayHint.Visibility = _tray.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         _trayScroll.Visibility = _tray.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
         _trayTitle.Text = _tray.Count == 0 ? "Collection" : $"Collection ({_tray.Count:N0})";
+        UpdateCollectionPaneTitle();
     }
 
     private void PaintTray()
@@ -315,10 +315,19 @@ public sealed partial class UnicodeExplorerView
             _traySel.Add(index);
             _trayAnchor = index;
             if (index < _trayCells.Count) _trayCells[index].BringIntoView();
-            if (_db is not null) Inspect(_tray[index].CodePoint.Value);
+            InspectFromTray(index);
         }
 
         PaintTray();
+    }
+
+    /// <summary>Shows a collection character in the details, remembering that it was picked here (colors then go to the collection's selection).</summary>
+    private void InspectFromTray(int index)
+    {
+        if (_db is null || index < 0 || index >= _tray.Count) return;
+
+        Inspect(_tray[index].CodePoint.Value);
+        _inspectedFromTray = true;
     }
 
     private void TrayClick(int index)
@@ -328,12 +337,15 @@ public sealed partial class UnicodeExplorerView
         {
             _traySel.Clear();
             for (int i = Math.Min(_trayAnchor, index); i <= Math.Max(_trayAnchor, index); i++) _traySel.Add(i);
+            InspectFromTray(index);
             PaintTray();
         }
         else if (mods.HasFlag(ModifierKeys.Control))
         {
             if (!_traySel.Remove(index)) _traySel.Add(index);
             _trayAnchor = index;
+            if (_traySel.Contains(index)) InspectFromTray(index);
+            else if (_traySel.Count > 0) InspectFromTray(_traySel.Max());
             PaintTray();
         }
         else SelectTray(index);
@@ -348,6 +360,8 @@ public sealed partial class UnicodeExplorerView
         menu.Items.Add(UiKit.Rule());
         menu.Items.Add(UiKit.Item("Move left", () => MoveSelected(-1), gesture: "Alt+Left"));
         menu.Items.Add(UiKit.Item("Move right", () => MoveSelected(1), gesture: "Alt+Right"));
+        menu.Items.Add(ColorMenu(() => TrayTarget().Select(c => c.CodePoint.Value).ToArray()));
+        menu.Items.Add(UiKit.Rule());
         menu.Items.Add(UiKit.Item("Sort by code point", SortTray));
         menu.Items.Add(UiKit.Item("Remove repeated characters", RemoveTrayDuplicates));
         menu.Items.Add(UiKit.Rule());
@@ -364,6 +378,7 @@ public sealed partial class UnicodeExplorerView
                 break;
             case Key.A when mods == ModifierKeys.Control:
                 for (int i = 0; i < _tray.Count; i++) _traySel.Add(i);
+                if (!_inspectedFromTray && _tray.Count > 0) InspectFromTray(_trayAnchor >= 0 && _trayAnchor < _tray.Count ? _trayAnchor : 0);
                 PaintTray();
                 break;
             case Key.C when mods == ModifierKeys.Control:

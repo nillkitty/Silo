@@ -1,5 +1,5 @@
 ﻿using Serilog;
-using Silo.Contracts.Providers.Data;
+using Silo.Providers.Data;
 
 namespace Silo.Settings;
 
@@ -20,7 +20,8 @@ public static class SaveConflictPolicy
                 return SaveConflictChoice.Overwrite;
 
             case ExternalChangePolicy.SaveCopy:
-                Log.Information("{Kind} at {Location}: saving a conflicted copy, per the conflict setting", conflict.Kind, conflict.Location);
+                Log.Information("{Kind} at {Location}: saving a conflicted copy, per the conflict setting", conflict.Kind,
+                                conflict.Location);
                 return SaveConflictChoice.SaveCopy;
         }
 
@@ -33,7 +34,9 @@ public static class SaveConflictPolicy
 
         var answer = await resolver.ResolveAsync(conflict);
         if (answer.Remember && answer.Choice != SaveConflictChoice.Cancel)
-            settings.ConflictPolicy = answer.Choice == SaveConflictChoice.Overwrite ? ExternalChangePolicy.Overwrite : ExternalChangePolicy.SaveCopy;
+            settings.ConflictPolicy = answer.Choice == SaveConflictChoice.Overwrite
+                                          ? ExternalChangePolicy.Overwrite
+                                          : ExternalChangePolicy.SaveCopy;
 
         return answer.Choice;
     }

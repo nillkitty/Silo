@@ -1,6 +1,6 @@
-using Silo.Contracts.Providers.Document;
+using Silo.Providers.Document;
 
-namespace Silo.Contracts.Providers.Data;
+namespace Silo.Providers.Data;
 
 /// <summary>
 ///     Where, in a source text file, something was read from: a 1-based line/column pair (the
@@ -29,7 +29,7 @@ public readonly record struct Origin(int Line, int Column, long? CharacterOffset
     ///     parsed from a file at all. Distinct from a real <c>Line</c>/<c>Column</c>, since both
     ///     of those are always &gt;= 1 for an actual position (see <see cref="IsKnown" />).
     /// </summary>
-    public static readonly Origin Unknown = new(0, 0, null);
+    public static readonly Origin Unknown = new(0, 0);
 
     /// <summary>
     ///     True if this <see cref="Origin" /> carries a real line/column position, i.e. is not
@@ -37,8 +37,8 @@ public readonly record struct Origin(int Line, int Column, long? CharacterOffset
     /// </summary>
     public bool IsKnown => Line > 0 && Column > 0;
 
-    public override string ToString() =>
-        IsKnown
-            ? CharacterOffset is { } offset ? $"{Line}:{Column} (char {offset})" : $"{Line}:{Column}"
-            : "(unknown position)";
+    public override string ToString()
+    {
+        return IsKnown ? CharacterOffset is { } offset ? $"{Line}:{Column} (char {offset})" : $"{Line}:{Column}" : "(unknown position)";
+    }
 }

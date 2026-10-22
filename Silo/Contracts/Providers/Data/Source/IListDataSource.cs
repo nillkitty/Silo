@@ -1,6 +1,4 @@
-using Silo.Contracts.Providers.Data;
-
-namespace Silo.Contracts.Providers.Data.Source;
+namespace Silo.Providers.Data.Source;
 
 /// <summary>
 ///     A data source that exposes its content as a list of items, each optionally containing its
@@ -19,15 +17,15 @@ public interface IListDataSource : IDataSource
     bool IsOrdered { get; }
 
     /// <summary>
+    ///     The list's top-level items, in document order.
+    /// </summary>
+    IReadOnlyList<IListItem> Items { get; }
+
+    /// <summary>
     ///     Where this list appears in its source file, or <see cref="Origin.Unknown" /> if position
     ///     isn't tracked for this source.
     /// </summary>
     Origin Origin { get; }
-
-    /// <summary>
-    ///     The list's top-level items, in document order.
-    /// </summary>
-    IReadOnlyList<IListItem> Items { get; }
 }
 
 /// <summary>
@@ -37,10 +35,10 @@ public interface IListDataSource : IDataSource
 public interface IListItem
 {
     /// <summary>
-    ///     The item's own text, flattened to plain text (inline formatting such as emphasis or
-    ///     links is stripped, link/code text is kept).
+    ///     This item's nested sub-items, if any, in document order. Empty (never null) for an item
+    ///     with no nested list.
     /// </summary>
-    string Text { get; }
+    IReadOnlyList<IListItem> Children { get; }
 
     /// <summary>
     ///     Where this item appears in its source file, or <see cref="Origin.Unknown" /> if position
@@ -49,8 +47,8 @@ public interface IListItem
     Origin Origin { get; }
 
     /// <summary>
-    ///     This item's nested sub-items, if any, in document order. Empty (never null) for an item
-    ///     with no nested list.
+    ///     The item's own text, flattened to plain text (inline formatting such as emphasis or
+    ///     links is stripped, link/code text is kept).
     /// </summary>
-    IReadOnlyList<IListItem> Children { get; }
+    string Text { get; }
 }

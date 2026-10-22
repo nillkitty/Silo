@@ -1,5 +1,5 @@
 ﻿using System.IO;
-using Silo.Contracts.Connectors;
+using Silo.Providers;
 
 namespace Silo.Connectors;
 
@@ -17,11 +17,18 @@ public sealed record UriCheck(bool IsValid, Uri? Uri, IConnector? Connector, str
 /// </summary>
 public static class UriRules
 {
-    /// <summary>The scopes that count: <c>Private</c> (Silo owns the scheme) and <c>WellKnown</c> (a standard scheme a connector handles).</summary>
+    /// <summary>
+    ///     The scopes that count: <c>Private</c> (Silo owns the scheme) and <c>WellKnown</c> (a standard scheme a
+    ///     connector handles).
+    /// </summary>
     public static readonly IReadOnlyCollection<UriSchemeScope> DefaultScopes = [UriSchemeScope.Private, UriSchemeScope.WellKnown];
 
-    /// <summary>Every scope but <c>Unknown</c>: used when the person has already picked the connector, so any scheme it handles is fine.</summary>
-    public static readonly IReadOnlyCollection<UriSchemeScope> AnyScope = [UriSchemeScope.Private, UriSchemeScope.WellKnown, UriSchemeScope.AdHoc];
+    /// <summary>
+    ///     Every scope but <c>Unknown</c>: used when the person has already picked the connector, so any scheme it
+    ///     handles is fine.
+    /// </summary>
+    public static readonly IReadOnlyCollection<UriSchemeScope> AnyScope =
+        [UriSchemeScope.Private, UriSchemeScope.WellKnown, UriSchemeScope.AdHoc];
 
     /// <summary>
     ///     The URI the text means: a URI as it is, or a Windows path (<c>C:\Data</c>, <c>\\server\share</c>) as a file: URI.
@@ -34,7 +41,8 @@ public static class UriRules
 
         try
         {
-            if (Path.IsPathFullyQualified(text) && (text.StartsWith(@"\\", StringComparison.Ordinal) || (text.Length > 1 && text[1] == ':')))
+            if (Path.IsPathFullyQualified(text) &&
+                (text.StartsWith(@"\\", StringComparison.Ordinal) || (text.Length > 1 && text[1] == ':')))
                 return new Uri(text);
         }
         catch (Exception)
@@ -47,7 +55,8 @@ public static class UriRules
     }
 
     /// <summary>The connector that handles <paramref name="uri" />'s scheme, or null.</summary>
-    public static IUriConnector? FindConnector(Uri uri, IEnumerable<IUriConnector> connectors, IReadOnlyCollection<UriSchemeScope>? scopes = null)
+    public static IUriConnector? FindConnector(Uri                                  uri, IEnumerable<IUriConnector> connectors,
+                                               IReadOnlyCollection<UriSchemeScope>? scopes = null)
     {
         scopes ??= DefaultScopes;
         return connectors.FirstOrDefault(c => scopes.Contains(c.HandlesScheme(uri.Scheme)));
@@ -57,11 +66,13 @@ public static class UriRules
     public static UriCheck Check(string? text, IEnumerable<IUriConnector> connectors, IReadOnlyCollection<UriSchemeScope>? scopes = null)
     {
         if (string.IsNullOrWhiteSpace(text))
-            return new UriCheck(false, null, null, "Enter a URI such as reg:///hkey_current_user/software, a folder such as C:\\Data, or a share such as \\\\server\\share.");
+            return new UriCheck(false, null, null,
+                                "Enter a URI such as reg:///hkey_current_user/software, a folder such as C:\\Data, or a share such as \\\\server\\share.");
 
         var uri = Parse(text);
         if (uri is null)
-            return new UriCheck(false, null, null, "That is not a complete URI: it needs a scheme (such as reg:, file: or https:), or has to be a full Windows path (C:\\Data, \\\\server\\share).");
+            return new UriCheck(false, null, null,
+                                "That is not a complete URI: it needs a scheme (such as reg:, file: or https:), or has to be a full Windows path (C:\\Data, \\\\server\\share).");
 
         return CheckUri(uri, connectors, scopes);
     }
@@ -87,7 +98,9 @@ public static class UriRules
     {
         string last = uri.IsFile
                           ? Path.GetFileName(uri.LocalPath.TrimEnd('\\', '/')) is { Length: > 0 } leaf ? leaf : uri.LocalPath
-                          : Uri.UnescapeDataString(uri.AbsolutePath.TrimEnd('/')).Split('/', StringSplitOptions.RemoveEmptyEntries).LastOrDefault() ?? string.Empty;
+                          : Uri.UnescapeDataString(uri.AbsolutePath.TrimEnd('/'))
+                               .Split('/', StringSplitOptions.RemoveEmptyEntries)
+                               .LastOrDefault() ?? string.Empty;
 
         if (last.Length > 0) return last;
         return uri.Host.Length > 0 ? uri.Host : uri.ToString();

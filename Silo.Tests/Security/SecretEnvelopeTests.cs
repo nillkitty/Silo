@@ -1,17 +1,20 @@
 ﻿using System.Text;
-using Silo.Contracts.Providers.Crypto;
 using Silo.Crypto;
+using Silo.Providers.Crypto;
 
 namespace Silo.Tests.Security;
 
 public class SecretEnvelopeTests
 {
-    private static byte[] Bytes(string text) => Encoding.UTF8.GetBytes(text);
+    private static byte[] Bytes(string text)
+    {
+        return Encoding.UTF8.GetBytes(text);
+    }
 
     [Test]
     public void A_sealed_secret_opens_with_the_same_key_and_context()
     {
-        var key    = SecretEnvelope.NewKey();
+        var key        = SecretEnvelope.NewKey();
         var sealedData = SecretEnvelope.Seal(key, 7, Bytes("hunter2"), "credential");
 
         Assert.That(Encoding.UTF8.GetString(SecretEnvelope.Open(key, sealedData, "credential")), Is.EqualTo("hunter2"));
@@ -24,7 +27,7 @@ public class SecretEnvelopeTests
         var sealedData = SecretEnvelope.Seal(key, 42, Bytes("a-very-recognisable-password"), "credential");
 
         Assert.That(Encoding.UTF8.GetString(sealedData), Does.Not.Contain("recognisable"));
-        Assert.That(SecretEnvelope.KeyIdOf(sealedData), Is.EqualTo(42));
+        Assert.That(SecretEnvelope.KeyIdOf(sealedData),  Is.EqualTo(42));
     }
 
     [Test]

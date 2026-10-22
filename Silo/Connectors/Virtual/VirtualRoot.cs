@@ -3,12 +3,19 @@ using Telefrag.DI;
 
 namespace Silo.Connectors.Virtual;
 
+public abstract class VirtualRoot<TModel>(bool requireActiveSilo) : VirtualRoot<TModel, ConnectionlessState>(requireActiveSilo)
+{
+    protected VirtualRoot() : this(true)
+    {
+    }
+}
+
 /// <summary>
 ///     A VirtualRoot is a combination Connector/Connection/Root Node for basic virtual trees like "Process/Current
 ///     Process"
 ///     which implement a static tree and are connectionless.
 /// </summary>
-public abstract class VirtualRoot : IConnector, IConnection
+public abstract class VirtualRoot<TModel, TState> : ConnectorBase<TModel, TState>, IConnector, IConnection where TState : IConnectionState
 {
     private IReceiver<Container> _recv;
     public  bool?                ConnectionState  => null;
@@ -22,8 +29,12 @@ public abstract class VirtualRoot : IConnector, IConnection
     public  Exception?           LastError        { get; protected set; }
     public  List<object>         Metadata         { get; } = [];
 
-
     public Container Components { get; }
+
+    protected override IConnection OnCreateConnection(ConnectionRequest crq)
+    {
+        return this;
+    }
 
     /// <param name="requiresSilo">
     ///     True (the default) for a root that is made for a Silo: asks for the active one (and says so when there is none).
@@ -32,9 +43,7 @@ public abstract class VirtualRoot : IConnector, IConnection
     protected VirtualRoot(bool requiresSilo = true)
     {
         var silo = requiresSilo ? App.RequireActiveSilo() : App.Instance?.ActiveSilo;
-        Components = silo is null
-                         ? new Container(GetType().FullName)
-                         : silo.Components.CreateChildContainer(GetType().FullName);
+        Components = silo is null ? new Container(GetType().FullName) : silo.Components.CreateChildContainer(GetType().FullName);
     }
 
     public string? GetHostname()
@@ -74,11 +83,6 @@ public abstract class VirtualRoot : IConnector, IConnection
 
     public IConnection CreateConnection(ConnectionRequest crq)
     {
-        return this;
-    }
-
-    public Type GetStateType()
-    {
-        return typeof(object);
+        return OnCreateConnection(crq);
     }
 }

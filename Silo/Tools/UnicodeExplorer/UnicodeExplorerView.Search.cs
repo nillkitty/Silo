@@ -8,86 +8,53 @@ namespace Silo.Tools.UnicodeExplorer;
 
 public sealed partial class UnicodeExplorerView
 {
-    private const double GridCell = 46;
-    private const double ListRow  = 28;
-
     private readonly TextBox       _search     = new() { MinWidth = 240, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 6, 0) };
-    private readonly RadioButton   _modeSearch = new() { Content = "Search", IsChecked = true, GroupName = "ue-mode", Margin = new Thickness(0, 0, 8, 0), VerticalAlignment = VerticalAlignment.Center };
-    private readonly RadioButton   _modeText   = new() { Content = "Look up text", GroupName = "ue-mode", Margin = new Thickness(0, 0, 8, 0), VerticalAlignment = VerticalAlignment.Center };
-    private readonly ComboBox      _category   = UiKit.Combo(190, "General category");
-    private readonly ComboBox      _block      = UiKit.Combo(190, "Unicode block");
-    private readonly ComboBox      _script     = UiKit.Combo(150, "Script");
-    private readonly ComboBox      _ageOp      = UiKit.Combo(52, "Compare the Unicode version that added the character");
-    private readonly ComboBox      _age        = UiKit.Combo(80, "Unicode version that added the character");
-    private readonly CheckBox      _emojiOnly  = new() { Content = "Emoji only", Margin = new Thickness(0, 0, 8, 0), VerticalAlignment = VerticalAlignment.Center };
-    private readonly CheckBox      _unassigned = new() { Content = "Include unassigned", ToolTip = "With a block chosen and no search text, also list the code points that have no character yet.", Margin = new Thickness(0, 0, 8, 0), VerticalAlignment = VerticalAlignment.Center };
-    private readonly RadioButton   _viewGrid   = new() { Content = "Grid", IsChecked = true, GroupName = "ue-view", Margin = new Thickness(0, 0, 6, 0), VerticalAlignment = VerticalAlignment.Center };
-    private readonly RadioButton   _viewList   = new() { Content = "List", GroupName = "ue-view", Margin = new Thickness(0, 0, 10, 0), VerticalAlignment = VerticalAlignment.Center };
-    private readonly ComboBox      _pageSizeBox = UiKit.Combo(70, "Characters per page");
     private readonly TextBlock     _count      = UiKit.Text(string.Empty, muted: true);
-    private readonly TextBox       _pageBox    = new() { Width = 46, TextAlignment = TextAlignment.Center, VerticalAlignment = VerticalAlignment.Center, ToolTip = "Page number (Enter to go)" };
-    private readonly TextBlock     _pageOf     = UiKit.Text(string.Empty, muted: true);
-    private readonly TextBox       _jump       = new() { Width = 96, VerticalAlignment = VerticalAlignment.Center, ToolTip = "A code point (U+1F7E2, 0x1F7E2, 1F7E2) or a character: shows it in the full list" };
-    private readonly ScrollViewer  _resultsScroll = new() { VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled, Focusable = true };
-    private readonly WrapPanel     _gridPanel  = new() { Margin = new Thickness(2) };
-    private readonly StackPanel    _listPanel  = new() { Margin = new Thickness(2) };
+    private readonly TextBlock     _filterNote = new() { Margin = new Thickness(2, 0, 0, 4), TextTrimming = TextTrimming.CharacterEllipsis, Visibility = Visibility.Collapsed };
+    private readonly TextBlock     _where      = new() { VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis, Margin = new Thickness(12, 0, 8, 0) };
+    private readonly ResultsView   _view       = new();
+    private Button                 _addSelectedButton = null!;
     private readonly DispatcherTimer _debounce = new() { Interval = TimeSpan.FromMilliseconds(250) };
 
+    private readonly FilterState    _filter       = new();      // what the Category, Blocks, Script and Glyph Filter menus have chosen
+    private bool                    _lookupMode;                // "Look up text": list the characters of the text instead of searching
     private UnicodeDatabase?        _db;
+    private CodePointSet?           _coverage;      // what the display fonts can draw; null until it has been worked out
     private int[]                   _results      = [];
-    private readonly List<Border>   _cells        = [];
-    private int                     _page;
-    private int                     _pageSize     = 200;
-    private int                     _selectedIndex = -1; // index into _results
+    private int                     _hiddenNoGlyph; // how many the glyph filter left out of the last search
+    private int                     _hiddenBlocks;  // how many were left out because their block is switched off
+    private readonly HashSet<int>   _sel          = []; // positions in _results
+    private int                     _anchor       = -1; // where a Shift+click span starts
+    private int                     _selectedIndex = -1; // position in _results of the one shown in the details (the one last clicked)
     private int                     _searchVersion;
     private CancellationTokenSource? _searchCancel;
     private int?                    _selectAfterSearch;
     private bool                    _suspendSearch;
 
+    private const string SearchTip = "Words from a name, tag or HTML entity (green circle); a character; U+1F7E2; U+1F600-1F64F; or qualifiers like cat:Sm block:arrows age:>=6.0 is:emoji";
+
     // ---- building ------------------------------------------------------------------------------------------------
 
+    /// <summary>The search box, Search and Clear Filter: everything else is in the menus.</summary>
     private UIElement BuildSearchBar()
     {
         var panel = new StackPanel();
 
-        var row1 = new DockPanel { Margin = new Thickness(0, 0, 0, 4), LastChildFill = true };
-        DockPanel.SetDock(_alwaysOnTop, Dock.Right);
-        row1.Children.Add(_alwaysOnTop);
-        var help = UiKit.Btn("?", ShowSearchHelp, "How to search");
-        help.Margin = new Thickness(0, 0, 8, 0);
-        help.MinWidth = 26;
-        DockPanel.SetDock(help, Dock.Right);
-        row1.Children.Add(help);
-        var modes = new StackPanel { Orientation = Orientation.Horizontal };
-        modes.Children.Add(_modeSearch);
-        modes.Children.Add(_modeText);
-        DockPanel.SetDock(modes, Dock.Right);
-        row1.Children.Add(modes);
-        _search.ToolTip = "Words from a name, tag or HTML entity (green circle); a character; U+1F7E2; U+1F600-1F64F; or qualifiers like cat:Sm block:arrows age:>=6.0 is:emoji";
-        row1.Children.Add(_search);
-        panel.Children.Add(row1);
+        var row = new DockPanel { Margin = new Thickness(0, 0, 0, 4), LastChildFill = true };
+        var clear = UiKit.Btn("Clear Filter", ClearFilters, "Reset the filters and the search text");
+        clear.Margin = new Thickness(0);
+        DockPanel.SetDock(clear, Dock.Right);
+        row.Children.Add(clear);
+        var go = UiKit.Btn("Search", () => Schedule(immediate: true), "Search now (Enter)");
+        go.Margin = new Thickness(0, 0, 6, 0);
+        DockPanel.SetDock(go, Dock.Right);
+        row.Children.Add(go);
+        _search.ToolTip = SearchTip;
+        row.Children.Add(_search);
+        panel.Children.Add(row);
 
-        var filters = new WrapPanel { Margin = new Thickness(0, 0, 0, 4) };
-        filters.Children.Add(_category);
-        filters.Children.Add(_block);
-        filters.Children.Add(_script);
-        filters.Children.Add(UiKit.Text("Added in", muted: true).WithMargin(0, 0, 4, 0));
-        filters.Children.Add(_ageOp);
-        filters.Children.Add(_age);
-        filters.Children.Add(_emojiOnly);
-        filters.Children.Add(_unassigned);
-        filters.Children.Add(UiKit.Btn("Clear filters", ClearFilters, "Reset the filters and the search text"));
-        panel.Children.Add(filters);
-
-        FillCategoryCombo();
-        foreach (string op in new[] { "=", ">=", "<=", ">", "<" }) _ageOp.Items.Add(op);
-        _ageOp.SelectedIndex = 0;
-        foreach (int size in new[] { 100, 200, 500 }) _pageSizeBox.Items.Add(size);
-        _pageSizeBox.SelectedItem = _pageSize;
-        _block.Items.Add(Any("Any block"));
-        _script.Items.Add(Any("Any script"));
-        _age.Items.Add(Any("Any"));
-        _block.SelectedIndex = _script.SelectedIndex = _age.SelectedIndex = 0;
+        _filterNote.SetResourceReference(TextBlock.ForegroundProperty, "Theme.TextMuted");
+        panel.Children.Add(_filterNote);
 
         _debounce.Tick += (_, _) =>
                           {
@@ -95,28 +62,15 @@ public sealed partial class UnicodeExplorerView
                               _ = RunSearchAsync();
                           };
         _search.TextChanged += (_, _) => Schedule();
-        _modeSearch.Checked += (_, _) => ModeChanged();
-        _modeText.Checked   += (_, _) => ModeChanged();
-        foreach (var combo in new[] { _category, _block, _script, _ageOp, _age })
-            combo.SelectionChanged += (_, _) => Schedule(immediate: true);
-        _emojiOnly.Click  += (_, _) => Schedule(immediate: true);
-        _unassigned.Click += (_, _) => Schedule(immediate: true);
+        _search.PreviewKeyDown += (_, e) =>
+                                  {
+                                      if (e.Key == Key.Enter && !(_lookupMode && Keyboard.Modifiers == ModifierKeys.None))
+                                      {
+                                          Schedule(immediate: true);
+                                          e.Handled = true;
+                                      }
+                                  };
         return panel;
-    }
-
-    private static ComboBoxItem Any(string text) => new() { Content = text, Tag = null };
-
-    private void FillCategoryCombo()
-    {
-        _category.Items.Add(Any("Any category"));
-        foreach (var (code, name) in UnicodeNames.Majors)
-        {
-            _category.Items.Add(new ComboBoxItem { Content = $"{code} – {name} (all)", Tag = code, FontWeight = FontWeights.SemiBold });
-            foreach (var c in UnicodeNames.Categories.Where(c => c.Major == code))
-                _category.Items.Add(new ComboBoxItem { Content = $"    {c.Code} – {c.Name}", Tag = c.Code });
-        }
-
-        _category.SelectedIndex = 0;
     }
 
     private UIElement BuildBrowser()
@@ -126,61 +80,37 @@ public sealed partial class UnicodeExplorerView
         grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
         grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
-        var header = new DockPanel { Margin = new Thickness(0, 0, 0, 4) };
-        var views = new StackPanel { Orientation = Orientation.Horizontal };
-        views.Children.Add(_viewGrid);
-        views.Children.Add(_viewList);
-        views.Children.Add(UiKit.Text("Per page", muted: true).WithMargin(0, 0, 4, 0));
-        views.Children.Add(_pageSizeBox);
-        DockPanel.SetDock(views, Dock.Right);
-        header.Children.Add(views);
+        var header = new DockPanel { Margin = new Thickness(0, 0, 0, 4), LastChildFill = true };
+        DockPanel.SetDock(_count, Dock.Left);
         header.Children.Add(_count);
+        _where.SetResourceReference(TextBlock.ForegroundProperty, "Theme.Text");
+        header.Children.Add(_where);
         Grid.SetRow(header, 0);
         grid.Children.Add(header);
 
-        var border = new Border { BorderThickness = new Thickness(1) };
+        var border = new Border { BorderThickness = new Thickness(1), Child = _view };
         border.SetResourceReference(Border.BorderBrushProperty, "Theme.Border");
         border.SetResourceReference(Border.BackgroundProperty, "Theme.BackgroundAlt");
-        _resultsScroll.Content = _gridPanel;
-        border.Child = _resultsScroll;
         Grid.SetRow(border, 1);
         grid.Children.Add(border);
 
-        var pager = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 4, 0, 0) };
-        pager.Children.Add(UiKit.Btn("⏮", () => GoToPage(0), "First page"));
-        pager.Children.Add(UiKit.Btn("◀", () => GoToPage(_page - 1), "Previous page (Page Up)"));
-        pager.Children.Add(_pageBox);
-        pager.Children.Add(_pageOf.WithMargin(6, 0, 10, 0));
-        pager.Children.Add(UiKit.Btn("▶", () => GoToPage(_page + 1), "Next page (Page Down)"));
-        pager.Children.Add(UiKit.Btn("⏭", () => GoToPage(PageCount - 1), "Last page"));
-        pager.Children.Add(UiKit.Text("Go to", muted: true).WithMargin(12, 0, 4, 0));
-        pager.Children.Add(_jump);
-        pager.Children.Add(UiKit.Btn("Go", JumpToCode, "Find the character in the full list").WithMargin(6, 0, 0, 0));
-        Grid.SetRow(pager, 2);
-        grid.Children.Add(pager);
+        var bottom = new DockPanel { Margin = new Thickness(0, 4, 0, 0), LastChildFill = false };
+        _addSelectedButton = UiKit.Btn("Add selected to collection", AddSelectedOrCursor, "Add the selected characters (Ctrl+click and Shift+click select several; Enter adds them)");
+        _addSelectedButton.Margin = new Thickness(0);
+        DockPanel.SetDock(_addSelectedButton, Dock.Right);
+        bottom.Children.Add(_addSelectedButton);
+        Grid.SetRow(bottom, 2);
+        grid.Children.Add(bottom);
 
-        _pageBox.KeyDown += (_, e) =>
-                            {
-                                if (e.Key == Key.Enter && int.TryParse(_pageBox.Text, out int p)) GoToPage(p - 1);
-                            };
-        _jump.KeyDown += (_, e) =>
-                         {
-                             if (e.Key == Key.Enter) JumpToCode();
-                         };
-        _pageSizeBox.SelectionChanged += (_, _) =>
-                                         {
-                                             if (_pageSizeBox.SelectedItem is not int size || size == _pageSize) return;
-                                             int first = _page * _pageSize;
-                                             _pageSize = size;
-                                             _page     = first / _pageSize;
-                                             ShowPage();
-                                         };
-        _viewGrid.Checked += (_, _) => ShowPage();
-        _viewList.Checked += (_, _) => ShowPage();
-
-        _resultsScroll.PreviewKeyDown += OnResultsKeyDown;
-        _resultsScroll.MouseDown      += (_, _) => _resultsScroll.Focus();
-        _resultsScroll.PreviewMouseWheel += OnResultsWheel;
+        _view.Resolve       = index => _db!.Get(_results[index]);
+        _view.IsSelected    = index => _sel.Contains(index);
+        _view.ColorOf       = index => ColorOfCodePoint(_results[index]);
+        _view.ItemClicked  += OnItemClicked;
+        _view.MenuRequested += OnCellMenu;
+        _view.ViewChanged  += () => UpdateWhere();
+        _view.Map.Hover    += index => UpdateWhere(index);
+        _view.PreviewKeyDown += OnResultsKeyDown;
+        UpdateSelectionUi();
         return grid;
     }
 
@@ -189,10 +119,11 @@ public sealed partial class UnicodeExplorerView
         PromptDialog.Show("Searching the Unicode Explorer",
                           "Type words from a character's name, tags or HTML entity: every word has to match (green circle). Put a phrase in quotes to match it as written.\n\n" +
                           "A character (\U0001F7E2, é) or a code point (U+1F7E2, 0x1F7E2, \\u{1F7E2}, &#128994;) finds that character; U+1F600-1F64F a range.\n\n" +
-                          "Qualifiers can be typed in the box or chosen above: cat:Lu (or cat:L), block:arrows, script:latn, age:6.0 (also >=, <=, >, <), plane:1, bidi:AL, " +
+                          "Qualifiers can be typed in the box or chosen in the Category, Blocks, Script and Glyph Filter menus: cat:Lu (or cat:L), block:arrows, script:latn, age:6.0 (also >=, <=, >, <), plane:1, bidi:AL, " +
                           "is:emoji, is:assigned, is:mirrored, is:combining, is:ascii.\n\n" +
-                          "\"Look up text\" lists the characters of whatever you paste (what is this strange character in my text?).\n\n" +
-                          "In the grid: click to inspect, double-click or Enter to add to the collection, arrows to move, Ctrl+C to copy the character.",
+                          "The big ideograph blocks (Chinese, Japanese and Korean characters, Hangul syllables, Yi, Tangut, Nushu, Khitan) are switched off so they do not bury everything else. Blocks > Manage Blocks… switches them on; choosing one of them from the Blocks or Script menu, or typing one of its characters or code points, shows it anyway.\n\n" +
+                          "Edit > Look up Text lists the characters of whatever you paste (what is this strange character in my text?).\n\n" +
+                          "In the grid: click to inspect, Ctrl+click to select several, Shift+click to select a span, double-click or Enter to add to the collection, arrows to move (Shift+arrows extend the selection), Ctrl+A selects all, Ctrl+C copies. The list scrolls through every result; the strip beside the scroll bar is a map of the whole list by block, and shows where you are.",
                           ["OK"]);
     }
 
@@ -201,6 +132,7 @@ public sealed partial class UnicodeExplorerView
     private async Task StartAsync()
     {
         Say("Loading the Unicode data…");
+        var coverageTask = Task.Run(TryBuildCoverage); // reading the fonts' character maps takes a moment: alongside the data, so the first list is already right
         try
         {
             _db = await Task.Run(() => UnicodeDatabase.Default);
@@ -212,15 +144,25 @@ public sealed partial class UnicodeExplorerView
         }
 
         RefreshTray(); // the collection was loaded before the names were
-        _suspendSearch = true;
-        foreach (var b in _db.Blocks) _block.Items.Add(new ComboBoxItem { Content = b.Name, Tag = b.Name });
-        foreach (var s in _db.Scripts.OrderBy(s => s.Name, StringComparer.OrdinalIgnoreCase)) _script.Items.Add(new ComboBoxItem { Content = s.Name, Tag = s.Code });
-        foreach (string age in _db.Ages) _age.Items.Add(new ComboBoxItem { Content = age, Tag = age });
-        _suspendSearch = false;
+        RebuildBlockPolicy();
 
         Say($"Unicode {_db.Version}: {_db.AssignedCount:N0} characters.");
+        _coverage = await coverageTask;
         await RunSearchAsync();
         if (_selectedIndex < 0 && _results.Length > 0) Select(0, scroll: false);
+    }
+
+    /// <summary>Works out which characters the display fonts can draw; null when the fonts cannot be read (then nothing is hidden).</summary>
+    private static CodePointSet? TryBuildCoverage()
+    {
+        try
+        {
+            return GlyphCoverage.Build(UiKit.GlyphFontNames);
+        }
+        catch (Exception)
+        {
+            return null;
+        }
     }
 
     private void Schedule(bool immediate = false)
@@ -232,32 +174,60 @@ public sealed partial class UnicodeExplorerView
         else _debounce.Start();
     }
 
-    private void ModeChanged()
+    /// <summary>A menu changed the filter: show what is chosen, keep the choices that are kept, search again.</summary>
+    private void FilterChanged()
     {
-        _search.AcceptsReturn = _modeText.IsChecked == true;
-        _search.ToolTip = _modeText.IsChecked == true
-                              ? "Paste or type text: every character in it is listed, in order."
-                              : "Words from a name, tag or HTML entity (green circle); a character; U+1F7E2; U+1F600-1F64F; or qualifiers like cat:Sm block:arrows age:>=6.0 is:emoji";
-        foreach (var c in new Control[] { _category, _block, _script, _ageOp, _age, _emojiOnly, _unassigned }) c.IsEnabled = _modeText.IsChecked != true;
+        UpdateFilterNote();
+        SaveSettings();
         Schedule(immediate: true);
     }
 
-    private UnicodeQuery BuildQuery()
+    /// <summary>Switches between searching and looking up the characters of a text.</summary>
+    private void SetLookupMode(bool on)
     {
-        string? category = (_category.SelectedItem as ComboBoxItem)?.Tag as string;
-        string? block    = (_block.SelectedItem as ComboBoxItem)?.Tag as string;
-        string? script   = (_script.SelectedItem as ComboBoxItem)?.Tag as string;
-        string? age      = (_age.SelectedItem as ComboBoxItem)?.Tag as string;
+        if (_lookupMode == on) return;
 
-        return new UnicodeQuery
+        _lookupMode           = on;
+        _search.AcceptsReturn = on;
+        _search.ToolTip       = on ? "Paste or type text: every character in it is listed, in order." : SearchTip;
+        UpdateFilterNote();
+        Schedule(immediate: true);
+    }
+
+    /// <summary>The line under the search box that says what is narrowing the list (the menus do not show it unless they are open).</summary>
+    private void UpdateFilterNote()
+    {
+        var parts = new List<string>();
+        if (_lookupMode) parts.Add("Look up text: every character of the text is listed");
+        else
+        {
+            if (_filter.Category is { } cat) parts.Add("Category: " + FilterLabels.Category(cat));
+            if (_filter.Block is { } block) parts.Add("Block: " + block);
+            if (_filter.Script is { } script) parts.Add("Script: " + FilterLabels.Script(_db, script));
+            if (_filter.Kind != GlyphKind.AvailableOnly) parts.Add(FilterLabels.Kind(_filter.Kind));
+            if (_filter.Version.IsActive) parts.Add(FilterLabels.Version(_filter.Version));
+            if (_filter.ColorFilter is { } color) parts.Add("Color: " + FilterLabels.Color(color));
+        }
+
+        _filterNote.Text       = string.Join("  ·  ", parts);
+        _filterNote.Visibility = parts.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
+    }
+
+    /// <summary>What happens to the found code points after the search: blocks switched off, colors, versions to leave out, the glyph filter.</summary>
+    private ResultFilter BuildResultFilter(string text)
+    {
+        CodePointSet? disabled = _filter.OverridesBlockPolicy(text) ? null : DisabledBlocksFor(_selectAfterSearch);
+        var colors = _filter.ColorFilter is null ? null : CharacterColorMap.From(_colors.ToDictionary()); // a copy: the search runs on another thread
+
+        return new ResultFilter
                {
-                   Text              = _search.Text,
-                   Categories        = category is null ? [] : [category],
-                   Block             = block,
-                   Script            = script,
-                   Age               = age is null ? null : (_ageOp.SelectedItem as string ?? "=") + age,
-                   EmojiOnly         = _emojiOnly.IsChecked == true,
-                   IncludeUnassigned = _unassigned.IsChecked == true
+                   Kind           = _filter.Kind,
+                   Coverage       = _coverage,
+                   Version        = _filter.Version,
+                   DisabledBlocks = disabled,
+                   Colors         = colors,
+                   ColorFilter    = _filter.ColorFilter,
+                   KeepUnassigned = _filter.Kind == GlyphKind.Everything && _filter.Block is not null
                };
     }
 
@@ -270,35 +240,52 @@ public sealed partial class UnicodeExplorerView
         int version = ++_searchVersion;
         var db      = _db;
 
-        bool lookup = _modeText.IsChecked == true;
+        bool lookup = _lookupMode;
         string text = _search.Text;
-        var query   = BuildQuery();
+        var query   = _filter.ToQuery(text);
+        var filter  = lookup ? null : BuildResultFilter(text);
 
         _count.Text = "Searching…";
         try
         {
-            int[] found = await Task.Run(() => lookup
-                                                   ? CodePoint.Enumerate(text).Select(c => c.Value).ToArray()
-                                                   : db.Search(query, cancel.Token), cancel.Token);
+            var (found, outcome, segments) = await Task.Run(() =>
+                                                           {
+                                                               int[] all = lookup ? CodePoint.Enumerate(text).Select(c => c.Value).ToArray() : db.Search(query, cancel.Token);
+                                                               var result = filter is null ? new FilterOutcome(all, 0, 0) : filter.Apply(db, all, cancel.Token);
+                                                               cancel.Token.ThrowIfCancellationRequested();
+                                                               return (result.Kept, result, BuildSegments(db, result.Kept));
+                                                           }, cancel.Token);
             if (version != _searchVersion) return;
 
             _results       = found;
-            _page          = 0;
+            _hiddenNoGlyph = outcome.NoGlyph;
+            _hiddenBlocks  = outcome.BlocksOff;
+            _sel.Clear();
+            _anchor        = -1;
             _selectedIndex = -1;
-            if (_selectAfterSearch is { } wanted)
+            int wanted     = -1;
+            if (_selectAfterSearch is { } want)
             {
                 _selectAfterSearch = null;
-                int at = Array.IndexOf(_results, wanted);
-                if (at >= 0)
-                {
-                    _page          = at / _pageSize;
-                    _selectedIndex = at;
-                }
+                wanted = Array.IndexOf(_results, want);
+                if (wanted < 0 && ResultFilter.NeedsGlyph(_filter.Kind) && _coverage is { } cov && !cov.Contains(want))
+                    Say($"{new CodePoint(want).Hex} has no glyph in the explorer's fonts, so it is hidden. Glyph Filter > By Kind > Assigned Only shows it.");
             }
 
-            ShowPage();
-            if (_selectedIndex >= 0) Select(_selectedIndex);
-            else if (_results.Length > 0 && ReferenceEquals(Inspected, null)) Select(_page * _pageSize, scroll: false);
+            _view.SetCount(_results.Length);
+            _view.Map.SetSegments(segments);
+            if (wanted >= 0)
+            {
+                _sel.Add(wanted);
+                _anchor        = wanted;
+                _selectedIndex = wanted;
+                _view.CenterOn(wanted);
+                Inspect(_results[wanted]);
+            }
+            else if (_results.Length > 0 && ReferenceEquals(Inspected, null)) Select(0, scroll: false);
+
+            UpdateSelectionUi();
+            UpdateWhere();
         }
         catch (OperationCanceledException)
         {
@@ -310,21 +297,45 @@ public sealed partial class UnicodeExplorerView
         }
     }
 
+    /// <summary>The blocks the results run through, in order (what the map beside the scroll bar shows).</summary>
+    private static List<MapSegment> BuildSegments(UnicodeDatabase db, int[] results)
+    {
+        var list = new List<MapSegment>();
+        UnicodeBlock? current = null;
+        int start = 0;
+        bool open = false;
+
+        for (int i = 0; i < results.Length; i++)
+        {
+            int cp = results[i];
+            if (open && current is not null && current.Contains(cp)) continue;
+
+            if (open) list.Add(new MapSegment(start, i - start, current?.Name ?? string.Empty, results[start] >> 16));
+            current = db.BlockOf(cp);
+            start   = i;
+            open    = true;
+        }
+
+        if (open) list.Add(new MapSegment(start, results.Length - start, current?.Name ?? string.Empty, results[start] >> 16));
+        return list;
+    }
+
     private void ClearFilters()
     {
         _suspendSearch = true;
         _search.Text = string.Empty;
-        _category.SelectedIndex = _block.SelectedIndex = _script.SelectedIndex = _age.SelectedIndex = _ageOp.SelectedIndex = 0;
-        _emojiOnly.IsChecked = _unassigned.IsChecked = false;
-        _modeSearch.IsChecked = true;
+        _filter.Reset();
+        SetLookupMode(false);
         _suspendSearch = false;
+        UpdateFilterNote();
+        SaveSettings();
         Schedule(immediate: true);
     }
 
     /// <summary>Searches for something from elsewhere in the window (a tag clicked in the details, a block in a menu).</summary>
     private void SearchFor(string text)
     {
-        _modeSearch.IsChecked = true;
+        SetLookupMode(false);
         _search.Text = text;
         Schedule(immediate: true);
     }
@@ -333,190 +344,287 @@ public sealed partial class UnicodeExplorerView
     private void LookUp(string text)
     {
         _suspendSearch = true;
-        _modeText.IsChecked = true;
-        _search.Text        = text;
-        _suspendSearch      = false;
+        SetLookupMode(true);
+        _search.Text   = text;
+        _suspendSearch = false;
         Schedule(immediate: true);
     }
 
-    private void JumpToCode()
+    /// <summary>Asks for a code point (or a character) and shows it in the full list.</summary>
+    private void GoToCodePoint()
     {
-        if (!CodePoint.TryParse(_jump.Text, out var cp))
+        string? text = PromptDialog.Ask("Go to Code Point", "A code point (U+1F7E2, 0x1F7E2, 1F7E2) or a character; it is shown in the full list.", "Go", Inspected?.CodePoint.Hex ?? string.Empty);
+        if (string.IsNullOrWhiteSpace(text)) return;
+
+        if (!CodePoint.TryParse(text, out var cp))
         {
             Say("Not a code point: write it as U+1F7E2, 0x1F7E2 or the character itself.");
             return;
         }
 
-        // show it in the full list, whatever the filters were
+        ShowCodePoint(cp);
+    }
+
+    /// <summary>Shows the character in the full list, whatever the filters were.</summary>
+    private void ShowCodePoint(CodePoint cp)
+    {
         _selectAfterSearch = cp.Value;
         _suspendSearch     = true;
-        _search.Text = string.Empty;
-        _category.SelectedIndex = _block.SelectedIndex = _script.SelectedIndex = _age.SelectedIndex = 0;
-        _emojiOnly.IsChecked = false;
-        _unassigned.IsChecked = false;
-        _modeSearch.IsChecked = true;
-        _suspendSearch = false;
+        _search.Text       = string.Empty;
+        _filter.Reset();
+        _filter.Kind       = _settings.Kind; // the choice of what to list stays; the rest is what was in the way
+        SetLookupMode(false);
 
         var info = _db?.Get(cp);
         if (info is { IsAssigned: false })
         {
             // an unassigned code point is not in the list of characters: show its block, with the gaps
-            if (info.Block is { } block && _block.Items.OfType<ComboBoxItem>().FirstOrDefault(i => i.Tag as string == block.Name) is { } item)
+            if (info.Block is { } block)
             {
-                _suspendSearch = true;
-                _block.SelectedItem = item;
-                _unassigned.IsChecked = true;
-                _suspendSearch = false;
+                _filter.Block = block.Name;
+                _filter.Kind  = GlyphKind.Everything;
             }
         }
 
+        _suspendSearch = false;
+        UpdateFilterNote();
         Schedule(immediate: true);
     }
 
-    // ---- paging and the cells ------------------------------------------------------------------------------------
+    // ---- selecting -----------------------------------------------------------------------------------------------
 
-    private int PageCount => Math.Max(1, (_results.Length + _pageSize - 1) / _pageSize);
-
-    private void GoToPage(int page)
+    /// <summary>A cell was clicked: Ctrl toggles it, Shift selects the span from where the last plain click was, a plain click selects just it.</summary>
+    private void OnItemClicked(int index, ModifierKeys mods, int clicks)
     {
-        page = Math.Clamp(page, 0, PageCount - 1);
-        if (page == _page && _cells.Count > 0) return;
+        if (index < 0 || index >= _results.Length) return;
 
-        _page = page;
-        ShowPage();
-        if (_results.Length > 0) Select(Math.Min(_page * _pageSize, _results.Length - 1), scroll: false);
-        _resultsScroll.ScrollToTop();
-    }
-
-    private void ShowPage()
-    {
-        _gridPanel.Children.Clear();
-        _listPanel.Children.Clear();
-        _cells.Clear();
-
-        bool list  = _viewList.IsChecked == true;
-        int  first = _page * _pageSize;
-        int  last  = Math.Min(_results.Length, first + _pageSize);
-        var  db    = _db;
-
-        if (db is not null)
-            for (int i = first; i < last; i++)
-            {
-                var cell = list ? MakeRow(db.Get(_results[i]), i) : MakeCell(db.Get(_results[i]), i);
-                _cells.Add(cell);
-                (list ? (Panel)_listPanel : _gridPanel).Children.Add(cell);
-            }
-
-        _resultsScroll.Content = list ? _listPanel : _gridPanel;
-        _count.Text = _results.Length == 0
-                          ? (_modeText.IsChecked == true ? "No text to look up." : "No characters match.")
-                          : $"{_results.Length:N0} character{(_results.Length == 1 ? "" : "s")}" + (_results.Length > _pageSize ? $", showing {first + 1:N0}–{last:N0}" : string.Empty);
-        _pageBox.Text = (_page + 1).ToString();
-        _pageOf.Text  = "of " + PageCount.ToString("N0");
-
-        if (_selectedIndex >= first && _selectedIndex < last) PaintSelection();
-    }
-
-    private Border MakeCell(UnicodeCharacter c, int index)
-    {
-        var cell = UiKit.Cell(c.Glyph, 22, GridCell, GridCell);
-        cell.ToolTip = $"{c.CodePoint.Hex}  {c.Name}";
-        Wire(cell, c, index);
-        return cell;
-    }
-
-    private Border MakeRow(UnicodeCharacter c, int index)
-    {
-        var grid = new Grid { Height = ListRow };
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(38) });
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(74) });
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(34) });
-
-        var glyph = new TextBlock { Text = c.Glyph, FontFamily = UiKit.GlyphFont, FontSize = 18, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
-        glyph.SetResourceReference(TextBlock.ForegroundProperty, "Theme.Text");
-        var hex  = UiKit.Text(c.CodePoint.Hex, muted: true);
-        hex.FontFamily = UiKit.Mono;
-        var name = UiKit.Text(c.Name);
-        name.TextTrimming = TextTrimming.CharacterEllipsis;
-        var cat = UiKit.Text(c.Category, muted: true);
-        cat.ToolTip = c.CategoryName;
-        for (int i = 0; i < 4; i++)
+        bool shift = mods.HasFlag(ModifierKeys.Shift), ctrl = mods.HasFlag(ModifierKeys.Control);
+        if (shift && _anchor >= 0)
         {
-            var e = i switch { 0 => (UIElement)glyph, 1 => hex, 2 => name, _ => cat };
-            Grid.SetColumn(e, i);
-            grid.Children.Add(e);
+            if (!ctrl) _sel.Clear();
+            AddSpan(_anchor, index);
+        }
+        else if (ctrl)
+        {
+            if (!_sel.Remove(index)) _sel.Add(index);
+            _anchor = index;
+        }
+        else
+        {
+            _sel.Clear();
+            _sel.Add(index);
+            _anchor = index;
         }
 
-        var row = new Border { Child = grid, BorderThickness = new Thickness(1), Margin = new Thickness(0, 0, 0, 1), Cursor = Cursors.Hand, ToolTip = $"{c.CodePoint.Hex}  {c.Name}" };
-        UiKit.Paint(row, false);
-        Wire(row, c, index);
-        return row;
+        _selectedIndex = index;
+        SelectionChanged(inspect: true);
+        if (clicks == 2 && !shift && !ctrl) AddToTray(new CodePoint(_results[index]));
     }
 
-    private void Wire(Border cell, UnicodeCharacter c, int index)
+    private void AddSpan(int from, int to)
     {
-        cell.MouseEnter += (_, _) => UiKit.Paint(cell, index == _selectedIndex, hot: true);
-        cell.MouseLeave += (_, _) => UiKit.Paint(cell, index == _selectedIndex);
-        cell.MouseLeftButtonDown += (_, e) =>
-                                    {
-                                        Select(index, scroll: false);
-                                        _resultsScroll.Focus();
-                                        if (e.ClickCount == 2) AddToTray(c.CodePoint);
-                                    };
-        cell.ContextMenu = BuildCellMenu(c, index);
-        cell.ContextMenuOpening += (_, _) => Select(index, scroll: false);
+        for (int i = Math.Min(from, to); i <= Math.Max(from, to); i++) _sel.Add(i);
     }
 
-    private ContextMenu BuildCellMenu(UnicodeCharacter c, int index)
-    {
-        var menu = new ContextMenu();
-        menu.Items.Add(UiKit.Item("Add to collection", () => AddToTray(c.CodePoint), gesture: "Enter"));
-        menu.Items.Add(UiKit.Item("Add all on this page", AddPageToTray));
-        menu.Items.Add(UiKit.Item("Add all results", AddAllResultsToTray, _results.Length > 0));
-        menu.Items.Add(UiKit.Rule());
-        menu.Items.Add(UiKit.Item("Copy character", () => Copy(c.Text, "character"), gesture: "Ctrl+C"));
-        menu.Items.Add(UiKit.Item("Copy code point", () => Copy(c.CodePoint.Hex, "code point")));
-        menu.Items.Add(UiKit.Item("Copy name", () => Copy(c.Name, "name")));
-        menu.Items.Add(UiKit.Rule());
-        if (c.Block is { } block) menu.Items.Add(UiKit.Item($"Show the whole block: {block.Name}", () => SearchFor("block:\"" + block.Name + "\"")));
-        menu.Items.Add(UiKit.Item($"Show everything in {c.CategoryName}", () => SearchFor("cat:" + c.Category)));
-        return menu;
-    }
-
+    /// <summary>Selects one result (and shows it in the details), scrolling to it unless told not to.</summary>
     private void Select(int index, bool scroll = true)
     {
         if (index < 0 || index >= _results.Length) return;
 
+        _sel.Clear();
+        _sel.Add(index);
+        _anchor        = index;
         _selectedIndex = index;
-        int page = index / _pageSize;
-        if (page != _page)
+        if (scroll) _view.EnsureVisible(index);
+        SelectionChanged(inspect: true);
+    }
+
+    /// <summary>Moves the end of the selection (Shift+arrow): the span from where it began to the new place.</summary>
+    private void ExtendTo(int index)
+    {
+        if (_anchor < 0) _anchor = Math.Max(0, _selectedIndex);
+        _sel.Clear();
+        AddSpan(_anchor, index);
+        _selectedIndex = index;
+        _view.EnsureVisible(index);
+        SelectionChanged(inspect: true);
+    }
+
+    private void SelectAllResults()
+    {
+        if (_results.Length == 0) return;
+
+        _sel.Clear();
+        AddSpan(0, _results.Length - 1);
+        if (_selectedIndex < 0) _selectedIndex = 0;
+        _anchor = 0;
+        SelectionChanged(inspect: false);
+    }
+
+    private void SelectionChanged(bool inspect)
+    {
+        _view.Refresh();
+        UpdateSelectionUi();
+        if (inspect && _selectedIndex >= 0 && _selectedIndex < _results.Length) Inspect(_results[_selectedIndex]);
+    }
+
+    /// <summary>The selected code points in the order of the list.</summary>
+    private int[] SelectedCodePoints()
+    {
+        return _sel.Where(i => i >= 0 && i < _results.Length).OrderBy(i => i).Select(i => _results[i]).ToArray();
+    }
+
+    /// <summary>The count line, the "add selected" buttons.</summary>
+    private void UpdateSelectionUi()
+    {
+        int n = _sel.Count;
+        var notes = new List<string>();
+        if (_hiddenNoGlyph > 0) notes.Add($"{_hiddenNoGlyph:N0} without a glyph");
+        if (_hiddenBlocks > 0) notes.Add($"{_hiddenBlocks:N0} in switched-off blocks");
+        string hidden = notes.Count > 0 ? $" ({string.Join(", ", notes)} hidden)" : string.Empty;
+        _count.ToolTip = "Glyph Filter > By Kind chooses which characters are listed; Blocks > Manage Blocks… switches blocks on and off.";
+        _count.Text = _results.Length == 0
+                          ? (_lookupMode ? "No text to look up." : "No characters match.")
+                          : $"{_results.Length:N0} character{(_results.Length == 1 ? "" : "s")}{hidden}" + (n > 1 ? $" · {n:N0} selected" : string.Empty);
+
+        string add = n > 1 ? $"Add {n:N0} selected to collection" : "Add to collection";
+        _addSelectedButton.Content   = n > 1 ? $"Add {n:N0} selected to collection" : "Add selected to collection";
+        _addSelectedButton.IsEnabled = n > 0;
+        _addInspected.Content        = add;
+    }
+
+    /// <summary>Says where in the whole list the view is: the code points, the block(s), the plane, how far through; with a position, what is under the mouse on the map.</summary>
+    private void UpdateWhere(int hover = -1)
+    {
+        var db = _db;
+        if (db is null || _results.Length == 0)
         {
-            _page = page;
-            ShowPage();
+            _where.Text = string.Empty;
+            return;
         }
 
-        PaintSelection();
-        if (scroll && _selectedIndex - _page * _pageSize is var at && at >= 0 && at < _cells.Count) _cells[at].BringIntoView();
-        Inspect(_results[index]);
+        if (hover >= 0 && hover < _results.Length)
+        {
+            var h = db.Get(_results[hover]);
+            _where.Text = $"→ {h.CodePoint.Hex}  ·  {h.Block?.Name ?? "(no block)"}  ·  {h.PlaneName}";
+            return;
+        }
+
+        int first = _view.FirstVisible, last = _view.LastVisible;
+        if (first < 0 || last < 0)
+        {
+            _where.Text = string.Empty;
+            return;
+        }
+
+        var a = db.Get(_results[first]);
+        var z = db.Get(_results[last]);
+        string range  = a.Value == z.Value ? a.CodePoint.Hex : $"{a.CodePoint.Hex} – {z.CodePoint.Hex}";
+        string blockA = a.Block?.Name ?? "(no block)";
+        string blockZ = z.Block?.Name ?? "(no block)";
+        string blocks = blockA == blockZ ? blockA : $"{blockA} → {blockZ}";
+        string plane  = a.PlaneName == z.PlaneName ? a.PlaneName : $"{a.PlaneName} → {z.PlaneName}";
+        _where.Text = $"{range}  ·  {blocks}  ·  {plane}  ·  {(long)(first + 1) * 100 / _results.Length}%";
     }
 
-    private void PaintSelection()
+    // ---- adding, the menu, the keys -----------------------------------------------------------------------------
+
+    private void AddSelectedToTray()
     {
-        int first = _page * _pageSize;
-        for (int i = 0; i < _cells.Count; i++) UiKit.Paint(_cells[i], first + i == _selectedIndex);
+        var chosen = SelectedCodePoints().Where(IsCollectable).ToArray();
+        if (chosen.Length == 0)
+        {
+            Say("Select the characters to add first (Ctrl+click, Shift+click).");
+            return;
+        }
+
+        AddMany(chosen, "the selection");
     }
 
-    private int Columns => Math.Max(1, (int)((_resultsScroll.ViewportWidth > 0 ? _resultsScroll.ViewportWidth : _resultsScroll.ActualWidth) / (GridCell + 2)));
+    /// <summary>Adds the selected characters, or the one the details show when only one is selected.</summary>
+    private void AddSelectedOrCursor()
+    {
+        if (_sel.Count > 1) AddSelectedToTray();
+        else if (_selectedIndex >= 0 && _selectedIndex < _results.Length) AddToTray(new CodePoint(_results[_selectedIndex]));
+        else Say("Select a character first.");
+    }
+
+    private void OnCellMenu(int index, ContextMenu menu)
+    {
+        // a right click on something outside the selection selects it; inside, the menu is about the whole selection
+        if (!_sel.Contains(index))
+        {
+            _sel.Clear();
+            _sel.Add(index);
+            _anchor        = index;
+            _selectedIndex = index;
+            SelectionChanged(inspect: true);
+        }
+
+        var c    = _db!.Get(_results[index]);
+        int many = _sel.Count;
+
+        menu.Items.Add(UiKit.Item(many > 1 ? $"Add {many:N0} selected to collection" : "Add to collection", AddSelectedOrCursor, gesture: "Enter"));
+        menu.Items.Add(UiKit.Item("Add all results", AddAllResultsToTray, _results.Length > 0));
+        menu.Items.Add(UiKit.Rule());
+        menu.Items.Add(UiKit.Item(many > 1 ? "Copy characters" : "Copy character", CopySelectedCharacters, gesture: "Ctrl+C"));
+        menu.Items.Add(UiKit.Item(many > 1 ? "Copy code points" : "Copy code point", () => Copy(string.Join(' ', SelectedCodePoints().Select(cp => new CodePoint(cp).Hex)), "code points")));
+        if (many == 1) menu.Items.Add(UiKit.Item("Copy name", () => Copy(c.Name, "name")));
+        menu.Items.Add(UiKit.Item("Select all", SelectAllResults, gesture: "Ctrl+A"));
+        menu.Items.Add(UiKit.Rule());
+        menu.Items.Add(ColorMenu(() => SelectedCodePoints()));
+        menu.Items.Add(UiKit.Rule());
+        if (c.Block is { } block) menu.Items.Add(UiKit.Item($"Show the whole block: {block.Name}", () => SearchFor("block:\"" + block.Name + "\"")));
+        menu.Items.Add(UiKit.Item($"Show everything in {c.CategoryName}", () => SearchFor("cat:" + c.Category)));
+    }
+
+    private void CopySelectedCharacters()
+    {
+        var cps = SelectedCodePoints();
+        if (cps.Length == 0) return;
+
+        Copy(string.Concat(cps.Select(cp => new CodePoint(cp).Text)), cps.Length == 1 ? "character" : "characters");
+    }
 
     private void OnResultsKeyDown(object sender, KeyEventArgs e)
     {
         if (_results.Length == 0) return;
 
-        bool list = _viewList.IsChecked == true;
-        int  step = list ? 1 : Columns;
-        int  rows = Math.Max(1, (int)(_resultsScroll.ViewportHeight / (list ? ListRow + 1 : GridCell + 2)));
-        int  at   = Math.Max(0, _selectedIndex);
+        var  mods  = Keyboard.Modifiers;
+        bool list  = _view.ListMode;
+        bool shift = mods.HasFlag(ModifierKeys.Shift);
+        int  step  = list ? 1 : _view.Columns;
+        int  rows  = _view.VisibleRows;
+        int  at    = Math.Max(0, _selectedIndex);
+
+        if (e.Key == Key.A && mods == ModifierKeys.Control)
+        {
+            SelectAllResults();
+            e.Handled = true;
+            return;
+        }
+
+        if (e.Key == Key.C && mods == ModifierKeys.Control)
+        {
+            CopySelectedCharacters();
+            e.Handled = true;
+            return;
+        }
+
+        if (e.Key == Key.Enter && _selectedIndex >= 0)
+        {
+            AddSelectedOrCursor();
+            e.Handled = true;
+            return;
+        }
+
+        if (e.Key == Key.Escape && _sel.Count > 1)
+        {
+            Select(_selectedIndex, scroll: false);
+            e.Handled = true;
+            return;
+        }
+
         int? to = e.Key switch
                   {
                       Key.Left when !list => at - 1,
@@ -525,35 +633,16 @@ public sealed partial class UnicodeExplorerView
                       Key.Down => at + step,
                       Key.Home => 0,
                       Key.End => _results.Length - 1,
-                      Key.PageUp when Keyboard.Modifiers == ModifierKeys.Control => (_page - 1) * _pageSize,
-                      Key.PageDown when Keyboard.Modifiers == ModifierKeys.Control => (_page + 1) * _pageSize,
                       Key.PageUp => at - rows * step,
                       Key.PageDown => at + rows * step,
                       _ => null
                   };
 
-        if (to is { } target)
-        {
-            Select(Math.Clamp(target, 0, _results.Length - 1));
-            e.Handled = true;
-        }
-        else if (e.Key == Key.Enter && _selectedIndex >= 0)
-        {
-            AddToTray(new CodePoint(_results[_selectedIndex]));
-            e.Handled = true;
-        }
-        else if (e.Key == Key.C && Keyboard.Modifiers == ModifierKeys.Control && _selectedIndex >= 0)
-        {
-            Copy(new CodePoint(_results[_selectedIndex]).Text, "character");
-            e.Handled = true;
-        }
-    }
+        if (to is not { } target) return;
 
-    private void OnResultsWheel(object sender, MouseWheelEventArgs e)
-    {
-        // Ctrl+wheel turns pages; plain wheel scrolls
-        if (Keyboard.Modifiers != ModifierKeys.Control) return;
-        GoToPage(_page + (e.Delta < 0 ? 1 : -1));
+        target = Math.Clamp(target, 0, _results.Length - 1);
+        if (shift) ExtendTo(target);
+        else Select(target);
         e.Handled = true;
     }
 }

@@ -1,7 +1,6 @@
 ﻿using Microsoft.Win32;
-using Silo.Contracts.Core;
 
-namespace Silo.Shell;
+namespace Silo.Providers.Shell;
 
 public class ShellTypeWriter : ContextBase
 {

@@ -1,7 +1,9 @@
 using System.IO;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using Silo.Providers.Data.Source;
 using Silo.Providers.Document;
+using Silo.Providers.Reflection;
 using Telefrag.DI;
 
 namespace Silo.Providers.Format;
@@ -16,10 +18,11 @@ public class JsonFormat : IFileFormat, IDocumentProvider<JToken>
                                                           LineInfoHandling              = LineInfoHandling.Load
                                                       };
 
-    public string ContentType { get; } = "application/json";
     public string DisplayName { get; } = "JSON File";
 
     public string FileExtension { get; } = "json";
+
+    public string ContentType { get; } = "application/json";
 
     public IEnumerable<DataVerb> GetSupportedVerbs()
     {

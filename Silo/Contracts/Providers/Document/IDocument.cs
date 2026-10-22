@@ -1,6 +1,7 @@
 using System.IO;
+using Silo.Providers.Data.Source;
 
-namespace Silo.Contracts.Providers.Document;
+namespace Silo.Providers.Document;
 
 /// <summary>
 ///     An object which can read one or more documents of type <typeparamref name="TContent" />

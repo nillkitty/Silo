@@ -1,13 +1,17 @@
-﻿using Silo.Contracts.Providers.Data.Shape;
+﻿using Serilog;
 using Silo.DbModel.Worlds;
+using Silo.Providers.Data;
+using Silo.Providers.Data.Shape;
 using Silo.Providers.Definitions;
 using Telefrag.DI;
 
 namespace Silo.Providers;
 
 /// <summary>
-///     Finds the syntaxes defined in the active Silo (<c>syntax:Name</c>, by name or alias; see <see cref="ISyntaxStore" />). New Silos start with the
-///     predefined ones: Timestamp, Duration, Guid, Regex, Wildcard, IPAddress, IPSubnet, Version, Oid, SecurityIdentifier, JObject (jobj), JArray (jarr),
+///     Finds the syntaxes defined in the active Silo (<c>syntax:Name</c>, by name or alias; see
+///     <see cref="ISyntaxStore" />). New Silos start with the
+///     predefined ones: Timestamp, Duration, Guid, Regex, Wildcard, IPAddress, IPSubnet, Version, Oid, SecurityIdentifier,
+///     JObject (jobj), JArray (jarr),
 ///     JToken (jtok), Base64, Html, Csv, Tsv, CliArgs and CliCommand.
 /// </summary>
 [Singleton(typeof(ITypeProvider))]
@@ -23,7 +27,7 @@ public class SyntaxTypeProvider : ITypeProvider
         }
         catch (Exception ex) when (ex is not ArgumentNullException)
         {
-            Serilog.Log.Warning(ex, "Looking up a syntax failed");
+            Log.Warning(ex, "Looking up a syntax failed");
             return null;
         }
     }
@@ -48,7 +52,7 @@ public class EnumTypeProvider : ITypeProvider
         }
         catch (Exception ex) when (ex is not ArgumentNullException)
         {
-            Serilog.Log.Warning(ex, "Looking up an enum failed");
+            Log.Warning(ex, "Looking up an enum failed");
             return null;
         }
     }

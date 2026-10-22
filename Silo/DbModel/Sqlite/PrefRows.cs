@@ -1,13 +1,19 @@
 ﻿using System.Globalization;
-using System.Linq;
 using Microsoft.Data.Sqlite;
+using Silo.Providers.Data;
 
 namespace Silo.DbModel.Sqlite;
 
-/// <summary>The SQL behind <see cref="IPreferenceStore" />: the <c>Pref</c> table, one row per key and user. Kept apart from the provider so it can be tested on its own.</summary>
+/// <summary>
+///     The SQL behind <see cref="IPreferenceStore" />: the <c>Pref</c> table, one row per key and user. Kept apart
+///     from the provider so it can be tested on its own.
+/// </summary>
 public static class PrefRows
 {
-    /// <summary>The preferences that apply to the user: the Silo's shared rows (no user), each replaced by the user's own row for the same key.</summary>
+    /// <summary>
+    ///     The preferences that apply to the user: the Silo's shared rows (no user), each replaced by the user's own row
+    ///     for the same key.
+    /// </summary>
     public static List<PreferenceRecord> Get(SqliteConnection conn, string table, long? userId)
     {
         var byKey = new Dictionary<string, string>(StringComparer.Ordinal);
@@ -31,7 +37,10 @@ public static class PrefRows
         return order.Select(k => new PreferenceRecord(k, byKey[k])).ToList();
     }
 
-    /// <summary>Writes the user's value for the key (the shared one when <paramref name="userId" /> is null). False if it already was that.</summary>
+    /// <summary>
+    ///     Writes the user's value for the key (the shared one when <paramref name="userId" /> is null). False if it
+    ///     already was that.
+    /// </summary>
     public static bool Set(SqliteConnection conn, SqliteTransaction? tx, string table, long? userId, string key, string data)
     {
         string now = DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture);
@@ -64,7 +73,8 @@ public static class PrefRows
         }
         else
         {
-            write.CommandText = $"INSERT INTO {table} ([Key], [Data], [Created], [Modified], [UserId]) VALUES (@key, @data, @now, @now, @uid)";
+            write.CommandText =
+                $"INSERT INTO {table} ([Key], [Data], [Created], [Modified], [UserId]) VALUES (@key, @data, @now, @now, @uid)";
             write.Parameters.AddWithValue("@key", key);
             write.Parameters.AddWithValue("@uid", uid);
         }

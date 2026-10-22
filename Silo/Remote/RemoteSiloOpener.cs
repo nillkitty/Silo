@@ -1,7 +1,7 @@
 ﻿using System.IO;
 using System.Net.Http;
 using Serilog;
-using Silo.Contracts.Providers.Data;
+using Silo.Providers.Data;
 using Silo.Settings;
 
 namespace Silo.Remote;
@@ -20,7 +20,8 @@ public sealed record RemoteOpenResult(string LocalFile, ISiloRemote Remote, bool
 ///         <item>Local copy, nothing waiting to upload: conditional GET; only a changed file is downloaded.</item>
 ///         <item>
 ///             Local copy with saved-but-not-uploaded changes (an earlier upload failed, or the app was closed offline):
-///             if the remote has not changed, upload now; if it has, it is a conflict -- ask (or follow the stored policy).
+///             if the remote has not changed, upload now; if it has, it is a conflict -- ask (or follow the stored
+///             policy).
 ///         </item>
 ///         <item>Remote unreachable but a cached copy exists: open the cached copy and say so.</item>
 ///     </list>
@@ -37,10 +38,10 @@ public static class RemoteSiloOpener
                 throw new ArgumentException("Not a remote location.", nameof(uri));
         }
 
-        var cache   = RemoteSiloCache.For(uri);
-        var remote  = new HttpSiloRemote(cache);
-        var hadCopy = cache.HasLocalCopy;
-        string? notice = null;
+        var     cache   = RemoteSiloCache.For(uri);
+        var     remote  = new HttpSiloRemote(cache);
+        var     hadCopy = cache.HasLocalCopy;
+        string? notice  = null;
 
         try
         {
@@ -64,14 +65,15 @@ public static class RemoteSiloOpener
                         case SaveConflictChoice.SaveCopy:
                             var mine = Path.Combine(cache.Directory,
                                                     $"{Path.GetFileNameWithoutExtension(cache.File)} (my changes {DateTime.Now:yyyy-MM-dd HHmmss}).silo");
-                            System.IO.File.Move(cache.File, mine);
+                            File.Move(cache.File, mine);
                             cache.State.Unpushed = false;
                             await remote.PullAsync(ct);
                             notice = $"Opened the remote version. Your unsent changes are kept in {mine}";
                             break;
 
                         default:
-                            throw new OperationCanceledException("Open cancelled: the remote copy changed while changes here were not uploaded.");
+                            throw new
+                                OperationCanceledException("Open cancelled: the remote copy changed while changes here were not uploaded.");
                     }
                 }
             }
@@ -84,7 +86,8 @@ public static class RemoteSiloOpener
         catch (Exception ex) when (hadCopy && ex is HttpRequestException or TaskCanceledException)
         {
             Log.Warning(ex, "Could not reach {Uri}; opening the cached copy", uri);
-            return new RemoteOpenResult(cache.File, remote, true, $"{uri.Host} could not be reached; opened the copy from your last visit.");
+            return new RemoteOpenResult(cache.File, remote, true,
+                                        $"{uri.Host} could not be reached; opened the copy from your last visit.");
         }
 
         return new RemoteOpenResult(cache.File, remote, false, notice);

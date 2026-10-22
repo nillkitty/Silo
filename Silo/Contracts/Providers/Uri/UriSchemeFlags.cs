@@ -1,4 +1,4 @@
-﻿namespace Silo.Shell;
+﻿namespace Silo.Providers;
 
 [Flags]
 public enum UriSchemeFlags

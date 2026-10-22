@@ -1,6 +1,7 @@
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
+using Silo.Clipboarding;
 using Silo.Labs;
 using Silo.Tabular;
 using Silo.Toolbar;
@@ -27,8 +28,6 @@ public partial class MenuBar : Menu
         // style (background, text colour) is asked for explicitly
         SetResourceReference(StyleProperty, typeof(Menu));
 
-        // the Node menu is only available while the selected Explorer node has commands
-        NodeCommandHub.Changed += (_, _) => RefreshNodeMenuEnabled();
     }
 
     private MainWindow? Main => Window.GetWindow(this) as MainWindow;
@@ -71,21 +70,47 @@ public partial class MenuBar : Menu
 
     // ---- Node ----------------------------------------------------------------------------------
 
-    private void RefreshNodeMenuEnabled()
-    {
-        NodeMenu.IsEnabled = NodeCommandHub.CommandsFor(NodeCommandHub.Current).Count > 0;
-    }
-
     /// <summary>Lists the selected Explorer node's commands.</summary>
     private void NodeMenu_SubmenuOpened(object sender, RoutedEventArgs e)
     {
         if (!ReferenceEquals(e.OriginalSource, sender)) return;
 
         NodeMenu.Items.Clear();
-        foreach (var entry in CommandMenu.Items(NodeCommandHub.CommandsFor(NodeCommandHub.Current)))
-            NodeMenu.Items.Add(entry);
 
-        if (NodeMenu.Items.Count == 0) NodeMenu.Items.Add(new MenuItem { Header = "(no commands)", IsEnabled = false });
+        var node = NodeCommandHub.Current;
+        try
+        {
+            // opening the node's view (what a click and a double-click do)
+            if (node is { Opener: { } open, DocKey: not null })
+            {
+                NodeMenu.Items.Add(Item("_Open (preview tab)", () => open(false)));
+                NodeMenu.Items.Add(Item("Open (_keep as a tab)", () => open(true)));
+                NodeMenu.Items.Add(new Separator());
+            }
+
+            // the node's commands: exactly what its right-click menu lists (see ContextCommands), Refresh (F5) among them
+            foreach (var entry in CommandMenu.Items(NodeCommandHub.CommandsFor(node)))
+                NodeMenu.Items.Add(entry);
+
+            // then Cut / Copy / Paste, as in the right-click menu
+            if (Main?.ExplorerControl is { } explorer)
+            {
+                var clipboard = ClipboardCommands.Items(explorer.GetClipboardContext()).ToList();
+                if (clipboard.Count > 0)
+                {
+                    if (NodeMenu.Items.Count > 0 && NodeMenu.Items[^1] is not Separator) NodeMenu.Items.Add(new Separator());
+                    foreach (var item in clipboard) NodeMenu.Items.Add(item);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Serilog.Log.Warning(ex, "Building the Node menu failed");
+        }
+
+        // never leave it empty: a menu item with no items cannot open again
+        if (NodeMenu.Items.Count == 0)
+            NodeMenu.Items.Add(new MenuItem { Header = node is null ? "(select a node in the Explorer)" : "(no commands)", IsEnabled = false });
     }
 
     // ---- Analysis ------------------------------------------------------------------------------
@@ -139,7 +164,7 @@ public partial class MenuBar : Menu
             foreach (var window in windows)
             {
                 var w = window;
-                var item = new MenuItem { Header = "Window: " + w.Title.Replace("_", "__") };
+                var item = new MenuItem { Header = "Window: " + Shorten(w.Title), ToolTip = w.Title };
                 item.Click += (_, _) =>
                               {
                                   if (w.WindowState == WindowState.Minimized) w.WindowState = WindowState.Normal;
@@ -182,7 +207,7 @@ public partial class MenuBar : Menu
             var w = window;
 
             // "_" would make the next letter an access key
-            var entry = new MenuItem { Header = "Window: " + w.Title.Replace("_", "__") };
+            var entry = new MenuItem { Header = "Window: " + Shorten(w.Title), ToolTip = w.Title };
             entry.Items.Add(Item("_Show", w.Reveal));
             entry.Items.Add(Item("_Return to tab", w.ReturnToTab));
             entry.Items.Add(Item("_Close", w.Close));
@@ -190,6 +215,17 @@ public partial class MenuBar : Menu
             ViewMenu.Items.Add(entry);
             _windowItems.Add(entry);
         }
+    }
+
+    /// <summary>The longest a window's name is in a menu; a page's title can be a whole sentence.</summary>
+    private const int WindowNameLimit = 40;
+
+    /// <summary>A window's title for a menu: cut at <see cref="WindowNameLimit" /> characters with an ellipsis, and with "_" doubled (it would make the next letter an access key).</summary>
+    internal static string Shorten(string? title, int limit = WindowNameLimit)
+    {
+        string text = (title ?? string.Empty).Trim();
+        if (text.Length > limit) text = text[..(limit - 1)].TrimEnd() + "\u2026";
+        return text.Replace("_", "__");
     }
 
     private static MenuItem Item(string header, Action click)

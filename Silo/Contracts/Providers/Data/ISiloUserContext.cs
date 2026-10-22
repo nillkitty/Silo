@@ -1,4 +1,4 @@
-﻿namespace Silo.Contracts.Providers.Data;
+﻿namespace Silo.Providers.Data;
 
 /// <summary>
 ///     Represents the relationship between the Silo and the current user.

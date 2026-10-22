@@ -1,77 +1,28 @@
-﻿using System.Linq;
-using Silo.Contracts.Providers.Data;
+﻿using System.Reflection;
+using Silo.Contracts.Connectors;
+using Silo.Contracts.Core;
 using Silo.Model;
+using Silo.Providers.Data;
 
 namespace Silo.Tests.ViewModel;
 
 public class PreferenceTests
 {
-    private sealed class FakeStore : IPreferenceStore
+    private static IPreference Pref(ModelBase m, string key)
     {
-        public Dictionary<string, string> Rows   { get; } = [];
-        public List<string>               Writes { get; } = [];
-
-        public IReadOnlyList<PreferenceRecord> GetPreferences() => Rows.Select(r => new PreferenceRecord(r.Key, r.Value)).ToList();
-
-        public void SetPreference(string key, string data)
-        {
-            Rows[key] = data;
-            Writes.Add(key);
-        }
+        return m.Preferences.Single(p => p.Key == key);
     }
-
-    private enum Mode
-    {
-        Quick,
-        Careful
-    }
-
-    private class Sample : ModelBase
-    {
-        public FakeStore Store { get; } = new();
-
-        protected override IPreferenceStore? PreferenceStore => Store;
-
-        [Toggle("test.on", "Starts on", true)]
-        public bool On { get; set; }
-
-        [Toggle("test.off", "Starts off")]
-        public bool Off { get; set; }
-
-        [Toggle("test.declared", "Declared default beats the initial value", true)]
-        public bool Declared { get; set; }
-
-        [Preference("test.count", "A number", 5, Category = "Numbers")]
-        public int Count { get; set; } = 1;
-
-        [Preference("test.ratio", "A decimal number", 2)]
-        public double Ratio { get; set; }
-
-        [Preference("test.mode", "A choice", "Careful")]
-        public Mode Mode { get; set; }
-
-        [Preference("test.name", "Text")]
-        public string Name { get; set; } = "initial";
-
-        public bool NotAPreference { get; set; } = true;
-
-        public void Load() => LoadPreferences();
-    }
-
-    private sealed class Derived : Sample
-    {
-        [Toggle("test.derived", "Added by a subclass", false)]
-        public bool Extra { get; set; }
-    }
-
-    private static Preference Pref(ModelBase m, string key) => m.Preferences.Single(p => p.Key == key);
 
     [Test]
     public void Marked_properties_are_the_preferences_and_others_are_not()
     {
         var keys = new Sample().Preferences.Select(p => p.Key);
 
-        Assert.That(keys, Is.EquivalentTo(new[] { "test.on", "test.off", "test.declared", "test.count", "test.ratio", "test.mode", "test.name" }));
+        Assert.That(keys,
+                    Is.EquivalentTo(new[]
+                                    {
+                                        "test.on", "test.off", "test.declared", "test.count", "test.ratio", "test.mode", "test.name"
+                                    }));
     }
 
     [Test]
@@ -79,8 +30,8 @@ public class PreferenceTests
     {
         var keys = new Derived().Preferences.Select(p => p.Key).ToList();
 
-        Assert.That(keys.Last(),  Is.EqualTo("test.derived"));
-        Assert.That(keys.Count,   Is.EqualTo(8));
+        Assert.That(keys.Last(), Is.EqualTo("test.derived"));
+        Assert.That(keys.Count,  Is.EqualTo(8));
     }
 
     [Test]
@@ -88,10 +39,10 @@ public class PreferenceTests
     {
         var count = Pref(new Sample(), "test.count");
 
-        Assert.That(count.Description, Is.EqualTo("A number"));
-        Assert.That(count.Category,    Is.EqualTo("Numbers"));
-        Assert.That(count.ValueType,   Is.EqualTo(typeof(int)));
-        Assert.That(count.IsToggle,    Is.False);
+        Assert.That(count.Description,                      Is.EqualTo("A number"));
+        Assert.That(count.Category,                         Is.EqualTo("Numbers"));
+        Assert.That(count.ValueType,                        Is.EqualTo(typeof(int)));
+        Assert.That(count.IsToggle,                         Is.False);
         Assert.That(Pref(new Sample(), "test.on").IsToggle, Is.True);
     }
 
@@ -100,10 +51,10 @@ public class PreferenceTests
     {
         var m = new Sample();
 
-        Assert.That(Pref(m, "test.count").Default, Is.EqualTo(5), "declared");
+        Assert.That(Pref(m, "test.count").Default, Is.EqualTo(5),         "declared");
         Assert.That(Pref(m, "test.name").Default,  Is.EqualTo("initial"), "none declared: the initial value");
         Assert.That(Pref(m, "test.off").Default,   Is.EqualTo(false));
-        Assert.That(Pref(m, "test.ratio").Default, Is.EqualTo(2.0), "an int constant for a double property");
+        Assert.That(Pref(m, "test.ratio").Default, Is.EqualTo(2.0),          "an int constant for a double property");
         Assert.That(Pref(m, "test.mode").Default,  Is.EqualTo(Mode.Careful), "a string constant for an enum property");
     }
 
@@ -114,11 +65,11 @@ public class PreferenceTests
 
         m.Load();
 
-        Assert.That(m.On,       Is.True);
-        Assert.That(m.Declared, Is.True, "the property started false, the attribute says true");
-        Assert.That(m.Count,    Is.EqualTo(5));
-        Assert.That(m.Mode,     Is.EqualTo(Mode.Careful));
-        Assert.That(m.Name,     Is.EqualTo("initial"));
+        Assert.That(m.On,           Is.True);
+        Assert.That(m.Declared,     Is.True, "the property started false, the attribute says true");
+        Assert.That(m.Count,        Is.EqualTo(5));
+        Assert.That(m.Mode,         Is.EqualTo(Mode.Careful));
+        Assert.That(m.Name,         Is.EqualTo("initial"));
         Assert.That(m.Store.Writes, Is.Empty, "loading writes nothing");
     }
 
@@ -133,10 +84,10 @@ public class PreferenceTests
 
         m.Load();
 
-        Assert.That(m.On,    Is.False);
-        Assert.That(m.Count, Is.EqualTo(42));
-        Assert.That(m.Mode,  Is.EqualTo(Mode.Quick));
-        Assert.That(m.Name,  Is.EqualTo("kept"));
+        Assert.That(m.On,           Is.False);
+        Assert.That(m.Count,        Is.EqualTo(42));
+        Assert.That(m.Mode,         Is.EqualTo(Mode.Quick));
+        Assert.That(m.Name,         Is.EqualTo("kept"));
         Assert.That(m.Store.Writes, Is.Empty);
     }
 
@@ -159,8 +110,8 @@ public class PreferenceTests
 
         Pref(m, "test.count").Value = 9;
 
-        Assert.That(m.Count,                      Is.EqualTo(9));
-        Assert.That(m.Store.Rows["test.count"],   Is.EqualTo("9"));
+        Assert.That(m.Count,                    Is.EqualTo(9));
+        Assert.That(m.Store.Rows["test.count"], Is.EqualTo("9"));
     }
 
     [Test]
@@ -168,7 +119,7 @@ public class PreferenceTests
     {
         var m = new Sample();
 
-        Pref(m, "test.ratio").Value = 3;   // an int for a double
+        Pref(m, "test.ratio").Value = 3; // an int for a double
         Pref(m, "test.mode").Value  = "Quick";
 
         Assert.That(m.Ratio, Is.EqualTo(3.0));
@@ -182,7 +133,7 @@ public class PreferenceTests
 
         Assert.Throws<ArgumentException>(() => Pref(m, "test.count").Value = "many");
         Assert.Throws<ArgumentException>(() => Pref(m, "test.count").Value = null);
-        Assert.That(m.Count, Is.EqualTo(1));
+        Assert.That(m.Count,        Is.EqualTo(1));
         Assert.That(m.Store.Writes, Is.Empty);
     }
 
@@ -218,8 +169,8 @@ public class PreferenceTests
 
         Pref(m, "test.count").Reset();
 
-        Assert.That(m.Count,                    Is.EqualTo(5));
-        Assert.That(m.Store.Rows["test.count"], Is.EqualTo("5"));
+        Assert.That(m.Count,                         Is.EqualTo(5));
+        Assert.That(m.Store.Rows["test.count"],      Is.EqualTo("5"));
         Assert.That(Pref(m, "test.count").IsDefault, Is.True);
     }
 
@@ -233,7 +184,7 @@ public class PreferenceTests
         m.On    = false;
         m.SavePreferences();
 
-        Assert.That(m.Store.Writes, Is.EquivalentTo(new[] { "test.count", "test.on" }));
+        Assert.That(m.Store.Writes,             Is.EquivalentTo(new[] { "test.count", "test.on" }));
         Assert.That(m.Store.Rows["test.count"], Is.EqualTo("7"));
         Assert.That(m.Store.Rows["test.on"],    Is.EqualTo("false"));
 
@@ -291,48 +242,14 @@ public class PreferenceTests
         Assert.That(m.X, Is.True);
     }
 
-    private sealed class NoStore : ModelBase
-    {
-        [Toggle("test.x", "x", false)]
-        public bool X { get; set; }
-    }
-
-    // ---- mistakes in the code are loud ----------------------------------------------------------
-
-    private sealed class DuplicateKeys : ModelBase
-    {
-        [Toggle("test.same", "a", false)] public bool A { get; set; }
-        [Toggle("test.same", "b", false)] public bool B { get; set; }
-    }
-
-    private sealed class ToggleOfNumber : ModelBase
-    {
-        [Toggle("test.num", "n")] public int N { get; set; }
-    }
-
-    private sealed class UnsupportedType : ModelBase
-    {
-        [Preference("test.list", "l")] public List<int> L { get; set; } = [];
-    }
-
-    private sealed class ReadOnly : ModelBase
-    {
-        [Preference("test.ro", "r")] public int R { get; } = 1;
-    }
-
-    private sealed class BadDefault : ModelBase
-    {
-        [Preference("test.bad", "b", "not a number")] public int B { get; set; }
-    }
-
     [Test]
     public void A_mistake_in_the_markings_is_an_error_naming_the_property()
     {
-        Assert.That(() => new DuplicateKeys().Preferences,  Throws.InvalidOperationException.With.Message.Contains("test.same"));
-        Assert.That(() => new ToggleOfNumber().Preferences, Throws.InvalidOperationException.With.Message.Contains("ToggleOfNumber.N"));
+        Assert.That(() => new DuplicateKeys().Preferences,   Throws.InvalidOperationException.With.Message.Contains("test.same"));
+        Assert.That(() => new ToggleOfNumber().Preferences,  Throws.InvalidOperationException.With.Message.Contains("ToggleOfNumber.N"));
         Assert.That(() => new UnsupportedType().Preferences, Throws.InvalidOperationException.With.Message.Contains("UnsupportedType.L"));
-        Assert.That(() => new ReadOnly().Preferences,       Throws.InvalidOperationException.With.Message.Contains("setter"));
-        Assert.That(() => new BadDefault().Preferences,     Throws.InvalidOperationException.With.Message.Contains("default"));
+        Assert.That(() => new ReadOnly().Preferences,        Throws.InvalidOperationException.With.Message.Contains("setter"));
+        Assert.That(() => new BadDefault().Preferences,      Throws.InvalidOperationException.With.Message.Contains("default"));
     }
 
     // ---- the Silo's own ------------------------------------------------------------------------
@@ -344,7 +261,7 @@ public class PreferenceTests
         {
             types = typeof(ModelBase).Assembly.GetTypes();
         }
-        catch (System.Reflection.ReflectionTypeLoadException ex)
+        catch (ReflectionTypeLoadException ex)
         {
             types = ex.Types;
         }
@@ -375,5 +292,122 @@ public class PreferenceTests
         Assert.That(keys, Does.Contain("silo.rememberExplorerTree"));
         Assert.That(keys, Does.Contain("silo.reopenMe"));
         Assert.That(keys, Is.Unique);
+    }
+
+    /// <summary>
+    ///     A model must be given a connection, but these tests never use it: this one answers every question with the
+    ///     default (null, false, 0).
+    /// </summary>
+    public class Stand : DispatchProxy
+    {
+        public static IConnection In()
+        {
+            return Create<IConnection, Stand>();
+        }
+
+        protected override object? Invoke(MethodInfo? targetMethod, object?[]? args)
+        {
+            var type = targetMethod?.ReturnType;
+            return type is { IsValueType: true } && type != typeof(void) ? Activator.CreateInstance(type) : null;
+        }
+    }
+
+    private sealed class FakeStore : IPreferenceStore
+    {
+        public Dictionary<string, string> Rows   { get; } = [];
+        public List<string>               Writes { get; } = [];
+
+        public IReadOnlyList<PreferenceRecord> GetPreferences()
+        {
+            return Rows.Select(r => new PreferenceRecord(r.Key, r.Value)).ToList();
+        }
+
+        public void SetPreference(string key, string data)
+        {
+            Rows[key] = data;
+            Writes.Add(key);
+        }
+    }
+
+    private enum Mode
+    {
+        Quick,
+        Careful
+    }
+
+    private class Sample() : ModelBase(Stand.In())
+    {
+        [Preference("Count", "test.count", "A number", 5, Category = "Numbers")]
+        public int Count { get; set; } = 1;
+
+        [Toggle("Declared", "test.declared", "Declared default beats the initial value", true)]
+        public bool Declared { get; set; }
+
+        [Preference("Mode", "test.mode", "A choice", "Careful")]
+        public Mode Mode { get; set; }
+
+        [Preference("Name", "test.name", "Text")]
+        public string Name { get; set; } = "initial";
+
+        public bool NotAPreference { get; set; } = true;
+
+        [Toggle("Off", "test.off", "Starts off")]
+        public bool Off { get; set; }
+
+        [Toggle("On", "test.on", "Starts on", true)]
+        public bool On { get; set; }
+
+        [Preference("Ratio", "test.ratio", "A decimal number", 2)]
+        public double Ratio { get; set; }
+
+        public FakeStore Store { get; } = new();
+
+        protected override IPreferenceStore? PreferenceStore => Store;
+
+        public void Load()
+        {
+            LoadPreferences();
+        }
+    }
+
+    private sealed class Derived : Sample
+    {
+        [Toggle("Extra", "test.derived", "Added by a subclass", false)]
+        public bool Extra { get; set; }
+    }
+
+    private sealed class NoStore() : ModelBase(Stand.In())
+    {
+        [Toggle("X", "test.x", "x", false)]
+        public bool X { get; set; }
+    }
+
+    // ---- mistakes in the code are loud ----------------------------------------------------------
+
+    private sealed class DuplicateKeys() : ModelBase(Stand.In())
+    {
+        [Toggle("A", "test.same", "a", false)] public bool A { get; set; }
+        [Toggle("B", "test.same", "b", false)] public bool B { get; set; }
+    }
+
+    private sealed class ToggleOfNumber() : ModelBase(Stand.In())
+    {
+        [Toggle("N", "test.num", "n")] public int N { get; set; }
+    }
+
+    private sealed class UnsupportedType() : ModelBase(Stand.In())
+    {
+        [Preference("L", "test.list", "l")] public List<int> L { get; set; } = [];
+    }
+
+    private sealed class ReadOnly() : ModelBase(Stand.In())
+    {
+        [Preference("R", "test.ro", "r")] public int R { get; } = 1;
+    }
+
+    private sealed class BadDefault() : ModelBase(Stand.In())
+    {
+        [Preference("B", "test.bad", "b", "not a number")]
+        public int B { get; set; }
     }
 }

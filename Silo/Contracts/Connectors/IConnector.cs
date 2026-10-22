@@ -52,4 +52,9 @@ public interface IConnector
     ///     Gets the type of object this connector uses for state values
     /// </summary>
     Type GetStateType();
+
+    /// <summary>
+    ///     Gets the current state for a node's context
+    /// </summary>
+    IConnectionState GetState(object context);
 }

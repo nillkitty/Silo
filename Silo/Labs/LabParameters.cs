@@ -25,35 +25,25 @@ public enum LabParameterKind
 }
 
 /// <summary>
-///     One setting of a Lab (the home address of the Web Lab, the hosts it blocks...): described once here, edited in the Lab's Parameters
+///     One setting of a Lab (the home address of the Web Lab, the hosts it blocks...): described once here, edited in the
+///     Lab's Parameters
 ///     pane or with <c>set</c> in its terminal, and kept in the Silo by its <see cref="LabParameterSet" />.
 /// </summary>
 public sealed class LabParameter
 {
     private object? _value;
 
-    public LabParameter(string name, string title, LabParameterKind kind, object? defaultValue = null, string? description = null,
-                        string? group = null, IReadOnlyList<string>? choices = null, string? hint = null)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(name);
-        Name        = name;
-        Title       = title;
-        Kind        = kind;
-        Description = description ?? string.Empty;
-        Group       = group ?? string.Empty;
-        Hint        = hint;
-        Choices     = choices ?? [];
-        Default     = Normalize(kind, defaultValue);
-        _value      = Default;
-    }
+    /// <summary>The value of an on/off parameter.</summary>
+    public bool Bool => _value is true;
 
-    /// <summary>What it is called in the terminal and in the saved text ("blockedHosts"); not changed once released.</summary>
-    public string Name { get; }
+    /// <summary>
+    ///     For <see cref="LabParameterKind.Choice" /> and <see cref="LabParameterKind.Flags" />: what there is to choose
+    ///     from.
+    /// </summary>
+    public IReadOnlyList<string> Choices { get; }
 
-    /// <summary>What it is called to a person ("Blocked hosts").</summary>
-    public string Title { get; }
-
-    public LabParameterKind Kind { get; }
+    /// <summary>The value when nothing has been set.</summary>
+    public object? Default { get; }
 
     /// <summary>What it does; shown under the title.</summary>
     public string Description { get; }
@@ -64,13 +54,27 @@ public sealed class LabParameter
     /// <summary>Shown as a tooltip on the editor (the format of a line, say).</summary>
     public string? Hint { get; }
 
-    /// <summary>For <see cref="LabParameterKind.Choice" /> and <see cref="LabParameterKind.Flags" />: what there is to choose from.</summary>
-    public IReadOnlyList<string> Choices { get; }
+    /// <summary>Whether the value is what it is when nothing is set.</summary>
+    public bool IsDefault => SameValue(_value, Default);
 
-    /// <summary>The value when nothing has been set.</summary>
-    public object? Default { get; }
+    public LabParameterKind Kind { get; }
 
-    /// <summary>The value: a <see cref="string" />, a <see cref="bool" /> or a <see cref="string" />[] by <see cref="Kind" />. Setting it raises <see cref="Changed" />.</summary>
+    /// <summary>The entries of a <see cref="LabParameterKind.Lines" /> or <see cref="LabParameterKind.Flags" /> parameter.</summary>
+    public IReadOnlyList<string> Lines => _value as string[] ?? [];
+
+    /// <summary>What it is called in the terminal and in the saved text ("blockedHosts"); not changed once released.</summary>
+    public string Name { get; }
+
+    /// <summary>The value as text.</summary>
+    public string Text => _value as string ?? string.Empty;
+
+    /// <summary>What it is called to a person ("Blocked hosts").</summary>
+    public string Title { get; }
+
+    /// <summary>
+    ///     The value: a <see cref="string" />, a <see cref="bool" /> or a <see cref="string" />[] by <see cref="Kind" />.
+    ///     Setting it raises <see cref="Changed" />.
+    /// </summary>
     public object? Value
     {
         get => _value;
@@ -84,18 +88,6 @@ public sealed class LabParameter
         }
     }
 
-    /// <summary>The value as text.</summary>
-    public string Text => _value as string ?? string.Empty;
-
-    /// <summary>The value of an on/off parameter.</summary>
-    public bool Bool => _value is true;
-
-    /// <summary>The entries of a <see cref="LabParameterKind.Lines" /> or <see cref="LabParameterKind.Flags" /> parameter.</summary>
-    public IReadOnlyList<string> Lines => _value as string[] ?? [];
-
-    /// <summary>Whether the value is what it is when nothing is set.</summary>
-    public bool IsDefault => SameValue(_value, Default);
-
     public event EventHandler? Changed;
 
     /// <summary>The value written as a person would type it in the terminal.</summary>
@@ -105,12 +97,15 @@ public sealed class LabParameter
                {
                    LabParameterKind.Bool  => Bool ? "on" : "off",
                    LabParameterKind.Lines => string.Join(" | ", Lines),
-                   LabParameterKind.Flags => string.Join(", ", Lines),
+                   LabParameterKind.Flags => string.Join(", ",  Lines),
                    _                      => Text
                };
     }
 
-    /// <summary>Sets the value from text typed in the terminal. Throws <see cref="FormatException" /> when the text is not a value of this parameter.</summary>
+    /// <summary>
+    ///     Sets the value from text typed in the terminal. Throws <see cref="FormatException" /> when the text is not a
+    ///     value of this parameter.
+    /// </summary>
     public void SetFromText(string text)
     {
         switch (Kind)
@@ -118,21 +113,21 @@ public sealed class LabParameter
             case LabParameterKind.Bool:
                 Value = text.Trim().ToLowerInvariant() switch
                         {
-                            "true" or "on" or "yes" or "1" or "y"   => true,
+                            "true" or "on" or "yes" or "1" or "y"  => true,
                             "false" or "off" or "no" or "0" or "n" => false,
-                            _                                       => throw new FormatException($"'{text}' is not on or off.")
+                            _                                      => throw new FormatException($"'{text}' is not on or off.")
                         };
                 break;
 
             case LabParameterKind.Choice:
-                Value = Choices.FirstOrDefault(c => string.Equals(c, text.Trim(), StringComparison.OrdinalIgnoreCase))
-                        ?? throw new FormatException($"'{text}' is not one of: {string.Join(", ", Choices)}.");
+                Value = Choices.FirstOrDefault(c => string.Equals(c, text.Trim(), StringComparison.OrdinalIgnoreCase)) ??
+                        throw new FormatException($"'{text}' is not one of: {string.Join(", ", Choices)}.");
                 break;
 
             case LabParameterKind.Flags:
                 var picked = text.Split([',', ';', ' '], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                                 .Select(w => Choices.FirstOrDefault(c => string.Equals(c, w, StringComparison.OrdinalIgnoreCase))
-                                              ?? throw new FormatException($"'{w}' is not one of: {string.Join(", ", Choices)}."))
+                                 .Select(w => Choices.FirstOrDefault(c => string.Equals(c, w, StringComparison.OrdinalIgnoreCase)) ??
+                                              throw new FormatException($"'{w}' is not one of: {string.Join(", ", Choices)}."))
                                  .ToArray();
                 Value = picked;
                 break;
@@ -160,9 +155,9 @@ public sealed class LabParameter
         {
             Value = Kind switch
                     {
-                        LabParameterKind.Bool                                => JsonConvert.DeserializeObject<bool>(json),
-                        LabParameterKind.Lines or LabParameterKind.Flags     => JsonConvert.DeserializeObject<string[]>(json),
-                        _                                                    => JsonConvert.DeserializeObject<string>(json)
+                        LabParameterKind.Bool                            => JsonConvert.DeserializeObject<bool>(json),
+                        LabParameterKind.Lines or LabParameterKind.Flags => JsonConvert.DeserializeObject<string[]>(json),
+                        _                                                => JsonConvert.DeserializeObject<string>(json)
                     };
         }
         catch (JsonException ex)
@@ -186,11 +181,11 @@ public sealed class LabParameter
             case LabParameterKind.Lines:
             case LabParameterKind.Flags:
                 IEnumerable<string> entries;
-                if (value is null) entries = Array.Empty<string>();
-                else if (value is string s) entries = s.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries);
+                if (value is null) entries                           = Array.Empty<string>();
+                else if (value is string s) entries                  = s.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries);
                 else if (value is IEnumerable<string> typed) entries = typed;
-                else if (value is IEnumerable untyped) entries = untyped.Cast<object?>().Select(o => o?.ToString() ?? string.Empty);
-                else entries = [value.ToString() ?? string.Empty];
+                else if (value is IEnumerable untyped) entries       = untyped.Cast<object?>().Select(o => o?.ToString() ?? string.Empty);
+                else entries                                         = [value.ToString() ?? string.Empty];
 
                 var cleaned = entries.Select(e => e.Trim()).Where(e => e.Length > 0);
                 return (kind == LabParameterKind.Flags ? cleaned.Distinct(StringComparer.OrdinalIgnoreCase) : cleaned).ToArray();
@@ -205,34 +200,41 @@ public sealed class LabParameter
         if (a is string[] x && b is string[] y) return x.SequenceEqual(y);
         return Equals(a, b);
     }
+
+    public LabParameter(string  name,         string title, LabParameterKind kind, object? defaultValue = null, string? description = null,
+                        string? group = null, IReadOnlyList<string>? choices = null, string? hint = null)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        Name        = name;
+        Title       = title;
+        Kind        = kind;
+        Description = description ?? string.Empty;
+        Group       = group       ?? string.Empty;
+        Hint        = hint;
+        Choices     = choices ?? [];
+        Default     = Normalize(kind, defaultValue);
+        _value      = Default;
+    }
 }
 
 /// <summary>
-///     The parameters of one Lab, kept in the Silo for the person using it: what is not the default is stored (as one item,
-///     <c>lab:&lt;id&gt;:parameters</c>, which the Explorer lists with the other saved things), so a Lab that gains a parameter, or changes a
-///     default, reaches people who never touched it. Named presets (<c>lab:&lt;id&gt;:preset:&lt;name&gt;</c>) keep whole sets to load later.
+///     The parameters of one Lab, kept in the Silo for the person using it: what is not the default is stored (as one
+///     item,
+///     <c>lab:&lt;id&gt;:parameters</c>, which the Explorer lists with the other saved things), so a Lab that gains a
+///     parameter, or changes a
+///     default, reaches people who never touched it. Named presets (<c>lab:&lt;id&gt;:preset:&lt;name&gt;</c>) keep whole
+///     sets to load later.
 ///     With no Silo open the parameters work for the session and are not kept.
 /// </summary>
 public sealed class LabParameterSet : IEnumerable<LabParameter>
 {
-    private readonly List<LabParameter>                     _all    = [];
-    private readonly Dictionary<string, LabParameter>       _byName = new(StringComparer.OrdinalIgnoreCase);
-    private          bool                                   _loading;
+    private readonly List<LabParameter>               _all    = [];
+    private readonly Dictionary<string, LabParameter> _byName = new(StringComparer.OrdinalIgnoreCase);
+    private          bool                             _loading;
 
-    public LabParameterSet(string labId, IEnumerable<LabParameter> parameters)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(labId);
-        LabId = labId;
+    public int Count => _all.Count;
 
-        foreach (var p in parameters)
-        {
-            _all.Add(p);
-            _byName[p.Name] = p;
-            p.Changed += (_, _) => OnParameterChanged(p);
-        }
-
-        if (App.Instance is { } app) app.ActiveSiloChanged += (_, _) => Load();
-    }
+    public LabParameter this[string name] => _byName[name];
 
     /// <summary>The Lab the parameters are of.</summary>
     public string LabId { get; }
@@ -242,12 +244,9 @@ public sealed class LabParameterSet : IEnumerable<LabParameter>
 
     private string PresetPrefix => $"lab:{LabId}:preset:";
 
-    public int Count => _all.Count;
-
-    public LabParameter this[string name] => _byName[name];
-
     /// <summary>
-    ///     Raised after a parameter changed (that parameter), or after many did at once -- loading, resetting, a preset (null). May be raised
+    ///     Raised after a parameter changed (that parameter), or after many did at once -- loading, resetting, a preset
+    ///     (null). May be raised
     ///     on any thread; whoever shows the parameters marshals.
     /// </summary>
     public event Action<LabParameter?>? Changed;
@@ -257,16 +256,23 @@ public sealed class LabParameterSet : IEnumerable<LabParameter>
         return _byName.TryGetValue(name, out parameter!);
     }
 
-    /// <summary>The parameter a person means by <paramref name="key" />: its name or its title with the spaces taken out (any case); null if none.</summary>
+    /// <summary>
+    ///     The parameter a person means by <paramref name="key" />: its name or its title with the spaces taken out (any
+    ///     case); null if none.
+    /// </summary>
     public LabParameter? Find(string key)
     {
         if (_byName.TryGetValue(key, out var byName)) return byName;
 
         string squeezed = new string(key.Where(char.IsLetterOrDigit).ToArray());
-        return _all.FirstOrDefault(p => string.Equals(new string(p.Title.Where(char.IsLetterOrDigit).ToArray()), squeezed, StringComparison.OrdinalIgnoreCase));
+        return _all.FirstOrDefault(p => string.Equals(new string(p.Title.Where(char.IsLetterOrDigit).ToArray()), squeezed,
+                                                      StringComparison.OrdinalIgnoreCase));
     }
 
-    /// <summary>Puts every parameter to what is kept in the Silo (the default for those not kept). Called when the Silo changes.</summary>
+    /// <summary>
+    ///     Puts every parameter to what is kept in the Silo (the default for those not kept). Called when the Silo
+    ///     changes.
+    /// </summary>
     public void Load()
     {
         _loading = true;
@@ -331,7 +337,7 @@ public sealed class LabParameterSet : IEnumerable<LabParameter>
         try
         {
             var store = Stored.DefaultStore();
-            return store?.ListStored(PresetPrefix, StoredScope.Personal).Select(r => r.Key[PresetPrefix.Length..]).ToList() ?? [];
+            return store?.ListStored(PresetPrefix).Select(r => r.Key[PresetPrefix.Length..]).ToList() ?? [];
         }
         catch (Exception ex)
         {
@@ -372,6 +378,30 @@ public sealed class LabParameterSet : IEnumerable<LabParameter>
         return true;
     }
 
+    /// <summary>Every parameter as it is now, as text (what the Presets pane keeps in the profile).</summary>
+    internal Dictionary<string, string> Snapshot()
+    {
+        return _all.ToDictionary(p => p.Name, p => p.ToJson());
+    }
+
+    /// <summary>Puts the parameters to a snapshot: the ones it does not have go back to their defaults.</summary>
+    internal void Restore(Dictionary<string, string> snapshot)
+    {
+        _loading = true;
+        try
+        {
+            foreach (var p in _all) p.Reset();
+            Apply(snapshot);
+        }
+        finally
+        {
+            _loading = false;
+        }
+
+        Save();
+        Changed?.Invoke(null);
+    }
+
     /// <summary>Forgets a preset; false when there is none with the name.</summary>
     public bool DeletePreset(string name)
     {
@@ -393,7 +423,28 @@ public sealed class LabParameterSet : IEnumerable<LabParameter>
         Changed?.Invoke(parameter);
     }
 
-    public IEnumerator<LabParameter> GetEnumerator() => _all.GetEnumerator();
+    public LabParameterSet(string labId, IEnumerable<LabParameter> parameters)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(labId);
+        LabId = labId;
 
-    IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+        foreach (var p in parameters)
+        {
+            _all.Add(p);
+            _byName[p.Name] =  p;
+            p.Changed       += (_, _) => OnParameterChanged(p);
+        }
+
+        if (App.Instance is { } app) app.ActiveSiloChanged += (_, _) => Load();
+    }
+
+    public IEnumerator<LabParameter> GetEnumerator()
+    {
+        return _all.GetEnumerator();
+    }
+
+    IEnumerator IEnumerable.GetEnumerator()
+    {
+        return GetEnumerator();
+    }
 }

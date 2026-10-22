@@ -1,7 +1,7 @@
 ﻿using System.IO;
 using Silo.Contracts.ConnectorServices;
 
-namespace Silo.Contracts.Providers.Reflection;
+namespace Silo.Providers.Reflection;
 
 /// <summary>
 ///     A specifier of a content format which has a Content-Type

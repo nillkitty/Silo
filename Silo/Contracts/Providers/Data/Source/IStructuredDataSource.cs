@@ -1,6 +1,6 @@
 ﻿using Newtonsoft.Json.Linq;
 
-namespace Silo.Contracts.Providers.Data.Source;
+namespace Silo.Providers.Data.Source;
 
 /// <summary>
 ///     Provides structured data as a JToken tree (allowing for an object, array, or scalar to be the root value/token)

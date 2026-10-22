@@ -41,6 +41,8 @@
     <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="10.0.9" />
     <!-- JsonFormat (Providers/Format/JsonFormat.cs) -->
     <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
+    <!-- Parser Lab (Labs/Parser/*.cs): the rules of a data spec are made into Superpower text parsers -->
+    <PackageReference Include="Superpower" Version="3.2.1" />
     <!-- YamlFormat (Providers/Format/YamlFormat.cs) -->
     <PackageReference Include="YamlDotNet" Version="18.1.0" />
     <!-- MarkdownFormat / MarkdownDataProvider (Providers/Format/MarkdownFormat.cs, MarkdownDataProvider.cs) -->
@@ -85,10 +87,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Folder Include="Connectors\App\" />
     <Folder Include="Connectors\Ssh\" />
     <Folder Include="Connectors\System\SysObj\" />
     <Folder Include="Authoring\" />
-    <Folder Include="Providers\Uri\" />
     <Folder Include="Subconnectors\" />
     <Folder Include="ViewModel\Features\" />
   </ItemGroup>

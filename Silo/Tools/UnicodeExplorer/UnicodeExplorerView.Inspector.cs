@@ -11,10 +11,14 @@ public sealed partial class UnicodeExplorerView
     private readonly TextBlock  _bigName     = UiKit.Text(string.Empty, size: 14, weight: FontWeights.SemiBold, wrap: true);
     private readonly TextBlock  _bigCode     = UiKit.Text(string.Empty, muted: true);
     private readonly StackPanel _detail      = new() { Margin = new Thickness(0, 6, 0, 0) };
+    private readonly Border     _bigGlyphBox = new() { Width = 88, Height = 88, BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(4), ToolTip = "Click to copy the character" };
     private readonly Button     _addInspected = UiKit.Btn("Add to collection", () => { }, "Add this character to the collection below (Enter in the list)");
 
     /// <summary>The character shown in the details; null before the first one is chosen.</summary>
     private UnicodeCharacter? Inspected { get; set; }
+
+    /// <summary>Whether the character shown was picked in the collection (then a color chosen in the details goes to the collection's selection).</summary>
+    private bool _inspectedFromTray;
 
     private UIElement BuildInspector()
     {
@@ -24,7 +28,8 @@ public sealed partial class UnicodeExplorerView
         head.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(96) });
         head.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
 
-        var glyphBox = new Border { Width = 88, Height = 88, BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(4), Child = _bigGlyph, ToolTip = "Click to copy the character" };
+        var glyphBox = _bigGlyphBox;
+        glyphBox.Child = _bigGlyph;
         glyphBox.SetResourceReference(Border.BorderBrushProperty, "Theme.Border");
         glyphBox.SetResourceReference(Border.BackgroundProperty, "Theme.Surface");
         glyphBox.Cursor = Cursors.Hand;
@@ -61,6 +66,7 @@ public sealed partial class UnicodeExplorerView
         var top = new StackPanel();
         top.Children.Add(head);
         top.Children.Add(actions);
+        top.Children.Add(BuildColorStrip());
         DockPanel.SetDock(top, Dock.Top);
         root.Children.Add(top);
 
@@ -78,7 +84,8 @@ public sealed partial class UnicodeExplorerView
         if (_db is null) return;
 
         var c = _db.Get(codePoint);
-        Inspected = c;
+        Inspected          = c;
+        _inspectedFromTray = false; // the collection sets it again after picking (see SelectTray)
 
         _bigGlyph.Text  = c.Glyph;
         _bigName.Text   = c.Name;
@@ -190,13 +197,8 @@ public sealed partial class UnicodeExplorerView
                 foreach (var entry in inGroup) _detail.Children.Add(EncodingRow(entry));
             }
         }
-    }
 
-    /// <summary>Shows a code point in the full list (used by the links in the details).</summary>
-    private void ShowCodePoint(CodePoint cp)
-    {
-        _jump.Text = cp.Hex;
-        JumpToCode();
+        UpdateColorStrip();
     }
 
     // ---- small pieces --------------------------------------------------------------------------------------------

@@ -2,7 +2,7 @@
 using System.Security.Principal;
 using Microsoft.Data.Sqlite;
 using Serilog;
-using Silo.Contracts.Providers.Data;
+using Silo.Providers.Data;
 using Silo.Settings;
 
 namespace Silo.DbModel.Sqlite;
@@ -40,43 +40,13 @@ public sealed partial class SqliteDatabaseProvider
     private string?    _workingFile;
 
     /// <inheritdoc />
-    public SiloStorageFormat Format => _layout.Format;
-
-    /// <inheritdoc />
-    public string FilePath => _siloPath;
-
-    /// <inheritdoc />
     public ISaveConflictResolver? ConflictResolver { get; set; }
 
     /// <inheritdoc />
-    public ISiloRemote? Remote { get; set; }
+    public string FilePath { get; private set; }
 
     /// <inheritdoc />
-    public bool IsUnsynced { get; private set; }
-
-    /// <inheritdoc />
-    public event EventHandler<SiloSaveEvent>? Saved;
-
-    /// <inheritdoc />
-    public long WorkingSizeBytes
-    {
-        get
-        {
-            try
-            {
-                if (_layout.Format == SiloStorageFormat.Simple)
-                    return _workingFile is not null ? new FileInfo(_workingFile).Length : 0;
-
-                return Directory.EnumerateFiles(_tempDir, "*", SearchOption.AllDirectories)
-                                .Where(f => !f.EndsWith(".lock", StringComparison.OrdinalIgnoreCase))
-                                .Sum(f => new FileInfo(f).Length);
-            }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-            {
-                return 0;
-            }
-        }
-    }
+    public SiloStorageFormat Format => _layout.Format;
 
     // ---- Solo ----------------------------------------------------------------------------------
 
@@ -100,11 +70,11 @@ public sealed partial class SqliteDatabaseProvider
                     var marker = Path.Combine(_tempDir, SiloProbe.SoloMarker);
                     if (value)
                     {
-                        System.IO.File.WriteAllBytes(marker, []);
+                        File.WriteAllBytes(marker, []);
                     }
                     else
                     {
-                        System.IO.File.Delete(marker);
+                        File.Delete(marker);
                         if (Directory.Exists(Path.Combine(_tempDir, "assemblies")))
                         {
                             Log.Warning("This Silo carries assemblies, so it stays a Solo Silo");
@@ -123,46 +93,46 @@ public sealed partial class SqliteDatabaseProvider
         }
     }
 
+    /// <inheritdoc />
+    public bool IsUnsynced { get; private set; }
+
+    /// <inheritdoc />
+    public ISiloRemote? Remote { get; set; }
+
+    /// <inheritdoc />
+    public long WorkingSizeBytes
+    {
+        get
+        {
+            try
+            {
+                if (_layout.Format == SiloStorageFormat.Simple)
+                    return _workingFile is not null ? new FileInfo(_workingFile).Length : 0;
+
+                return Directory.EnumerateFiles(_tempDir, "*", SearchOption.AllDirectories)
+                                .Where(f => !f.EndsWith(".lock", StringComparison.OrdinalIgnoreCase))
+                                .Sum(f => new FileInfo(f).Length);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                return 0;
+            }
+        }
+    }
+
     private bool ReadIsSolo()
     {
         try
         {
             if (_layout.Format == SiloStorageFormat.Simple) return SiloProbe.ReadSoloFlag(_conn);
 
-            return Directory.Exists(Path.Combine(_tempDir, "assemblies")) || System.IO.File.Exists(Path.Combine(_tempDir, SiloProbe.SoloMarker));
+            return Directory.Exists(Path.Combine(_tempDir, "assemblies")) || File.Exists(Path.Combine(_tempDir, SiloProbe.SoloMarker));
         }
         catch (Exception ex)
         {
             Log.Warning(ex, "Could not read the Solo flag");
             return false;
         }
-    }
-
-    // ---- Shutdown ------------------------------------------------------------------------------
-
-    /// <summary>Shuts down the database connection because the app is closing or unloading the Silo.</summary>
-    public async Task<bool> ShutdownAsync()
-    {
-        await _gate.WaitAsync();
-        try
-        {
-            _conn.Close();
-            _conn.Dispose();
-            SiloArchive.DeleteWorkingDirectory(_tempDir);
-            return true;
-        }
-        finally
-        {
-            _gate.Release();
-        }
-    }
-
-    // ---- Save ----------------------------------------------------------------------------------
-
-    /// <summary>Saves the Silo to its file (see the class remarks for exactly what a save does).</summary>
-    public Task SaveAsync()
-    {
-        return SaveCurrentAsync(null);
     }
 
     /// <summary>
@@ -172,7 +142,7 @@ public sealed partial class SqliteDatabaseProvider
     /// </summary>
     private async Task SaveCurrentAsync(string? note)
     {
-        var target   = _siloPath;
+        var target   = FilePath;
         var diverted = false;
         if (_disk is not null && await ResolveDiskConflictAsync(target) is { } copyPath)
         {
@@ -197,25 +167,13 @@ public sealed partial class SqliteDatabaseProvider
             return;
         }
 
-        if (Remote is { } remote) await PushToRemoteAsync(remote, _siloPath);
+        if (Remote is { } remote) await PushToRemoteAsync(remote, FilePath);
     }
 
-    /// <summary>Migrates the Silo to a copy at the supplied path; the open document continues at the new path.</summary>
-    public async Task MigrateToCopyAsync(string path)
-    {
-        await _gate.WaitAsync();
-        try
-        {
-            await SaveCoreAsync(Path.GetFullPath(path), true, "Save as");
-            Remote = null; // a copy saved under a new name is no longer the synced document
-        }
-        finally
-        {
-            _gate.Release();
-        }
-    }
-
-    /// <summary>Steps 2-7 of a save; the caller holds the gate. <paramref name="relocate" />: write to a new path without checking the old one.</summary>
+    /// <summary>
+    ///     Steps 2-7 of a save; the caller holds the gate. <paramref name="relocate" />: write to a new path without
+    ///     checking the old one.
+    /// </summary>
     private async Task SaveCoreAsync(string target, bool relocate, string? note)
     {
         var dir = Path.GetDirectoryName(Path.GetFullPath(target));
@@ -232,9 +190,9 @@ public sealed partial class SqliteDatabaseProvider
         {
             await Task.Run(() =>
                            {
-                               if (System.IO.File.Exists(tmp)) System.IO.File.Delete(tmp);
+                               if (File.Exists(tmp)) File.Delete(tmp);
                                WriteSnapshot(tmp);
-                               System.IO.File.SetLastWriteTimeUtc(tmp, savedUtc); // the file's time IS the SaveLog time
+                               File.SetLastWriteTimeUtc(tmp, savedUtc); // the file's time IS the SaveLog time
                            });
 
             hash = await Task.Run(() => DiskState.HashFile(tmp));
@@ -245,7 +203,7 @@ public sealed partial class SqliteDatabaseProvider
         {
             try
             {
-                if (System.IO.File.Exists(tmp)) System.IO.File.Delete(tmp);
+                if (File.Exists(tmp)) File.Delete(tmp);
             }
             catch
             {
@@ -256,13 +214,13 @@ public sealed partial class SqliteDatabaseProvider
             throw;
         }
 
-        _siloPath = target;
-        _disk     = new DiskState(hash, length, new FileInfo(target).LastWriteTimeUtc.Ticks);
+        FilePath = target;
+        _disk    = new DiskState(hash, length, new FileInfo(target).LastWriteTimeUtc.Ticks);
 
         var evt = new SiloSaveEvent(savedUtc, sequence, _layout.Format, target, hash, previousHash, length, CurrentUserName(),
                                     Environment.MachineName, Remote?.Uri.ToString());
-        Log.Information("Silo saved: {Path} ({Format}, save #{Sequence}, {Size} bytes, sha256 {Hash}, previous {Previous})", target, evt.Format,
-                        sequence, length, hash, previousHash);
+        Log.Information("Silo saved: {Path} ({Format}, save #{Sequence}, {Size} bytes, sha256 {Hash}, previous {Previous})", target,
+                        evt.Format, sequence, length, hash, previousHash);
         Saved?.Invoke(this, evt);
     }
 
@@ -286,7 +244,8 @@ public sealed partial class SqliteDatabaseProvider
             return null;
         }
 
-        var conflict = new SaveConflict(SaveConflictKind.FileChangedOnDisk, target, new DateTime(ticks, DateTimeKind.Utc), _disk.LastWriteUtc);
+        var conflict = new SaveConflict(SaveConflictKind.FileChangedOnDisk, target, new DateTime(ticks, DateTimeKind.Utc),
+                                        _disk.LastWriteUtc);
         switch (await SaveConflictPolicy.DecideAsync(ConflictResolver, conflict))
         {
             case SaveConflictChoice.Overwrite:
@@ -303,12 +262,6 @@ public sealed partial class SqliteDatabaseProvider
         }
     }
 
-    /// <inheritdoc />
-    public async Task RetryUploadAsync()
-    {
-        if (Remote is { } remote) await PushToRemoteAsync(remote, _siloPath);
-    }
-
     private async Task PushToRemoteAsync(ISiloRemote remote, string localFile)
     {
         remote.HasUnpushedChanges = true;
@@ -323,8 +276,9 @@ public sealed partial class SqliteDatabaseProvider
             {
                 var conflict = new SaveConflict(SaveConflictKind.RemoteChanged, remote.Uri.ToString(), null, _disk?.LastWriteUtc);
                 if (await SaveConflictPolicy.DecideAsync(ConflictResolver, conflict) != SaveConflictChoice.Overwrite)
-                    throw new RemoteSyncException("Saved on this computer only: the remote copy was changed by someone else and was left alone.",
-                                                  new RemoteConflictException("remote changed"));
+                    throw new
+                        RemoteSyncException("Saved on this computer only: the remote copy was changed by someone else and was left alone.",
+                                            new RemoteConflictException("remote changed"));
 
                 await remote.PushAsync(localFile, true);
             }
@@ -348,7 +302,7 @@ public sealed partial class SqliteDatabaseProvider
         for (var attempt = 0;; attempt++)
             try
             {
-                System.IO.File.Move(tmp, target, true);
+                File.Move(tmp, target, true);
                 return;
             }
             catch (IOException) when (attempt < 4)
@@ -397,8 +351,9 @@ public sealed partial class SqliteDatabaseProvider
         using (var cmd = _conn.CreateCommand())
         {
             cmd.Transaction = tx;
-            cmd.CommandText = $"INSERT INTO {T("main", "SaveLog")} ([SavedUtc],[Sequence],[Format],[PreviousHash],[User],[Machine],[Source],[Note]) " +
-                              "VALUES (@t,@seq,@fmt,@prev,@user,@machine,@src,@note)";
+            cmd.CommandText =
+                $"INSERT INTO {T("main", "SaveLog")} ([SavedUtc],[Sequence],[Format],[PreviousHash],[User],[Machine],[Source],[Note]) " +
+                "VALUES (@t,@seq,@fmt,@prev,@user,@machine,@src,@note)";
             cmd.Parameters.AddWithValue("@t",       savedUtc.ToString("O"));
             cmd.Parameters.AddWithValue("@seq",     sequence);
             cmd.Parameters.AddWithValue("@fmt",     _layout.Format.ToString());
@@ -406,7 +361,7 @@ public sealed partial class SqliteDatabaseProvider
             cmd.Parameters.AddWithValue("@user",    CurrentUserName());
             cmd.Parameters.AddWithValue("@machine", Environment.MachineName);
             cmd.Parameters.AddWithValue("@src",     (object?)Remote?.Uri.ToString() ?? target);
-            cmd.Parameters.AddWithValue("@note",    (object?)note ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@note",    (object?)note                   ?? DBNull.Value);
             cmd.ExecuteNonQuery();
         }
 
@@ -456,6 +411,169 @@ public sealed partial class SqliteDatabaseProvider
         }
     }
 
+    /// <summary>
+    ///     Copies every table from the single-file working copy into a new archive-layout working directory and switches
+    ///     to it.
+    /// </summary>
+    /// <remarks>
+    ///     SQLite attaches at most 10 databases to a connection, and a full archive already needs 3 +
+    ///     <see cref="MaxArchiveWorlds" />
+    ///     of them. So the Worlds are copied first, each through its own short-lived connection (one attach: the source), and
+    ///     only then are they attached to the connection that becomes the provider's.
+    /// </remarks>
+    private void ConvertToArchive()
+    {
+        var keys = _worldAliases.Keys.Select(a => a[2..]).ToList();
+        if (keys.Count > MaxArchiveWorlds)
+            throw new InvalidOperationException($"This Silo has {keys.Count} Worlds; the archive format holds at most {MaxArchiveWorlds}.");
+
+        var               newDir     = SiloArchive.CreateWorkingDirectory();
+        SqliteConnection? newConn    = null;
+        var               newAliases = new Dictionary<string, string>();
+        try
+        {
+            // 1. Each World -> its own w-<key>.db.
+            foreach (var key in keys)
+            {
+                var       alias     = "w_" + key;
+                var       file      = $"w-{key}.db";
+                using var worldConn = SqliteConnectionFactory.OpenStandalone(Path.Combine(newDir, file));
+                SqliteConnectionFactory.Attach(worldConn, _workingFile!, "src");
+                CopyTables(worldConn, EntitySchema.WorldFamily, _ => EntitySchema.MainAlias, _ => alias);
+                newAliases[alias] = file;
+            }
+
+            // 2. The fixed databases (main, x, u, y).
+            newConn = SqliteConnectionFactory.OpenAndAttachFixed(newDir);
+            EntitySchema.EnsureFixedSchemas(newConn, SiloLayout.Archive, false); // the rows come from the simple file, with its syntaxes
+            SqliteConnectionFactory.Attach(newConn, _workingFile!, "src");
+            CopyTables(newConn, EntitySchema.All.Values.Where(i => i.SchemaKind == SchemaKind.Fixed), i => i.FixedAlias!,
+                       i => i.FixedAlias!);
+            using (var detach = newConn.CreateCommand())
+            {
+                detach.CommandText = "DETACH DATABASE [src]";
+                detach.ExecuteNonQuery();
+            }
+
+            // 3. Attach the Worlds to the new connection.
+            foreach (var (alias, file) in newAliases)
+            {
+                SqliteConnectionFactory.Attach(newConn, Path.Combine(newDir, file), alias);
+                foreach (var info in EntitySchema.WorldFamily)
+                {
+                    using var cmd = newConn.CreateCommand();
+                    cmd.CommandText = EntitySchema.BuildCreateTableSql(info, alias, SiloLayout.Archive);
+                    cmd.ExecuteNonQuery();
+                }
+            }
+
+            if (_isSolo) File.WriteAllBytes(Path.Combine(newDir, SiloProbe.SoloMarker), []);
+        }
+        catch
+        {
+            newConn?.Dispose();
+            SiloArchive.DeleteWorkingDirectory(newDir);
+            throw;
+        }
+
+        var oldConn = _conn;
+        var oldDir  = _tempDir;
+
+        _conn        = newConn;
+        _tempDir     = newDir;
+        _layout      = SiloLayout.Archive;
+        _workingFile = null;
+        _worldAliases.Clear();
+        foreach (var (alias, file) in newAliases) _worldAliases[alias] = file;
+
+        oldConn.Dispose();
+        SiloArchive.DeleteWorkingDirectory(oldDir);
+        Log.Information("Converted '{Path}' from the simple to the archive format", FilePath);
+    }
+
+    /// <summary>
+    ///     Creates (archive layout) and fills the tables of <paramref name="entities" /> in <paramref name="conn" /> from the
+    ///     attached simple-layout source (schema <c>src</c>). <paramref name="destAlias" /> is the schema the table is created
+    ///     in on <paramref name="conn" />; <paramref name="logicalAlias" /> the logical database it belongs to (which decides
+    ///     its prefix in the source).
+    /// </summary>
+    private static void CopyTables(SqliteConnection         conn, IEnumerable<EntityInfo> entities, Func<EntityInfo, string> destAlias,
+                                   Func<EntityInfo, string> logicalAlias)
+    {
+        using var tx = conn.BeginTransaction();
+        foreach (var info in entities)
+        {
+            var dest = destAlias(info);
+
+            using (var create = conn.CreateCommand())
+            {
+                create.Transaction = tx;
+                create.CommandText = EntitySchema.BuildCreateTableSql(info, dest, SiloLayout.Archive);
+                create.ExecuteNonQuery();
+            }
+
+            var       cols = string.Join(", ", info.Columns.Select(c => $"[{c.ColumnName}]"));
+            using var copy = conn.CreateCommand();
+            copy.Transaction = tx;
+            copy.CommandText = $"INSERT INTO {SiloLayout.Archive.Table(dest, info.TableName)} ({cols}) " +
+                               $"SELECT {cols} FROM {SiloLayout.Simple.Table(logicalAlias(info), info.TableName, "src")}";
+            copy.ExecuteNonQuery();
+        }
+
+        tx.Commit();
+    }
+
+    // ---- Shutdown ------------------------------------------------------------------------------
+
+    /// <summary>Shuts down the database connection because the app is closing or unloading the Silo.</summary>
+    public async Task<bool> ShutdownAsync()
+    {
+        await _gate.WaitAsync();
+        try
+        {
+            _conn.Close();
+            _conn.Dispose();
+            SiloArchive.DeleteWorkingDirectory(_tempDir);
+            return true;
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    // ---- Save ----------------------------------------------------------------------------------
+
+    /// <summary>Saves the Silo to its file (see the class remarks for exactly what a save does).</summary>
+    public Task SaveAsync()
+    {
+        return SaveCurrentAsync(null);
+    }
+
+    /// <summary>Migrates the Silo to a copy at the supplied path; the open document continues at the new path.</summary>
+    public async Task MigrateToCopyAsync(string path)
+    {
+        await _gate.WaitAsync();
+        try
+        {
+            await SaveCoreAsync(Path.GetFullPath(path), true, "Save as");
+            Remote = null; // a copy saved under a new name is no longer the synced document
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    /// <inheritdoc />
+    public event EventHandler<SiloSaveEvent>? Saved;
+
+    /// <inheritdoc />
+    public async Task RetryUploadAsync()
+    {
+        if (Remote is { } remote) await PushToRemoteAsync(remote, FilePath);
+    }
+
     // ---- Simple -> Archive ---------------------------------------------------------------------
 
     /// <inheritdoc />
@@ -482,112 +600,5 @@ public sealed partial class SqliteDatabaseProvider
             RaiseChanged(); // converted in memory but not on disk: the document is dirty
             throw;
         }
-    }
-
-    /// <summary>Copies every table from the single-file working copy into a new archive-layout working directory and switches to it.</summary>
-    /// <remarks>
-    ///     SQLite attaches at most 10 databases to a connection, and a full archive already needs 3 + <see cref="MaxArchiveWorlds" />
-    ///     of them. So the Worlds are copied first, each through its own short-lived connection (one attach: the source), and
-    ///     only then are they attached to the connection that becomes the provider's.
-    /// </remarks>
-    private void ConvertToArchive()
-    {
-        var keys = _worldAliases.Keys.Select(a => a[2..]).ToList();
-        if (keys.Count > MaxArchiveWorlds)
-            throw new InvalidOperationException($"This Silo has {keys.Count} Worlds; the archive format holds at most {MaxArchiveWorlds}.");
-
-        var               newDir     = SiloArchive.CreateWorkingDirectory();
-        SqliteConnection? newConn    = null;
-        var               newAliases = new Dictionary<string, string>();
-        try
-        {
-            // 1. Each World -> its own w-<key>.db.
-            foreach (var key in keys)
-            {
-                var alias = "w_" + key;
-                var file  = $"w-{key}.db";
-                using var worldConn = SqliteConnectionFactory.OpenStandalone(Path.Combine(newDir, file));
-                SqliteConnectionFactory.Attach(worldConn, _workingFile!, "src");
-                CopyTables(worldConn, EntitySchema.WorldFamily, _ => EntitySchema.MainAlias, _ => alias);
-                newAliases[alias] = file;
-            }
-
-            // 2. The fixed databases (main, x, u, y).
-            newConn = SqliteConnectionFactory.OpenAndAttachFixed(newDir);
-            EntitySchema.EnsureFixedSchemas(newConn, SiloLayout.Archive, seed: false); // the rows come from the simple file, with its syntaxes
-            SqliteConnectionFactory.Attach(newConn, _workingFile!, "src");
-            CopyTables(newConn, EntitySchema.All.Values.Where(i => i.SchemaKind == SchemaKind.Fixed), i => i.FixedAlias!, i => i.FixedAlias!);
-            using (var detach = newConn.CreateCommand())
-            {
-                detach.CommandText = "DETACH DATABASE [src]";
-                detach.ExecuteNonQuery();
-            }
-
-            // 3. Attach the Worlds to the new connection.
-            foreach (var (alias, file) in newAliases)
-            {
-                SqliteConnectionFactory.Attach(newConn, Path.Combine(newDir, file), alias);
-                foreach (var info in EntitySchema.WorldFamily)
-                {
-                    using var cmd = newConn.CreateCommand();
-                    cmd.CommandText = EntitySchema.BuildCreateTableSql(info, alias, SiloLayout.Archive);
-                    cmd.ExecuteNonQuery();
-                }
-            }
-
-            if (_isSolo) System.IO.File.WriteAllBytes(Path.Combine(newDir, SiloProbe.SoloMarker), []);
-        }
-        catch
-        {
-            newConn?.Dispose();
-            SiloArchive.DeleteWorkingDirectory(newDir);
-            throw;
-        }
-
-        var oldConn = _conn;
-        var oldDir  = _tempDir;
-
-        _conn        = newConn;
-        _tempDir     = newDir;
-        _layout      = SiloLayout.Archive;
-        _workingFile = null;
-        _worldAliases.Clear();
-        foreach (var (alias, file) in newAliases) _worldAliases[alias] = file;
-
-        oldConn.Dispose();
-        SiloArchive.DeleteWorkingDirectory(oldDir);
-        Log.Information("Converted '{Path}' from the simple to the archive format", _siloPath);
-    }
-
-    /// <summary>
-    ///     Creates (archive layout) and fills the tables of <paramref name="entities" /> in <paramref name="conn" /> from the
-    ///     attached simple-layout source (schema <c>src</c>). <paramref name="destAlias" /> is the schema the table is created
-    ///     in on <paramref name="conn" />; <paramref name="logicalAlias" /> the logical database it belongs to (which decides
-    ///     its prefix in the source).
-    /// </summary>
-    private static void CopyTables(SqliteConnection conn, IEnumerable<EntityInfo> entities, Func<EntityInfo, string> destAlias,
-                                   Func<EntityInfo, string> logicalAlias)
-    {
-        using var tx = conn.BeginTransaction();
-        foreach (var info in entities)
-        {
-            var dest = destAlias(info);
-
-            using (var create = conn.CreateCommand())
-            {
-                create.Transaction = tx;
-                create.CommandText = EntitySchema.BuildCreateTableSql(info, dest, SiloLayout.Archive);
-                create.ExecuteNonQuery();
-            }
-
-            var cols = string.Join(", ", info.Columns.Select(c => $"[{c.ColumnName}]"));
-            using var copy = conn.CreateCommand();
-            copy.Transaction = tx;
-            copy.CommandText = $"INSERT INTO {SiloLayout.Archive.Table(dest, info.TableName)} ({cols}) " +
-                               $"SELECT {cols} FROM {SiloLayout.Simple.Table(logicalAlias(info), info.TableName, "src")}";
-            copy.ExecuteNonQuery();
-        }
-
-        tx.Commit();
     }
 }

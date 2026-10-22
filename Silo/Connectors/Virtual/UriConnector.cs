@@ -1,4 +1,5 @@
 ﻿using Newtonsoft.Json;
+using Silo.Providers;
 using Silo.ViewModel;
 using Telefrag.Collections;
 using Telefrag.DI;
@@ -9,7 +10,7 @@ namespace Silo.Connectors.Virtual;
 ///     Projects the URI namespaces into the explorer tree
 /// </summary>
 [Singleton(typeof(IConnector))]
-public class UriConnector : VirtualRoot
+public class UriConnector : VirtualRoot<object>
 {
     public bool CombinePrivatePublicViews { get; set; } = true;
     public bool ShowPrivateUris           { get; set; } = true;
@@ -29,8 +30,7 @@ public class UriConnector : VirtualRoot
         var r  = hb.Level("URI", "URI Namespace", UriConstants.UriRootUri);
 
         // a provider is shown when its own kind (public or private) is switched on
-        var ss = Components.Resolve<IEnumerable<IUriProvider>>()?.Where(z => z.IsPublic ? ShowPublicUris : ShowPrivateUris)?.ToList() ??
-                 [];
+        var ss = Components.Resolve<IEnumerable<IUriProvider>>()?.Where(z => z.IsPublic ? ShowPublicUris : ShowPrivateUris)?.ToList() ?? [];
 
         if (CombinePrivatePublicViews)
         {
@@ -68,30 +68,15 @@ public class HierarchyBuilder
 {
     private readonly List<HierarchyBuilder> _children = [];
 
-    private SiloNode?                                                    _built;
-    private bool                                                         _hasLevel;
-    private Uri?                                                         _icon;
-    private int?                                                         _expand;
-    private Func<CancellationToken, Task<IReadOnlyList<SiloNode>>>?      _loader;
-    private object?                                                      _model;
-    private string?                                                      _text;
-    private Uri?                                                         _uri;
-    private string?                                                      _typeName;
-
-    public HierarchyBuilder(IConnection connection)
-    {
-        connection.Required();
-        Connection = connection;
-        Connector  = Connection.Connector ?? throw new InvalidOperationException("Connector cannot be null.");
-    }
-
-    public HierarchyBuilder(HierarchyBuilder parent)
-    {
-        Parent = parent.Required();
-
-        Connection = parent.Connection ?? throw new InvalidOperationException("Connection cannot be null.");
-        Connector  = parent.Connector  ?? throw new InvalidOperationException("Connector cannot be null.");
-    }
+    private SiloNode?                                               _built;
+    private int?                                                    _expand;
+    private bool                                                    _hasLevel;
+    private Uri?                                                    _icon;
+    private Func<CancellationToken, Task<IReadOnlyList<SiloNode>>>? _loader;
+    private object?                                                 _model;
+    private string?                                                 _text;
+    private string?                                                 _typeName;
+    private Uri?                                                    _uri;
 
     public IConnection Connection { get; }
     public IConnector  Connector  { get; }
@@ -221,9 +206,24 @@ public class HierarchyBuilder
     public static Uri UriConcat(Uri a, Uri? b, string key)
     {
         a.Required();
-        string bb = b is null ? key : b.IsAbsoluteUri ? b.PathAndQuery : b.OriginalString;
+        string bb                                          = b is null ? key : b.IsAbsoluteUri ? b.PathAndQuery : b.OriginalString;
         if (string.IsNullOrWhiteSpace(bb) || bb == "/") bb = key;
         return a.Append(bb);
+    }
+
+    public HierarchyBuilder(IConnection connection)
+    {
+        connection.Required();
+        Connection = connection;
+        Connector  = Connection.Connector ?? throw new InvalidOperationException("Connector cannot be null.");
+    }
+
+    public HierarchyBuilder(HierarchyBuilder parent)
+    {
+        Parent = parent.Required();
+
+        Connection = parent.Connection ?? throw new InvalidOperationException("Connection cannot be null.");
+        Connector  = parent.Connector  ?? throw new InvalidOperationException("Connector cannot be null.");
     }
 }
 

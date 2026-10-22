@@ -1,9 +1,10 @@
-using System.Collections;
 using System.ComponentModel.DataAnnotations;
 using System.Runtime.CompilerServices;
 using Serilog;
 using Silo.Contracts.ConnectorServices;
-using Silo.Contracts.Providers.Data.Shape;
+using Silo.Providers.Data.Shape;
+using Silo.Providers.Data.Source;
+using Silo.Providers.Data.Validation;
 
 namespace Silo.Contracts;
 
@@ -31,36 +32,47 @@ namespace Silo.Contracts;
 /// </remarks>
 public interface IDataTransform : IDisplayName, IValidatable
 {
-    /// <summary>The operation's name, as the Operators page spells it: <c>Filter</c>, <c>Select</c>, <c>Take</c>, ... (<see cref="IDisplayName.DisplayName" /> is the human label for this configured step).</summary>
+    /// <summary>
+    ///     The operation's name, as the Operators page spells it: <c>Filter</c>, <c>Select</c>, <c>Take</c>, ... (
+    ///     <see cref="IDisplayName.DisplayName" /> is the human label for this configured step).
+    /// </summary>
     string Operation { get; }
 
-    /// <summary>The operator category, e.g. <c>Filtering &amp; Selection</c> or <c>Type Conversion</c>; null if not categorized.</summary>
+    /// <summary>
+    ///     The operator category, e.g. <c>Filtering &amp; Selection</c> or <c>Type Conversion</c>; null if not
+    ///     categorized.
+    /// </summary>
     string? Category => null;
 
     /// <summary>What running the transform can have an effect on or depend on; see <see cref="TransformFlags" />.</summary>
     TransformFlags Flags => TransformFlags.None;
 
-    /// <summary>The shape of item the transform takes; <see cref="DataShape.Unknown" /> means any (the Operators page's "Any").</summary>
+    /// <summary>
+    ///     The shape of item the transform takes; <see cref="DataShape.Unknown" /> means any (the Operators page's
+    ///     "Any").
+    /// </summary>
     DataShape InputShape => DataShape.Unknown;
 
     /// <summary>The shape of item it produces; <see cref="DataShape.Unknown" /> means "the same as it was given".</summary>
     DataShape OutputShape => DataShape.Unknown;
 
-    /// <summary>Whether an item of this shape can be given to the transform. An unknown or dynamic shape is accepted (it may turn out to fit).</summary>
+    /// <summary>
+    ///     Whether an item of this shape can be given to the transform. An unknown or dynamic shape is accepted (it may
+    ///     turn out to fit).
+    /// </summary>
     bool Accepts(DataShape input)
     {
-        return input is DataShape.Unknown or DataShape.Dynamic || InputShape is DataShape.Unknown or DataShape.Dynamic || InputShape == input;
+        return input is DataShape.Unknown or DataShape.Dynamic || InputShape is DataShape.Unknown or DataShape.Dynamic ||
+               InputShape == input;
     }
 
-    /// <summary>The shape of what comes out when an item of shape <paramref name="input" /> goes in; lets a pipeline be checked before anything runs.</summary>
+    /// <summary>
+    ///     The shape of what comes out when an item of shape <paramref name="input" /> goes in; lets a pipeline be
+    ///     checked before anything runs.
+    /// </summary>
     DataShape GetOutputShape(DataShape input)
     {
         return OutputShape == DataShape.Unknown ? input : OutputShape;
-    }
-
-    /// <summary>Checks that the transform is configured sensibly and throws if it is not. By default there is nothing to check.</summary>
-    void IValidatable.Validate()
-    {
     }
 
     /// <summary>
@@ -79,6 +91,14 @@ public interface IDataTransform : IDisplayName, IValidatable
     IAsyncEnumerable<TransformItem> CompleteAsync(ITransformContext context, CancellationToken cancel = default)
     {
         return DataTransformExtensions.NoItems();
+    }
+
+    /// <summary>
+    ///     Checks that the transform is configured sensibly and throws if it is not. By default there is nothing to
+    ///     check.
+    /// </summary>
+    void IValidatable.Validate()
+    {
     }
 }
 
@@ -99,8 +119,6 @@ public interface IDataTransformGroup : IDataTransform, IEnumerable<IDataTransfor
     /// <summary>What happens when a member throws (cancellation always propagates).</summary>
     TransformErrorPolicy OnError => TransformErrorPolicy.Throw;
 
-    string IDataTransform.Operation => "Group";
-
     string? IDataTransform.Category => "Pipeline";
 
     /// <summary>The union of the members' flags.</summary>
@@ -114,6 +132,8 @@ public interface IDataTransformGroup : IDataTransform, IEnumerable<IDataTransfor
             return Mode == DataTransformGroupMode.Sequential ? shapes.FirstOrDefault() : shapes.Count == 1 ? shapes[0] : DataShape.Unknown;
         }
     }
+
+    string IDataTransform.Operation => "Group";
 
     DataShape IDataTransform.OutputShape => GetOutputShape(DataShape.Unknown);
 
@@ -143,7 +163,8 @@ public interface IDataTransformGroup : IDataTransform, IEnumerable<IDataTransfor
         foreach (var member in members)
         {
             if (!member.Accepts(shape))
-                throw new ValidationException($"'{member.DisplayName ?? member.Operation}' takes {member.InputShape} data, but the step before it produces {shape}.");
+                throw new
+                    ValidationException($"'{member.DisplayName ?? member.Operation}' takes {member.InputShape} data, but the step before it produces {shape}.");
 
             shape = member.GetOutputShape(shape);
         }
@@ -163,7 +184,10 @@ public interface IDataTransformGroup : IDataTransform, IEnumerable<IDataTransfor
 /// <summary>How the members of an <see cref="IDataTransformGroup" /> work together.</summary>
 public enum DataTransformGroupMode
 {
-    /// <summary>A pipeline: the item goes to the first member, whatever it produces goes to the second, and so on. A member that produces nothing ends that item's journey.</summary>
+    /// <summary>
+    ///     A pipeline: the item goes to the first member, whatever it produces goes to the second, and so on. A member
+    ///     that produces nothing ends that item's journey.
+    /// </summary>
     Sequential,
 
     /// <summary>Every member gets the item; the group produces everything they produce, member by member.</summary>
@@ -182,10 +206,16 @@ public enum TransformErrorPolicy
     /// <summary>The exception propagates and ends the run.</summary>
     Throw,
 
-    /// <summary>The failure is reported and the item is dropped (in a chain, from that step on; in actions, no later action runs for it and it is not passed on).</summary>
+    /// <summary>
+    ///     The failure is reported and the item is dropped (in a chain, from that step on; in actions, no later action
+    ///     runs for it and it is not passed on).
+    /// </summary>
     SkipItem,
 
-    /// <summary>The failure is reported and the member is ignored: in a chain the item skips it, in a fan out it contributes nothing, in actions the next action runs.</summary>
+    /// <summary>
+    ///     The failure is reported and the member is ignored: in a chain the item skips it, in a fan out it contributes
+    ///     nothing, in actions the next action runs.
+    /// </summary>
     Continue
 }
 
@@ -195,13 +225,22 @@ public enum TransformFlags
 {
     None = 0,
 
-    /// <summary>The same input always gives the same output and nothing else is touched, so the step can be previewed, cached or reordered. Not combined with <see cref="SideEffects" />.</summary>
+    /// <summary>
+    ///     The same input always gives the same output and nothing else is touched, so the step can be previewed, cached
+    ///     or reordered. Not combined with <see cref="SideEffects" />.
+    /// </summary>
     Pure = 1,
 
-    /// <summary>The transform remembers things between items, kept in the context (<see cref="ITransformContext.GetState{T}" />) rather than the transform.</summary>
+    /// <summary>
+    ///     The transform remembers things between items, kept in the context (
+    ///     <see cref="ITransformContext.GetState{T}" />) rather than the transform.
+    /// </summary>
     Stateful = 2,
 
-    /// <summary>The transform holds items back and produces them from <see cref="IDataTransform.CompleteAsync" />, so a run has to finish for it to deliver (a sort, a grouping).</summary>
+    /// <summary>
+    ///     The transform holds items back and produces them from <see cref="IDataTransform.CompleteAsync" />, so a run
+    ///     has to finish for it to deliver (a sort, a grouping).
+    /// </summary>
     Buffers = 4,
 
     /// <summary>The transform changes something outside the data (files, mail, processes); it is skipped in a dry run.</summary>
@@ -209,9 +248,15 @@ public enum TransformFlags
 }
 
 /// <summary>An item travelling through a pipeline.</summary>
-/// <param name="Value">The data: a row, a file entry, a feed entry, a document, an <c>IValue</c>... whatever the source and the steps so far have made of it.</param>
+/// <param name="Value">
+///     The data: a row, a file entry, a feed entry, a document, an <c>IValue</c>... whatever the source
+///     and the steps so far have made of it.
+/// </param>
 /// <param name="Type">What is known of its type (and so its shape); null if nothing is.</param>
-/// <param name="Key">The key of the source item it came from (<see cref="DataChange.Key" />), so a later step can say which item it is acting on; it survives transforms that do not set their own.</param>
+/// <param name="Key">
+///     The key of the source item it came from (<see cref="DataChange.Key" />), so a later step can say
+///     which item it is acting on; it survives transforms that do not set their own.
+/// </param>
 public readonly record struct TransformItem(object? Value, IType? Type = null, string? Key = null)
 {
     /// <summary>The item's shape, or <see cref="DataShape.Unknown" />.</summary>
@@ -227,14 +272,14 @@ public readonly record struct TransformItem(object? Value, IType? Type = null, s
 /// <summary>What a run offers the transforms in it.</summary>
 public interface ITransformContext
 {
-    /// <summary>The source the items come from, if there is one.</summary>
-    IDataSource? Source { get; }
+    /// <summary>A rehearsal: transforms marked <see cref="TransformFlags.SideEffects" /> must not act.</summary>
+    bool IsDryRun { get; }
 
     /// <summary>The current time, UTC.</summary>
     DateTime Now { get; }
 
-    /// <summary>A rehearsal: transforms marked <see cref="TransformFlags.SideEffects" /> must not act.</summary>
-    bool IsDryRun { get; }
+    /// <summary>The source the items come from, if there is one.</summary>
+    IDataSource? Source { get; }
 
     /// <summary>The state <paramref name="owner" /> keeps for this run, created on first use.</summary>
     T GetState<T>(IDataTransform owner, Func<T> create) where T : class;
@@ -246,17 +291,17 @@ public interface ITransformContext
 /// <summary>The default <see cref="ITransformContext" />: state in memory for the length of one run, failures to the log.</summary>
 public sealed class TransformContext : ITransformContext
 {
-    private readonly object                          _lock  = new();
-    private readonly Dictionary<object, object>      _state = new(ReferenceEqualityComparer.Instance);
-
-    public IDataSource? Source { get; init; }
-
-    public bool IsDryRun { get; init; }
+    private readonly object                     _lock  = new();
+    private readonly Dictionary<object, object> _state = new(ReferenceEqualityComparer.Instance);
 
     /// <summary>Where the current time comes from; replace it to make a run repeatable.</summary>
     public Func<DateTime> Clock { get; init; } = () => DateTime.UtcNow;
 
+    public bool IsDryRun { get; init; }
+
     public DateTime Now => Clock();
+
+    public IDataSource? Source { get; init; }
 
     public T GetState<T>(IDataTransform owner, Func<T> create) where T : class
     {
@@ -276,14 +321,16 @@ public sealed class TransformContext : ITransformContext
     }
 }
 
-/// <summary>A plain, ready-to-use <see cref="IDataTransformGroup" />: a list of transforms, and so a natural XAML collection.</summary>
+/// <summary>
+///     A plain, ready-to-use <see cref="IDataTransformGroup" />: a list of transforms, and so a natural XAML
+///     collection.
+/// </summary>
 public class DataTransformGroup : List<IDataTransform>, IDataTransformGroup
 {
-    public string? DisplayName { get; set; }
-
     public DataTransformGroupMode Mode { get; set; } = DataTransformGroupMode.Sequential;
 
-    public TransformErrorPolicy OnError { get; set; } = TransformErrorPolicy.Throw;
+    public TransformErrorPolicy OnError     { get; set; } = TransformErrorPolicy.Throw;
+    public string?              DisplayName { get; set; }
 }
 
 public static class DataTransformExtensions
@@ -306,18 +353,23 @@ public static class DataTransformExtensions
     ///     <see cref="IObservableDataSource" /> does per batch, or over the whole watch.
     /// </summary>
     public static async IAsyncEnumerable<TransformItem> RunAsync(this IDataTransform transform, IAsyncEnumerable<TransformItem> items,
-                                                                 ITransformContext context, [EnumeratorCancellation] CancellationToken cancel = default)
+                                                                 ITransformContext context,
+                                                                 [EnumeratorCancellation] CancellationToken cancel = default)
     {
         await foreach (var item in items.WithCancellation(cancel).ConfigureAwait(false))
-        await foreach (var result in transform.TransformAsync(item, context, cancel).WithCancellation(cancel).ConfigureAwait(false))
-            yield return result;
+            await foreach (var result in transform.TransformAsync(item, context, cancel).WithCancellation(cancel).ConfigureAwait(false))
+                yield return result;
 
         await foreach (var result in transform.CompleteAsync(context, cancel).WithCancellation(cancel).ConfigureAwait(false))
             yield return result;
     }
 
-    /// <summary>The default <see cref="IDataTransform.TransformAsync" /> of a group; call it from a group that overrides the rest.</summary>
-    public static async IAsyncEnumerable<TransformItem> RunGroupAsync(IDataTransformGroup group, TransformItem item, ITransformContext context,
+    /// <summary>
+    ///     The default <see cref="IDataTransform.TransformAsync" /> of a group; call it from a group that overrides the
+    ///     rest.
+    /// </summary>
+    public static async IAsyncEnumerable<TransformItem> RunGroupAsync(IDataTransformGroup                        group, TransformItem item,
+                                                                      ITransformContext                          context,
                                                                       [EnumeratorCancellation] CancellationToken cancel = default)
     {
         var steps  = group.ToList();
@@ -350,7 +402,10 @@ public static class DataTransformExtensions
         }
     }
 
-    /// <summary>The default <see cref="IDataTransform.CompleteAsync" /> of a group: releases each member's held-back items, in order, routing them through the members after it in a chain.</summary>
+    /// <summary>
+    ///     The default <see cref="IDataTransform.CompleteAsync" /> of a group: releases each member's held-back items, in
+    ///     order, routing them through the members after it in a chain.
+    /// </summary>
     public static async IAsyncEnumerable<TransformItem> CompleteGroupAsync(IDataTransformGroup group, ITransformContext context,
                                                                            [EnumeratorCancellation] CancellationToken cancel = default)
     {
@@ -365,8 +420,8 @@ public static class DataTransformExtensions
             {
                 case DataTransformGroupMode.Sequential:
                     foreach (var item in released)
-                    await foreach (var result in Chain(steps, i + 1, item, policy, context, cancel))
-                        yield return result;
+                        await foreach (var result in Chain(steps, i + 1, item, policy, context, cancel))
+                            yield return result;
 
                     break;
                 case DataTransformGroupMode.FanOut:
@@ -378,8 +433,9 @@ public static class DataTransformExtensions
         }
     }
 
-    private static async IAsyncEnumerable<TransformItem> Chain(List<IDataTransform> steps, int index, TransformItem item, TransformErrorPolicy policy,
-                                                               ITransformContext context, [EnumeratorCancellation] CancellationToken cancel)
+    private static async IAsyncEnumerable<TransformItem> Chain(List<IDataTransform> steps, int index, TransformItem item,
+                                                               TransformErrorPolicy policy, ITransformContext context,
+                                                               [EnumeratorCancellation] CancellationToken cancel)
     {
         if (index == steps.Count)
         {
@@ -391,25 +447,25 @@ public static class DataTransformExtensions
         if (applied.Failed)
         {
             if (policy == TransformErrorPolicy.Continue)
-                await foreach (var result in Chain(steps, index + 1, item, policy, context, cancel)) yield return result;
+                await foreach (var result in Chain(steps, index + 1, item, policy, context, cancel))
+                    yield return result;
 
             yield break;
         }
 
         foreach (var produced in applied.Items)
-        await foreach (var result in Chain(steps, index + 1, produced, policy, context, cancel))
-            yield return result;
+            await foreach (var result in Chain(steps, index + 1, produced, policy, context, cancel))
+                yield return result;
     }
 
-    private readonly record struct Applied(bool Failed, List<TransformItem> Items);
-
-    private static async Task<Applied> Apply(IDataTransform step, TransformItem item, TransformErrorPolicy policy, ITransformContext context,
-                                             CancellationToken cancel)
+    private static async Task<Applied> Apply(IDataTransform    step,    TransformItem     item, TransformErrorPolicy policy,
+                                             ITransformContext context, CancellationToken cancel)
     {
         var items = new List<TransformItem>();
         try
         {
-            await foreach (var result in step.TransformAsync(item, context, cancel).WithCancellation(cancel).ConfigureAwait(false)) items.Add(result);
+            await foreach (var result in step.TransformAsync(item, context, cancel).WithCancellation(cancel).ConfigureAwait(false))
+                items.Add(result);
         }
         catch (OperationCanceledException)
         {
@@ -424,13 +480,14 @@ public static class DataTransformExtensions
         return new Applied(false, items);
     }
 
-    private static async Task<List<TransformItem>> Release(IDataTransform step, TransformErrorPolicy policy, ITransformContext context,
+    private static async Task<List<TransformItem>> Release(IDataTransform    step, TransformErrorPolicy policy, ITransformContext context,
                                                            CancellationToken cancel)
     {
         var items = new List<TransformItem>();
         try
         {
-            await foreach (var result in step.CompleteAsync(context, cancel).WithCancellation(cancel).ConfigureAwait(false)) items.Add(result);
+            await foreach (var result in step.CompleteAsync(context, cancel).WithCancellation(cancel).ConfigureAwait(false))
+                items.Add(result);
         }
         catch (OperationCanceledException)
         {
@@ -444,4 +501,6 @@ public static class DataTransformExtensions
 
         return items;
     }
+
+    private readonly record struct Applied(bool Failed, List<TransformItem> Items);
 }

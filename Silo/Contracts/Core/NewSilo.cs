@@ -1,6 +1,7 @@
 ﻿using System.IO;
 using System.Windows.Markup;
 using Silo.DbModel;
+using Silo.Providers.Data.Validation;
 
 namespace Silo.Contracts.Core;
 

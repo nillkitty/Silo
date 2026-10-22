@@ -4,7 +4,10 @@ using System.Numerics;
 using System.Text.RegularExpressions;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using Silo.Providers.Data;
+using Silo.Providers.Data.Source;
 using Silo.Providers.Document;
+using Silo.Providers.Reflection;
 using Telefrag.DI;
 using YamlDotNet.Core;
 
@@ -30,10 +33,10 @@ namespace Silo.Providers.Format;
 [Singleton(typeof(IFileFormat))]
 public class YamlFormat : IFileFormat, IDocumentProvider<YamlDocNode>
 {
-    public string ContentType { get; } = "application/yaml";
     public string DisplayName { get; } = "YAML File";
 
     public string FileExtension { get; } = "yaml";
+    public string ContentType   { get; } = "application/yaml";
 
     public IEnumerable<DataVerb> GetSupportedVerbs()
     {

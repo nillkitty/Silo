@@ -1,4 +1,4 @@
-﻿namespace Silo.Contracts.Providers.Data;
+﻿namespace Silo.Providers.Data;
 
 /// <summary>One saved connection: what it is called and where it points.</summary>
 /// <param name="Id">The row's id.</param>

@@ -1,5 +1,5 @@
 ﻿using Silo.Connectors;
-using Silo.Contracts.Providers;
+using Silo.Providers;
 using Silo.ViewModel;
 using Telefrag.DI;
 
@@ -29,12 +29,6 @@ public interface IConnection : IContainerHost, IProvider<Container>
     List<object> Metadata { get; }
 
     /// <summary>
-    ///     What to call the connection in lists (the name it was given when it was created); null when it has none, and
-    ///     the connector's name and the destination are used instead.
-    /// </summary>
-    string? DisplayText => null;
-
-    /// <summary>
     ///     Gets a refrence to the node in the tree that represents this node
     /// </summary>
     SiloNode? Node { get; }
@@ -56,6 +50,12 @@ public interface IConnection : IContainerHost, IProvider<Container>
     /// </summary>
 
     string? TempConfig { get; }
+
+    /// <summary>
+    ///     What to call the connection in lists (the name it was given when it was created); null when it has none, and
+    ///     the connector's name and the destination are used instead.
+    /// </summary>
+    string? DisplayText => null;
 
     /// <summary>
     ///     Gets whether the connection is connected or is connectionless

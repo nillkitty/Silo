@@ -1,16 +1,18 @@
-﻿using System.Linq;
-using AuthoredTable = Silo.DbModel.Global.AuthoredTable;
-using Diagram = Silo.DbModel.Global.Diagram;
+﻿using Serilog;
 using Silo.Bindings;
+using Silo.DbModel.Worlds;
 using Silo.Definitions;
 using Silo.Design;
-using SyntaxKind = Silo.DbModel.Meta.SyntaxKind;
 using Silo.Drawio;
-using Silo.DbModel.Worlds;
 using Silo.Model;
+using Silo.Providers.Data;
 using Silo.Providers.Definitions;
 using Silo.Tabular;
 using Silo.Views;
+using AuthoredTable = Silo.DbModel.Global.AuthoredTable;
+using DataBinding = Silo.DbModel.Global.DataBinding;
+using Diagram = Silo.DbModel.Global.Diagram;
+using SyntaxKind = Silo.DbModel.Meta.SyntaxKind;
 
 namespace Silo.Explorer;
 
@@ -24,7 +26,10 @@ public static class ExplorerTree
     /// <summary>The key of the document tab the "Tables" list shares between the Explorer and the navigation flyout.</summary>
     public const string TablesDocKey = "view:Tables";
 
-    /// <summary>The keys of the document tabs the "Enums" and "Syntaxes" lists share between the Explorer and the navigation flyout.</summary>
+    /// <summary>
+    ///     The keys of the document tabs the "Enums" and "Syntaxes" lists share between the Explorer and the navigation
+    ///     flyout.
+    /// </summary>
     public const string EnumsDocKey = "view:Enums";
 
     public const string SyntaxesDocKey = "view:Syntaxes";
@@ -55,13 +60,40 @@ public static class ExplorerTree
                          ExpandByDefault = true,
                          DocKey          = TablesDocKey,
                          Open            = () => new TablesView(),
-                         Details         = () => [("Contains", "Tables typed or pasted into this Silo"), ("World", "Local")],
+                         Details = () =>
+                                   [
+                                       ("Contains",
+                                        "Tables typed or pasted into this Silo"),
+                                       ("World", "Local")
+                                   ],
                          Actions = () =>
                                    [
-                                       new ExplorerAction("New _rich text table", () => TableEditors.CreateAndOpen(silo, TableTemplate.RichText)),
-                                       new ExplorerAction("New _plain table", () => TableEditors.CreateAndOpen(silo, TableTemplate.PlainText)),
-                                       new ExplorerAction("New _typed table", () => TableEditors.CreateAndOpen(silo, TableTemplate.Typed)),
-                                       new ExplorerAction("New table from _clipboard...", () => TablePaste.AsNewTable(silo))
+                                       new
+                                           ExplorerAction("New _rich text table",
+                                                          () =>
+                                                              TableEditors
+                                                                 .CreateAndOpen(silo,
+                                                                                TableTemplate
+                                                                                   .RichText)),
+                                       new
+                                           ExplorerAction("New _plain table",
+                                                          () =>
+                                                              TableEditors
+                                                                 .CreateAndOpen(silo,
+                                                                                TableTemplate
+                                                                                   .PlainText)),
+                                       new
+                                           ExplorerAction("New _typed table",
+                                                          () =>
+                                                              TableEditors
+                                                                 .CreateAndOpen(silo,
+                                                                                TableTemplate
+                                                                                   .Typed)),
+                                       new
+                                           ExplorerAction("New table from _clipboard...",
+                                                          () =>
+                                                              TablePaste
+                                                                 .AsNewTable(silo))
                                    ]
                      };
 
@@ -71,14 +103,16 @@ public static class ExplorerTree
 
         var local = new ExplorerNode("local", "Local", "World", "Database5")
                     {
-                        Realm = Realm.World, WorldKey = LocalWorld.Key,
+                        Realm           = Realm.World, WorldKey = LocalWorld.Key,
                         ExpandByDefault = true,
                         Details = () =>
                                   [
                                       ("Key", LocalWorld.Key),
                                       ("Provider", LocalWorld.Provider),
-                                      ("Authority", "Yes: the Silo holds the true copy; nothing is synchronised from elsewhere"),
-                                      ("Holds", "Data created or pasted into this Silo")
+                                      ("Authority",
+                                       "Yes: the Silo holds the true copy; nothing is synchronised from elsewhere"),
+                                      ("Holds",
+                                       "Data created or pasted into this Silo")
                                   ]
                     };
         local.Children.Add(tables);
@@ -90,18 +124,37 @@ public static class ExplorerTree
         int id = table.Id;
         return new ExplorerNode($"local/tables/{id}", table.Name, "Table", "Data1")
                {
-                   Realm = Realm.World, WorldKey = LocalWorld.Key,
-                   DocKey  = TableEditors.DocKey(silo, id),
-                   Open    = () => TableEditors.BuildDocument(silo, id, false),
+                   Realm  = Realm.World, WorldKey = LocalWorld.Key,
+                   DocKey = TableEditors.DocKey(silo, id),
+                   Open =
+                       () =>
+                           TableEditors.BuildDocument(silo, id, false),
                    Closed  = TableEditors.Release,
                    Stamp   = table.Modified.Ticks.ToString(),
                    Details = () => TableDetails(silo, id),
                    Actions = () =>
                              [
-                                 new ExplorerAction("_Open", () => TableEditors.OpenExisting(silo, id)),
-                                 new ExplorerAction("Open in a new _window", () => TableEditors.OpenInWindow(silo, id)),
-                                 new ExplorerAction("_Duplicate", () => TableEditors.Duplicate(silo, id)),
-                                 new ExplorerAction("D_elete...", () => TableEditors.Delete(silo, id))
+                                 new ExplorerAction("_Open",
+                                                    () =>
+                                                        TableEditors
+                                                           .OpenExisting(silo,
+                                                                         id)),
+                                 new
+                                     ExplorerAction("Open in a new _window",
+                                                    () =>
+                                                        TableEditors
+                                                           .OpenInWindow(silo,
+                                                                         id)),
+                                 new ExplorerAction("_Duplicate",
+                                                    () =>
+                                                        TableEditors
+                                                           .Duplicate(silo,
+                                                                      id)),
+                                 new ExplorerAction("D_elete...",
+                                                    () =>
+                                                        TableEditors
+                                                           .Delete(silo,
+                                                                   id))
                              ]
                };
     }
@@ -143,15 +196,28 @@ public static class ExplorerTree
         }
         catch (Exception ex)
         {
-            Serilog.Log.Warning(ex, "Listing the diagrams for the Explorer failed");
+            Log.Warning(ex, "Listing the diagrams for the Explorer failed");
             list = [];
         }
 
         var folder = new ExplorerNode("diagrams", "Diagrams", "Folder", "FlowDiagram")
                      {
                          ExpandByDefault = true,
-                         Details         = () => [("Contains", "Diagrams drawn in this Silo (draw.io)"), ("Count", list.Count.ToString())],
-                         Actions         = () => [new ExplorerAction("_New diagram...", () => DiagramActions.New(silo))]
+                         Details = () =>
+                                   [
+                                       ("Contains",
+                                        "Diagrams drawn in this Silo (draw.io)"),
+                                       ("Count",
+                                        list.Count.ToString())
+                                   ],
+                         Actions = () =>
+                                   [
+                                       new
+                                           ExplorerAction("_New diagram...",
+                                                          () =>
+                                                              DiagramActions
+                                                                 .New(silo))
+                                   ]
                      };
 
         foreach (var diagram in list.OrderBy(d => d.Name, StringComparer.CurrentCultureIgnoreCase))
@@ -166,14 +232,30 @@ public static class ExplorerTree
         return new ExplorerNode($"diagrams/{id}", diagram.Name, "Diagram", "FlowDiagram")
                {
                    Realm = Realm.Global,
-                   Stamp    = diagram.Modified.Ticks.ToString(),
-                   Activate = () => DiagramActions.Open(silo, id),
-                   Details  = () => DiagramDetails(store, id),
+                   Stamp = diagram.Modified.Ticks.ToString(),
+                   Activate =
+                       () => DiagramActions.Open(silo, id),
+                   Details = () => DiagramDetails(store, id),
                    Actions = () =>
                              [
-                                 new ExplorerAction("_Open", () => DiagramActions.Open(silo, id)),
-                                 new ExplorerAction("_Rename...", () => DiagramActions.Rename(silo, id)),
-                                 new ExplorerAction("D_elete...", () => DiagramActions.Delete(silo, id))
+                                 new
+                                     ExplorerAction("_Open",
+                                                    () =>
+                                                        DiagramActions
+                                                           .Open(silo,
+                                                                 id)),
+                                 new
+                                     ExplorerAction("_Rename...",
+                                                    () =>
+                                                        DiagramActions
+                                                           .Rename(silo,
+                                                                   id)),
+                                 new
+                                     ExplorerAction("D_elete...",
+                                                    () =>
+                                                        DiagramActions
+                                                           .Delete(silo,
+                                                                   id))
                              ]
                };
     }
@@ -198,30 +280,45 @@ public static class ExplorerTree
     // ---- data bindings -----------------------------------------------------------------------------
 
     /// <summary>
-    ///     The live values the Silo samples (performance counters and the like), shown in diagrams as <c>{bind:Name}</c>; null when the Silo
+    ///     The live values the Silo samples (performance counters and the like), shown in diagrams as <c>{bind:Name}</c>; null
+    ///     when the Silo
     ///     cannot hold them.
     /// </summary>
     private static ExplorerNode? BuildDataBindings(OpenSilo silo)
     {
         if (silo.Data is not IDataBindingStore store) return null;
 
-        IReadOnlyList<DbModel.Global.DataBinding> list;
+        IReadOnlyList<DataBinding> list;
         try
         {
             list = store.ListDataBindings();
         }
         catch (Exception ex)
         {
-            Serilog.Log.Warning(ex, "Listing the data bindings for the Explorer failed");
+            Log.Warning(ex, "Listing the data bindings for the Explorer failed");
             list = [];
         }
 
         var folder = new ExplorerNode("bindings", "Data bindings", "Folder", "DataStructure")
                      {
-                         Details = () => [("Contains", "Live values sampled while the Silo is open"),
-                                          ("Use", "Put {bind:Name} in a diagram cell's silo-label (Edit Data)"),
-                                          ("Count", list.Count.ToString())],
-                         Actions = () => [new ExplorerAction("_New data binding...", () => DataBindingActions.New(silo))]
+                         Details = () =>
+                                   [
+                                       ("Contains",
+                                        "Live values sampled while the Silo is open"),
+                                       ("Use",
+                                        "Put {bind:Name} in a diagram cell's silo-label (Edit Data)"),
+                                       ("Count",
+                                        list.Count
+                                            .ToString())
+                                   ],
+                         Actions = () =>
+                                   [
+                                       new
+                                           ExplorerAction("_New data binding...",
+                                                          () =>
+                                                              DataBindingActions
+                                                                 .New(silo))
+                                   ]
                      };
 
         foreach (var binding in list)
@@ -230,7 +327,7 @@ public static class ExplorerTree
         return folder;
     }
 
-    private static ExplorerNode BuildDataBinding(OpenSilo silo, IDataBindingStore store, DbModel.Global.DataBinding binding)
+    private static ExplorerNode BuildDataBinding(OpenSilo silo, IDataBindingStore store, DataBinding binding)
     {
         int    id   = binding.Id;
         string name = binding.Name;
@@ -242,9 +339,20 @@ public static class ExplorerTree
                    Details  = () => DataBindingDetails(store, id),
                    Actions = () =>
                              [
-                                 new ExplorerAction("_Edit...", () => DataBindingActions.Edit(silo, id)),
-                                 new ExplorerAction("_Copy token", () => DataBindingActions.CopyToken(name)),
-                                 new ExplorerAction("D_elete...", () => DataBindingActions.Delete(silo, id))
+                                 new ExplorerAction("_Edit...",
+                                                    () =>
+                                                        DataBindingActions
+                                                           .Edit(silo,
+                                                                 id)),
+                                 new ExplorerAction("_Copy token",
+                                                    () =>
+                                                        DataBindingActions
+                                                           .CopyToken(name)),
+                                 new ExplorerAction("D_elete...",
+                                                    () =>
+                                                        DataBindingActions
+                                                           .Delete(silo,
+                                                                   id))
                              ]
                };
     }
@@ -275,7 +383,8 @@ public static class ExplorerTree
     // ---- enums and syntaxes ------------------------------------------------------------------------
 
     /// <summary>
-    ///     The types defined in the Silo itself: its enums (<c>enum:Name</c>) and its syntaxes (<c>syntax:Name</c>). Like the diagrams they belong
+    ///     The types defined in the Silo itself: its enums (<c>enum:Name</c>) and its syntaxes (<c>syntax:Name</c>). Like the
+    ///     diagrams they belong
     ///     to the Silo rather than to a world; null when the Silo can hold neither.
     /// </summary>
     private static ExplorerNode? BuildTypes(OpenSilo silo)
@@ -288,7 +397,13 @@ public static class ExplorerTree
         var types = new ExplorerNode("types", "Types", "Folder", "DataModel")
                     {
                         ExpandByDefault = true,
-                        Details         = () => [("Contains", "Enums and syntaxes defined in this Silo"), ("Referred to as", "enum:Name and syntax:Name")]
+                        Details = () =>
+                                  [
+                                      ("Contains",
+                                       "Enums and syntaxes defined in this Silo"),
+                                      ("Referred to as",
+                                       "enum:Name and syntax:Name")
+                                  ]
                     };
         foreach (var folder in folders) types.Children.Add(folder);
         return types;
@@ -303,7 +418,7 @@ public static class ExplorerTree
         }
         catch (Exception ex)
         {
-            Serilog.Log.Warning(ex, "Listing the enums for the Explorer failed");
+            Log.Warning(ex, "Listing the enums for the Explorer failed");
             list = [];
         }
 
@@ -312,8 +427,22 @@ public static class ExplorerTree
                          ExpandByDefault = true,
                          DocKey          = EnumsDocKey,
                          Open            = () => new EnumsView(),
-                         Details         = () => [("Contains", "Enums defined in this Silo: named sets of known values"), ("Count", list.Count.ToString()), ("Referred to as", "enum:Name")],
-                         Actions         = () => [new ExplorerAction("_New enum...", () => DefinitionActions.NewEnum(silo))]
+                         Details = () =>
+                                   [
+                                       ("Contains",
+                                        "Enums defined in this Silo: named sets of known values"),
+                                       ("Count",
+                                        list.Count.ToString()),
+                                       ("Referred to as", "enum:Name")
+                                   ],
+                         Actions = () =>
+                                   [
+                                       new
+                                           ExplorerAction("_New enum...",
+                                                          () =>
+                                                              DefinitionActions
+                                                                 .NewEnum(silo))
+                                   ]
                      };
 
         foreach (var e in list) folder.Children.Add(BuildEnum(silo, e));
@@ -326,14 +455,29 @@ public static class ExplorerTree
         var node = new ExplorerNode($"types/enums/{id}", e.Name, "Enum", "Checklist")
                    {
                        Realm = Realm.Meta,
-                       Stamp    = DefinitionText.Stamp(e),
-                       Activate = () => DefinitionActions.EditEnum(silo, id),
-                       Details  = () => EnumDetails(e),
+                       Stamp = DefinitionText.Stamp(e),
+                       Activate =
+                           () => DefinitionActions.EditEnum(silo, id),
+                       Details = () => EnumDetails(e),
                        Actions = () =>
                                  [
-                                     new ExplorerAction("_Edit...", () => DefinitionActions.EditEnum(silo, id)),
-                                     new ExplorerAction("_Add value...", () => DefinitionActions.AddValue(silo, id)),
-                                     new ExplorerAction("D_elete...", () => DefinitionActions.DeleteEnum(silo, id))
+                                     new ExplorerAction("_Edit...",
+                                                        () =>
+                                                            DefinitionActions
+                                                               .EditEnum(silo,
+                                                                         id)),
+                                     new
+                                         ExplorerAction("_Add value...",
+                                                        () =>
+                                                            DefinitionActions
+                                                               .AddValue(silo,
+                                                                         id)),
+                                     new
+                                         ExplorerAction("D_elete...",
+                                                        () =>
+                                                            DefinitionActions
+                                                               .DeleteEnum(silo,
+                                                                           id))
                                  ]
                    };
 
@@ -347,20 +491,50 @@ public static class ExplorerTree
         return new ExplorerNode($"types/enums/{enumId}/{valueId}", DefinitionText.Label(v), "Enum value", "Record")
                {
                    Realm = Realm.Meta,
-                   Stamp    = v.Name + "|" + v.Value + "|" + v.Description,
-                   Activate = () => DefinitionActions.EditValue(silo, enumId, valueId),
+                   Stamp =
+                       v.Name  + "|" +
+                       v.Value + "|" +
+                       v.Description,
+                   Activate =
+                       () =>
+                           DefinitionActions
+                              .EditValue(silo,
+                                         enumId,
+                                         valueId),
                    Details = () =>
                              [
-                                 ("Label", v.Name),
-                                 ("Value", v.Value ?? string.Empty),
-                                 ("Enum", e.Name),
-                                 ("Type", e.Type.ToString()),
-                                 ("Note", v.Description ?? string.Empty)
+                                 ("Label",
+                                  v.Name),
+                                 ("Value",
+                                  v.Value ??
+                                  string
+                                     .Empty),
+                                 ("Enum",
+                                  e.Name),
+                                 ("Type",
+                                  e.Type
+                                   .ToString()),
+                                 ("Note",
+                                  v.Description ??
+                                  string
+                                     .Empty)
                              ],
                    Actions = () =>
                              [
-                                 new ExplorerAction("_Edit...", () => DefinitionActions.EditValue(silo, enumId, valueId)),
-                                 new ExplorerAction("D_elete...", () => DefinitionActions.DeleteValue(silo, enumId, valueId))
+                                 new
+                                     ExplorerAction("_Edit...",
+                                                    () =>
+                                                        DefinitionActions
+                                                           .EditValue(silo,
+                                                                      enumId,
+                                                                      valueId)),
+                                 new
+                                     ExplorerAction("D_elete...",
+                                                    () =>
+                                                        DefinitionActions
+                                                           .DeleteValue(silo,
+                                                                        enumId,
+                                                                        valueId))
                              ]
                };
     }
@@ -385,7 +559,7 @@ public static class ExplorerTree
         }
         catch (Exception ex)
         {
-            Serilog.Log.Warning(ex, "Listing the syntaxes for the Explorer failed");
+            Log.Warning(ex, "Listing the syntaxes for the Explorer failed");
             list = [];
         }
 
@@ -394,11 +568,27 @@ public static class ExplorerTree
                          ExpandByDefault = false,
                          DocKey          = SyntaxesDocKey,
                          Open            = () => new SyntaxesView(),
-                         Details         = () => [("Contains", "Syntaxes defined in this Silo: rules for checking a string and turning it into an object"), ("Count", list.Count.ToString()), ("Referred to as", "syntax:Name")],
+                         Details = () =>
+                                   [
+                                       ("Contains",
+                                        "Syntaxes defined in this Silo: rules for checking a string and turning it into an object"),
+                                       ("Count",
+                                        list.Count.ToString()),
+                                       ("Referred to as",
+                                        "syntax:Name")
+                                   ],
                          Actions = () =>
                                    [
-                                       new ExplorerAction("_New syntax...", () => DefinitionActions.NewSyntax(silo)),
-                                       new ExplorerAction("_Restore predefined syntaxes", () => DefinitionActions.RestoreDefaults(silo))
+                                       new
+                                           ExplorerAction("_New syntax...",
+                                                          () =>
+                                                              DefinitionActions
+                                                                 .NewSyntax(silo)),
+                                       new
+                                           ExplorerAction("_Restore predefined syntaxes",
+                                                          () =>
+                                                              DefinitionActions
+                                                                 .RestoreDefaults(silo))
                                    ]
                      };
 
@@ -412,13 +602,27 @@ public static class ExplorerTree
         return new ExplorerNode($"types/syntaxes/{id}", DefinitionText.NameWithAlias(s), "Syntax", "Code")
                {
                    Realm = Realm.Meta,
-                   Stamp    = DefinitionText.Stamp(s),
-                   Activate = () => DefinitionActions.EditSyntax(silo, id),
-                   Details  = () => SyntaxDetails(s),
+                   Stamp =
+                       DefinitionText.Stamp(s),
+                   Activate =
+                       () => DefinitionActions
+                          .EditSyntax(silo, id),
+                   Details =
+                       () => SyntaxDetails(s),
                    Actions = () =>
                              [
-                                 new ExplorerAction("_Edit...", () => DefinitionActions.EditSyntax(silo, id)),
-                                 new ExplorerAction("D_elete...", () => DefinitionActions.DeleteSyntax(silo, id))
+                                 new
+                                     ExplorerAction("_Edit...",
+                                                    () =>
+                                                        DefinitionActions
+                                                           .EditSyntax(silo,
+                                                                       id)),
+                                 new
+                                     ExplorerAction("D_elete...",
+                                                    () =>
+                                                        DefinitionActions
+                                                           .DeleteSyntax(silo,
+                                                                         id))
                              ]
                };
     }
@@ -430,7 +634,7 @@ public static class ExplorerTree
         yield return ("Referred to as", "syntax:" + s.Name + (string.IsNullOrEmpty(s.Alias) ? string.Empty : " or syntax:" + s.Alias));
         yield return ("Built on", DefinitionText.Source(s));
         if (s.Kind == SyntaxKind.Pattern && s.Pattern is not null) yield return ("Pattern", s.Pattern);
-        if (s.Kind == SyntaxKind.Parser && SyntaxParsers.Find(s.Parser) is { } parser) yield return ("Becomes", parser.ValueType.Name);
+        if (s.Kind == SyntaxKind.Parser  && SyntaxParsers.Find(s.Parser) is { } parser) yield return ("Becomes", parser.ValueType.Name);
         if (!string.IsNullOrEmpty(s.Description)) yield return ("Description", s.Description);
         if (!string.IsNullOrEmpty(s.Example)) yield return ("Example", s.Example);
         if (s.IsSeeded) yield return ("Origin", "Predefined (came with Silo)");
@@ -447,9 +651,9 @@ public static class ExplorerTree
 
             // a connection that put its own node in the tree (INodeProvider, or ConnectContext.CreateNode) is shown by that node
             if (c is INodeProvider provider && silo.Nodes.Provides(provider)) continue;
-            if (c.Node is { } own && silo.Nodes.Contains(own)) continue;
+            if (c.Node is { } own           && silo.Nodes.Contains(own)) continue;
 
-            string name = c.Connector.DisplayName;
+            string  name = c.Connector.DisplayName;
             string? host = null;
             try
             {
@@ -468,7 +672,11 @@ public static class ExplorerTree
                                        [
                                            ("Connector", name),
                                            ("Destination", string.IsNullOrWhiteSpace(shown) ? "(none)" : shown),
-                                           ("State", c.ConnectionState switch { true => "Connected", false => "Disconnected", _ => "Connectionless" }),
+                                           ("State",
+                                            c.ConnectionState switch
+                                            {
+                                                true => "Connected", false => "Disconnected", _ => "Connectionless"
+                                            }),
                                            ("Types and objects", "Will be listed here as the connector reports them")
                                        ]
                          };

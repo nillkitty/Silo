@@ -1,6 +1,6 @@
 ﻿using Silo.Contracts.ConnectorServices;
 
-namespace Silo.Contracts.Providers.Data.Shape;
+namespace Silo.Providers.Data.Shape;
 
 /// <summary>
 ///     Represents a syntax;  rules for validating a string and converting it to a usable runtime object value

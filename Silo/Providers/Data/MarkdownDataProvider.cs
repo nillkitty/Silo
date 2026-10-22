@@ -1,6 +1,7 @@
 using Markdig.Extensions.Tables;
 using Markdig.Syntax;
 using Markdig.Syntax.Inlines;
+using Silo.Providers.Data.Source;
 
 namespace Silo.Providers.Data;
 
@@ -136,9 +137,9 @@ public class MarkdownDataProvider : IFlatDataProvider
 internal sealed class MarkdownTableDataSource : ITabularDataSource
 {
     private readonly Table _table;
+    public           Uri   DataSourceUri { get; }
 
     public string         CanonicalName   { get; }
-    public Uri            DataSourceUri   { get; }
     public string?        DefaultAlias    { get; }
     public string         LocalNamespace  { get; }
     public string         NativeNamespace { get; }
@@ -211,8 +212,8 @@ internal sealed class MarkdownTableDataSource : ITabularDataSource
 /// </summary>
 internal sealed class MarkdownListDataSource : IListDataSource
 {
-    public string                   CanonicalName   { get; }
     public Uri                      DataSourceUri   { get; }
+    public string                   CanonicalName   { get; }
     public string?                  DefaultAlias    { get; } = "md";
     public string                   LocalNamespace  { get; }
     public string                   NativeNamespace { get; }

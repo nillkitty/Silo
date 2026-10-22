@@ -1,4 +1,4 @@
-﻿namespace Silo.Contracts.Providers.Data.Source;
+﻿namespace Silo.Providers.Data.Source;
 
 /// <summary>
 ///     A source of data at the level of which would be used

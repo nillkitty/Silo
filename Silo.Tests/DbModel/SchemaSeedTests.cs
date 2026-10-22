@@ -1,16 +1,18 @@
-using System.Linq;
 using Microsoft.Data.Sqlite;
-using Silo.Contracts.Providers.Data;
 using Silo.DbModel.Meta;
 using Silo.DbModel.Sqlite;
 using Silo.Providers.Definitions;
 
 namespace Silo.Tests.DbModel;
 
-/// <summary>What <c>EntitySchema.EnsureFixedSchemas</c> does for the enum and syntax tables: creates them, and seeds the predefined syntaxes once.</summary>
+/// <summary>
+///     What <c>EntitySchema.EnsureFixedSchemas</c> does for the enum and syntax tables: creates them, and seeds the
+///     predefined syntaxes once.
+/// </summary>
 public class SchemaSeedTests
 {
-    private SqliteConnection _conn = null!;
+    private static readonly string           SyntaxTable = SiloLayout.Simple.Table(EntitySchema.MetaverseAlias, nameof(MvSyntax));
+    private                 SqliteConnection _conn       = null!;
 
     [SetUp]
     public void SetUp()
@@ -20,9 +22,10 @@ public class SchemaSeedTests
     }
 
     [TearDown]
-    public void TearDown() => _conn.Dispose();
-
-    private static readonly string SyntaxTable = SiloLayout.Simple.Table(EntitySchema.MetaverseAlias, nameof(MvSyntax));
+    public void TearDown()
+    {
+        _conn.Dispose();
+    }
 
     private long Count(string table)
     {
@@ -44,9 +47,9 @@ public class SchemaSeedTests
         foreach (var type in new[] { typeof(MvEnum), typeof(MvEnumValue), typeof(MvSyntax) })
         {
             var info = EntitySchema.Get(type);
-            Assert.That(info, Is.Not.Null, type.Name);
-            Assert.That(info!.SchemaKind, Is.EqualTo(SchemaKind.Fixed), type.Name);
-            Assert.That(info.FixedAlias, Is.EqualTo(EntitySchema.MetaverseAlias), type.Name);
+            Assert.That(info,             Is.Not.Null,                             type.Name);
+            Assert.That(info!.SchemaKind, Is.EqualTo(SchemaKind.Fixed),            type.Name);
+            Assert.That(info.FixedAlias,  Is.EqualTo(EntitySchema.MetaverseAlias), type.Name);
         }
     }
 
@@ -74,8 +77,8 @@ public class SchemaSeedTests
         Assert.That(Count(SiloLayout.Simple.Table(EntitySchema.MetaverseAlias, nameof(MvEnumValue))), Is.EqualTo(0));
 
         var seeded = SyntaxRows.GetAll(_conn, null, SyntaxTable);
-        Assert.That(seeded.Select(s => s.Name), Does.Contain("Timestamp"));
-        Assert.That(seeded.Select(s => s.Name), Does.Contain("SecurityIdentifier"));
+        Assert.That(seeded.Select(s => s.Name),                   Does.Contain("Timestamp"));
+        Assert.That(seeded.Select(s => s.Name),                   Does.Contain("SecurityIdentifier"));
         Assert.That(seeded.Single(s => s.Name == "JToken").Alias, Is.EqualTo("jtok"));
     }
 
@@ -106,7 +109,7 @@ public class SchemaSeedTests
     [Test]
     public void Seeding_can_be_left_out_when_the_rows_are_about_to_be_copied_in()
     {
-        EntitySchema.EnsureFixedSchemas(_conn, SiloLayout.Simple, seed: false);
+        EntitySchema.EnsureFixedSchemas(_conn, SiloLayout.Simple, false);
         Assert.That(Count(SyntaxTable), Is.EqualTo(0));
     }
 }

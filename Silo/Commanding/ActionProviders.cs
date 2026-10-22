@@ -16,6 +16,10 @@ public static class ActionProviders
     // model type -> the providers written for exactly that type, in discovery order
     private static Dictionary<Type, List<IActionProvider>>? _byType;
 
+    // the (model type, provider type) pairs the scan of the app's assembly found; kept apart from the providers themselves so the
+    // reflection can be done early on a background thread (Prewarm) while the providers are still made on the thread that needs them
+    private static List<(Type Model, Type Provider)>? _scanned;
+
     /// <summary>
     ///     The commands the providers offer for <paramref name="model" />: those of the providers for its own type first, then
     ///     for each base type, then for the interfaces it implements, then for <see cref="object" />. Empty for null. Does not
@@ -68,6 +72,17 @@ public static class ActionProviders
         return types.Select(t => (t, (IReadOnlyList<IActionProvider>)(table.TryGetValue(t, out var list) ? list.ToList() : []))).ToList();
     }
 
+    /// <summary>
+    ///     Does the reflection of the scan -- which types of the app's assembly are providers -- ahead of time, so the first menu
+    ///     that needs providers does not pay for it. Meant for a background thread at startup; the providers themselves are still
+    ///     created the first time they are asked for, on whichever thread asks. Safe to call from any thread, and more than once.
+    /// </summary>
+    public static void Prewarm()
+    {
+        lock (Gate)
+            _scanned ??= Scan(typeof(ActionProviders).Assembly).ToList();
+    }
+
     /// <summary>Adds a provider (one the assembly scan does not find). It is asked for objects of type <typeparamref name="T" />.</summary>
     public static void Register<T>(IActionProvider<T> provider)
     {
@@ -108,7 +123,8 @@ public static class ActionProviders
 
             var table = new Dictionary<Type, List<IActionProvider>>();
             var made  = new Dictionary<Type, IActionProvider>();
-            foreach (var (model, providerType) in Scan(typeof(ActionProviders).Assembly))
+            _scanned ??= Scan(typeof(ActionProviders).Assembly).ToList();
+            foreach (var (model, providerType) in _scanned)
             {
                 try
                 {

@@ -1,5 +1,6 @@
 using System.Globalization;
 using Microsoft.Data.Sqlite;
+using Silo.Providers.Data;
 using DataBinding = Silo.DbModel.Global.DataBinding;
 
 namespace Silo.DbModel.Sqlite;
@@ -11,6 +12,21 @@ public sealed partial class SqliteDatabaseProvider : IDataBindingStore
 
     private string DataBindingTable => T(EntitySchema.MainAlias, nameof(DataBinding));
 
+    private static DataBinding ReadDataBinding(SqliteDataReader r)
+    {
+        return new DataBinding
+               {
+                   Id          = r.GetInt32(0),
+                   Name        = r.IsDBNull(1) ? string.Empty : r.GetString(1),
+                   Source      = r.IsDBNull(2) ? string.Empty : r.GetString(2),
+                   Interval    = r.IsDBNull(3) ? TimeSpan.FromSeconds(1) : TimeSpan.FromTicks(r.GetInt64(3)),
+                   Enabled     = r.IsDBNull(4) || r.GetInt64(4) != 0,
+                   Description = r.IsDBNull(5) ? null : r.GetString(5),
+                   Created     = r.IsDBNull(6) ? DateTime.UtcNow : ParseTime(r.GetString(6)),
+                   Modified    = r.IsDBNull(7) ? DateTime.UtcNow : ParseTime(r.GetString(7))
+               };
+    }
+
     public IReadOnlyList<DataBinding> ListDataBindings()
     {
         _gate.Wait();
@@ -19,7 +35,7 @@ public sealed partial class SqliteDatabaseProvider : IDataBindingStore
             using var cmd = _conn.CreateCommand();
             cmd.CommandText = $"SELECT {DataBindingColumns} FROM {DataBindingTable} ORDER BY Name COLLATE NOCASE";
 
-            var list = new List<DataBinding>();
+            var       list   = new List<DataBinding>();
             using var reader = cmd.ExecuteReader();
             while (reader.Read()) list.Add(ReadDataBinding(reader));
             return list;
@@ -61,8 +77,8 @@ public sealed partial class SqliteDatabaseProvider : IDataBindingStore
                     using var idCmd = _conn.CreateCommand();
                     idCmd.Transaction = tx;
                     idCmd.CommandText = $"SELECT COALESCE(MAX(Id), 0) + 1 FROM {DataBindingTable}";
-                    binding    = binding.Clone();
-                    binding.Id = Convert.ToInt32(idCmd.ExecuteScalar(), CultureInfo.InvariantCulture);
+                    binding           = binding.Clone();
+                    binding.Id        = Convert.ToInt32(idCmd.ExecuteScalar(), CultureInfo.InvariantCulture);
                 }
 
                 UpsertRecursive(binding, tx, new HashSet<object>(ReferenceEqualityComparer.Instance));
@@ -98,20 +114,5 @@ public sealed partial class SqliteDatabaseProvider : IDataBindingStore
         {
             _gate.Release();
         }
-    }
-
-    private static DataBinding ReadDataBinding(SqliteDataReader r)
-    {
-        return new DataBinding
-               {
-                   Id          = r.GetInt32(0),
-                   Name        = r.IsDBNull(1) ? string.Empty : r.GetString(1),
-                   Source      = r.IsDBNull(2) ? string.Empty : r.GetString(2),
-                   Interval    = r.IsDBNull(3) ? TimeSpan.FromSeconds(1) : TimeSpan.FromTicks(r.GetInt64(3)),
-                   Enabled     = r.IsDBNull(4) || r.GetInt64(4) != 0,
-                   Description = r.IsDBNull(5) ? null : r.GetString(5),
-                   Created     = r.IsDBNull(6) ? DateTime.UtcNow : ParseTime(r.GetString(6)),
-                   Modified    = r.IsDBNull(7) ? DateTime.UtcNow : ParseTime(r.GetString(7))
-               };
     }
 }

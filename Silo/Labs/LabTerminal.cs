@@ -279,7 +279,7 @@ internal sealed class LabTerminal
 
     private IEnumerable<ProvidedCommand> AllActions()
     {
-        return _session.GlobalActions.Concat(_session.ContextActions).Concat(_session.ValueActions);
+        return LabMenus.All(_session);
     }
 
     private ProvidedCommand? FindAction(string word)

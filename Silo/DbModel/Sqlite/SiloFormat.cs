@@ -3,7 +3,8 @@ using System.IO;
 using System.IO.Compression;
 using System.Security.Cryptography;
 using Microsoft.Data.Sqlite;
-using Silo.Contracts.Providers.Data;
+using Serilog;
+using Silo.Providers.Data;
 
 namespace Silo.DbModel.Sqlite;
 
@@ -13,18 +14,14 @@ namespace Silo.DbModel.Sqlite;
 /// </summary>
 /// <remarks>
 ///     <b>Archive</b>: one attached database per alias -- <c>[x].[Scalar]</c>, <c>[w_acme].[World]</c>.
-///     <b>Simple</b>: everything is in the one file; the global tables keep their plain names and every other alias becomes
+///     <b>Simple</b>: everything is in the one file; the global tables keep their plain names and every other alias
+///     becomes
 ///     a table-name prefix -- <c>[main].[Header]</c>, <c>[main].[x_Scalar]</c>, <c>[main].[w_acme_World]</c>.
 /// </remarks>
 public sealed class SiloLayout
 {
     public static readonly SiloLayout Simple  = new(SiloStorageFormat.Simple);
     public static readonly SiloLayout Archive = new(SiloStorageFormat.Archive);
-
-    private SiloLayout(SiloStorageFormat format)
-    {
-        Format = format;
-    }
 
     public SiloStorageFormat Format { get; }
 
@@ -33,8 +30,14 @@ public sealed class SiloLayout
         return format == SiloStorageFormat.Simple ? Simple : Archive;
     }
 
-    /// <summary>The bracket-quoted, qualified physical name of logical table <paramref name="table" /> in <paramref name="alias" />.</summary>
-    /// <param name="simpleSchema">Simple layout only: the connection schema the single file is attached as (default <c>main</c>).</param>
+    /// <summary>
+    ///     The bracket-quoted, qualified physical name of logical table <paramref name="table" /> in
+    ///     <paramref name="alias" />.
+    /// </summary>
+    /// <param name="simpleSchema">
+    ///     Simple layout only: the connection schema the single file is attached as (default
+    ///     <c>main</c>).
+    /// </param>
     public string Table(string alias, string table, string? simpleSchema = null)
     {
         if (Format == SiloStorageFormat.Archive) return $"[{alias}].[{table}]";
@@ -43,7 +46,10 @@ public sealed class SiloLayout
         return alias == EntitySchema.MainAlias ? $"[{schema}].[{table}]" : $"[{schema}].[{alias}_{table}]";
     }
 
-    /// <summary>The key of a World recovered from a simple-format table name (<c>w_&lt;key&gt;_World</c>), or null if it isn't one.</summary>
+    /// <summary>
+    ///     The key of a World recovered from a simple-format table name (<c>w_&lt;key&gt;_World</c>), or null if it isn't
+    ///     one.
+    /// </summary>
     public static string? WorldKeyFromTable(string tableName)
     {
         const string prefix = "w_";
@@ -52,6 +58,11 @@ public sealed class SiloLayout
         if (!tableName.StartsWith(prefix, StringComparison.Ordinal) || !tableName.EndsWith(suffix, StringComparison.Ordinal)) return null;
 
         return tableName[prefix.Length..^suffix.Length];
+    }
+
+    private SiloLayout(SiloStorageFormat format)
+    {
+        Format = format;
     }
 }
 
@@ -86,9 +97,9 @@ public static class SiloProbe
     {
         try
         {
-            if (!System.IO.File.Exists(path)) return new SiloProbeResult(SiloStorageFormat.Simple, false, false);
+            if (!File.Exists(path)) return new SiloProbeResult(SiloStorageFormat.Simple, false, false);
 
-            using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            using var fs   = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
             var       head = new byte[100];
             int       n    = fs.Read(head, 0, head.Length);
 
@@ -110,14 +121,17 @@ public static class SiloProbe
         }
         catch (Exception ex)
         {
-            Serilog.Log.Warning(ex, "Could not probe '{Path}'; treating it as a normal Silo", path);
+            Log.Warning(ex, "Could not probe '{Path}'; treating it as a normal Silo", path);
         }
 
         // Unknown or unreadable: let the normal open path report the real problem.
-        return new SiloProbeResult(SiloStorageFormat.Simple, false, System.IO.File.Exists(path));
+        return new SiloProbeResult(SiloStorageFormat.Simple, false, File.Exists(path));
     }
 
-    /// <summary>Stamps (<paramref name="solo" /> true/false) the Solo bit and application id on an open simple-format connection.</summary>
+    /// <summary>
+    ///     Stamps (<paramref name="solo" /> true/false) the Solo bit and application id on an open simple-format
+    ///     connection.
+    /// </summary>
     public static void WriteSoloFlag(SqliteConnection conn, bool solo)
     {
         long userVersion;
@@ -170,23 +184,27 @@ public sealed record DiskState(string Hash, long Length, long LastWriteTicksUtc)
         {
             var before = new FileInfo(source);
             using (var src = new FileStream(source, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
-            using (var dst = new FileStream(destination, FileMode.Create, FileAccess.Write, FileShare.None))
-            using (var sha = IncrementalHash.CreateHash(HashAlgorithmName.SHA256))
             {
-                var buffer = new byte[81920];
-                int read;
-                while ((read = src.Read(buffer, 0, buffer.Length)) > 0)
+                using (var dst = new FileStream(destination, FileMode.Create, FileAccess.Write, FileShare.None))
                 {
-                    sha.AppendData(buffer, 0, read);
-                    dst.Write(buffer, 0, read);
+                    using (var sha = IncrementalHash.CreateHash(HashAlgorithmName.SHA256))
+                    {
+                        var buffer = new byte[81920];
+                        int read;
+                        while ((read = src.Read(buffer, 0, buffer.Length)) > 0)
+                        {
+                            sha.AppendData(buffer, 0, read);
+                            dst.Write(buffer, 0, read);
+                        }
+
+                        dst.Flush(true);
+                        var after = new FileInfo(source);
+                        if ((after.Length != before.Length || after.LastWriteTimeUtc != before.LastWriteTimeUtc) && attempt < 3)
+                            continue; // changed while copying: go again
+
+                        return new DiskState(Convert.ToHexString(sha.GetHashAndReset()), after.Length, after.LastWriteTimeUtc.Ticks);
+                    }
                 }
-
-                dst.Flush(true);
-                var after = new FileInfo(source);
-                if ((after.Length != before.Length || after.LastWriteTimeUtc != before.LastWriteTimeUtc) && attempt < 3)
-                    continue; // changed while copying: go again
-
-                return new DiskState(Convert.ToHexString(sha.GetHashAndReset()), after.Length, after.LastWriteTimeUtc.Ticks);
             }
         }
     }

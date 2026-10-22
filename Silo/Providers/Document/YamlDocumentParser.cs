@@ -1,3 +1,4 @@
+using Silo.Providers.Data;
 using YamlDotNet.Core;
 using YamlDotNet.Core.Events;
 
@@ -61,7 +62,7 @@ internal sealed class YamlDocumentParser
 
             var root = ReadNode();
             if (header.Count > 0)
-                root.LeadingComments = [..header, ..root.LeadingComments];
+                root.LeadingComments = [.. header, .. root.LeadingComments];
 
             CollectComments(); // trailing comments before '...'/the next '---' -- dropped, same as above.
             Expect<DocumentEnd>();

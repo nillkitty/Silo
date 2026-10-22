@@ -1,7 +1,12 @@
-﻿namespace Silo.DbModel.Sqlite;
+﻿using Silo.Providers.Data;
+
+namespace Silo.DbModel.Sqlite;
 
 /// <summary>How the Explorer tree was left (<see cref="INodeStateStore" />) in the SQLite provider.</summary>
-/// <remarks>Like the window layout, none of this raises <c>Changed</c>: expanding a node does not make the Silo "modified".</remarks>
+/// <remarks>
+///     Like the window layout, none of this raises <c>Changed</c>: expanding a node does not make the Silo
+///     "modified".
+/// </remarks>
 public sealed partial class SqliteDatabaseProvider : INodeStateStore
 {
     private const string NodeTable = "[main].[Node]";
@@ -24,8 +29,8 @@ public sealed partial class SqliteDatabaseProvider : INodeStateStore
         _gate.Wait();
         try
         {
-            long? uid = CurrentUserId();
-            using var tx = _conn.BeginTransaction();
+            long?     uid = CurrentUserId();
+            using var tx  = _conn.BeginTransaction();
             try
             {
                 NodeStateRows.Save(_conn, tx, NodeTable, uid, states);

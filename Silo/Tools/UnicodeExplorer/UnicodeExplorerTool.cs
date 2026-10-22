@@ -20,4 +20,18 @@ public sealed class UnicodeExplorerTool : ToolBase
 
     /// <inheritdoc />
     protected override UIElement OnBuildContent() => new UnicodeExplorerView();
+
+    private UnicodeExplorerView View => (UnicodeExplorerView)BuildPaneContent();
+
+    /// <inheritdoc />
+    internal override IReadOnlyList<string> ExtraPaneKeys => [UnicodeExplorerView.CollectionPaneKey];
+
+    /// <inheritdoc />
+    internal override UIElement? TakeExtraPaneContent(string key) => key == UnicodeExplorerView.CollectionPaneKey ? View.TakeCollectionForPane() : null;
+
+    /// <inheritdoc />
+    internal override void AdoptExtraPane(string key, AvalonDock.Layout.LayoutAnchorable? pane)
+    {
+        if (key == UnicodeExplorerView.CollectionPaneKey) View.AdoptCollectionPane(pane);
+    }
 }

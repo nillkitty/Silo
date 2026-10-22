@@ -1,4 +1,4 @@
-﻿namespace Silo.Contracts.Providers.Document;
+﻿namespace Silo.Providers.Document;
 
 /// <summary>
 ///     Provides name and namespace for documents.

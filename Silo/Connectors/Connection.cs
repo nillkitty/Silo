@@ -2,6 +2,7 @@
 using Silo.ViewModel;
 using Telefrag.DI;
 
+
 namespace Silo.Connectors;
 
 public abstract class ConnectionBase<TModel> : ModelBase<TModel>, IConnection

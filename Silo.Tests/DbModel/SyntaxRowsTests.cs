@@ -1,8 +1,7 @@
-using System.Linq;
 using Microsoft.Data.Sqlite;
-using Silo.Contracts.Providers.Data;
 using Silo.DbModel.Meta;
 using Silo.DbModel.Sqlite;
+using Silo.Providers.Data;
 using Silo.Providers.Definitions;
 
 namespace Silo.Tests.DbModel;
@@ -22,7 +21,10 @@ public class SyntaxRowsTests
     }
 
     [TearDown]
-    public void TearDown() => _conn.Dispose();
+    public void TearDown()
+    {
+        _conn.Dispose();
+    }
 
     private void Exec(string sql)
     {
@@ -38,19 +40,26 @@ public class SyntaxRowsTests
         return (long)cmd.ExecuteScalar()!;
     }
 
-    private SyntaxRecord Save(SyntaxRecord s) => SyntaxRows.Save(_conn, null, Table, s);
+    private SyntaxRecord Save(SyntaxRecord s)
+    {
+        return SyntaxRows.Save(_conn, null, Table, s);
+    }
 
-    private List<SyntaxRecord> All() => SyntaxRows.GetAll(_conn, null, Table);
+    private List<SyntaxRecord> All()
+    {
+        return SyntaxRows.GetAll(_conn, null, Table);
+    }
 
     [Test]
     public void The_predefined_syntaxes_are_added_once_and_come_back_in_name_order()
     {
         Assert.That(SyntaxRows.InsertMissing(_conn, null, Table, SyntaxSeeds.Defaults), Is.EqualTo(19));
         Assert.That(SyntaxRows.InsertMissing(_conn, null, Table, SyntaxSeeds.Defaults), Is.EqualTo(0));
-        Assert.That(Count(), Is.EqualTo(19));
+        Assert.That(Count(),                                                            Is.EqualTo(19));
 
         var all = All();
-        Assert.That(all.Select(s => s.Name), Is.EqualTo(SyntaxSeeds.Defaults.Select(s => s.Name).OrderBy(n => n, StringComparer.OrdinalIgnoreCase)));
+        Assert.That(all.Select(s => s.Name),
+                    Is.EqualTo(SyntaxSeeds.Defaults.Select(s => s.Name).OrderBy(n => n, StringComparer.OrdinalIgnoreCase)));
         Assert.That(all.All(s => s.IsSeeded && s.Kind == SyntaxKind.Parser && s.Id > 0), Is.True);
     }
 
@@ -65,10 +74,11 @@ public class SyntaxRowsTests
         SyntaxRows.Save(_conn, null, Table, tsv with { Name = "Tabs", Alias = "tsv" }); // renamed, but the alias still holds the old name
         Assert.That(Count(), Is.EqualTo(18));
 
-        Assert.That(SyntaxRows.InsertMissing(_conn, null, Table, SyntaxSeeds.Defaults), Is.EqualTo(1)); // Guid is back; Tsv is not, its name is the alias of Tabs
-        Assert.That(SyntaxRows.Find(_conn, null, Table, "Guid"), Is.Not.Null);
+        Assert.That(SyntaxRows.InsertMissing(_conn, null, Table, SyntaxSeeds.Defaults),
+                    Is.EqualTo(1)); // Guid is back; Tsv is not, its name is the alias of Tabs
+        Assert.That(SyntaxRows.Find(_conn, null, Table, "Guid"),      Is.Not.Null);
         Assert.That(SyntaxRows.Find(_conn, null, Table, "Tsv")!.Name, Is.EqualTo("Tabs"));
-        Assert.That(Count(), Is.EqualTo(19));
+        Assert.That(Count(),                                          Is.EqualTo(19));
     }
 
     [Test]
@@ -77,25 +87,26 @@ public class SyntaxRowsTests
         SyntaxRows.InsertMissing(_conn, null, Table, SyntaxSeeds.Defaults);
 
         Assert.That(SyntaxRows.Find(_conn, null, Table, "jobject")!.Name, Is.EqualTo("JObject"));
-        Assert.That(SyntaxRows.Find(_conn, null, Table, "JOBJ")!.Name, Is.EqualTo("JObject"));
-        Assert.That(SyntaxRows.Find(_conn, null, Table, "nothing"), Is.Null);
-        Assert.That(SyntaxRows.Get(_conn, null, Table, 9999), Is.Null);
+        Assert.That(SyntaxRows.Find(_conn, null, Table, "JOBJ")!.Name,    Is.EqualTo("JObject"));
+        Assert.That(SyntaxRows.Find(_conn, null, Table, "nothing"),       Is.Null);
+        Assert.That(SyntaxRows.Get(_conn, null, Table, 9999),             Is.Null);
     }
 
     [Test]
     public void A_custom_syntax_round_trips_every_field()
     {
-        var saved = Save(new SyntaxRecord(0, " Phone ", " ph ", "A phone number", SyntaxKind.Pattern, "ignored", @"\d{3}-\d{4}", "555-1234"));
+        var saved =
+            Save(new SyntaxRecord(0, " Phone ", " ph ", "A phone number", SyntaxKind.Pattern, "ignored", @"\d{3}-\d{4}", "555-1234"));
 
-        Assert.That(saved.Id, Is.GreaterThan(0));
-        Assert.That(saved.Name, Is.EqualTo("Phone"));
-        Assert.That(saved.Alias, Is.EqualTo("ph"));
+        Assert.That(saved.Id,          Is.GreaterThan(0));
+        Assert.That(saved.Name,        Is.EqualTo("Phone"));
+        Assert.That(saved.Alias,       Is.EqualTo("ph"));
         Assert.That(saved.Description, Is.EqualTo("A phone number"));
-        Assert.That(saved.Kind, Is.EqualTo(SyntaxKind.Pattern));
-        Assert.That(saved.Parser, Is.Null);          // a pattern syntax keeps no parser key
-        Assert.That(saved.Pattern, Is.EqualTo(@"\d{3}-\d{4}"));
-        Assert.That(saved.Example, Is.EqualTo("555-1234"));
-        Assert.That(saved.IsSeeded, Is.False);
+        Assert.That(saved.Kind,        Is.EqualTo(SyntaxKind.Pattern));
+        Assert.That(saved.Parser,      Is.Null); // a pattern syntax keeps no parser key
+        Assert.That(saved.Pattern,     Is.EqualTo(@"\d{3}-\d{4}"));
+        Assert.That(saved.Example,     Is.EqualTo("555-1234"));
+        Assert.That(saved.IsSeeded,    Is.False);
     }
 
     [Test]
@@ -104,10 +115,10 @@ public class SyntaxRowsTests
         var saved = Save(SyntaxRecord.ForParser("When", "timestamp", "w"));
         var again = Save(saved with { Description = "when it happened", Parser = "duration", Example = "PT5M" });
 
-        Assert.That(again.Id, Is.EqualTo(saved.Id));
+        Assert.That(again.Id,          Is.EqualTo(saved.Id));
         Assert.That(again.Description, Is.EqualTo("when it happened"));
-        Assert.That(again.Parser, Is.EqualTo("duration"));
-        Assert.That(Count(), Is.EqualTo(1));
+        Assert.That(again.Parser,      Is.EqualTo("duration"));
+        Assert.That(Count(),           Is.EqualTo(1));
     }
 
     [Test]
@@ -117,7 +128,7 @@ public class SyntaxRowsTests
         var timestamp = SyntaxRows.Find(_conn, null, Table, "Timestamp")!;
 
         var edited = Save(timestamp with { Description = "mine now" });
-        Assert.That(edited.IsSeeded, Is.True);
+        Assert.That(edited.IsSeeded,    Is.True);
         Assert.That(edited.Description, Is.EqualTo("mine now"));
     }
 
@@ -128,7 +139,7 @@ public class SyntaxRowsTests
 
         Assert.Throws<DefinitionException>(() => Save(SyntaxRecord.ForParser("TAKEN", "guid")));
         Assert.Throws<DefinitionException>(() => Save(SyntaxRecord.ForParser("Fresh", "guid", "TK")));
-        Assert.Throws<DefinitionException>(() => Save(SyntaxRecord.ForParser("tk", "guid")));
+        Assert.Throws<DefinitionException>(() => Save(SyntaxRecord.ForParser("tk",    "guid")));
         Assert.Throws<DefinitionException>(() => Save(SyntaxRecord.ForParser("Fresh", "nosuchparser")));
         Assert.Throws<DefinitionException>(() => Save(SyntaxRecord.ForPattern("Fresh", "(unclosed")));
         Assert.Throws<DefinitionException>(() => Save(SyntaxRecord.ForPattern("Fresh", "a+", example: "bbb")));
@@ -143,7 +154,7 @@ public class SyntaxRowsTests
 
         var ex = Assert.Throws<DefinitionException>(() => Save(saved));
         Assert.That(ex!.Message.Contains("no longer exists"), Is.True);
-        Assert.That(Count(), Is.EqualTo(0));
+        Assert.That(Count(),                                  Is.EqualTo(0));
     }
 
     [Test]

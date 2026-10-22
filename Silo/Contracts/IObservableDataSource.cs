@@ -1,4 +1,5 @@
 using System.Runtime.CompilerServices;
+using Silo.Providers.Data.Source;
 
 namespace Silo.Contracts;
 
@@ -15,7 +16,8 @@ namespace Silo.Contracts;
 ///         <see cref="DataChangeKind.Changed" />), so the consumer decides what a batch is worth.
 ///     </para>
 ///     <para>
-///         Delivery is at-least-once and resumable. Each batch can carry a <see cref="DataChangeBatch.Cursor" />, an opaque
+///         Delivery is at-least-once and resumable. Each batch can carry a <see cref="DataChangeBatch.Cursor" />, an
+///         opaque
 ///         bookmark meaning "everything up to here has been reported". A consumer that has finished a batch stores its
 ///         cursor and, after a restart, watches again with <see cref="WatchStart.Cursor" />; this is the source side of a
 ///         delta import. A source that cannot honour the cursor (it is too old, or the source keeps no history) says so
@@ -30,7 +32,10 @@ namespace Silo.Contracts;
 /// </remarks>
 public interface IObservableDataSource : IDataSource
 {
-    /// <summary>The kinds of change this source can report (a polling source that cannot see renames omits <see cref="DataChangeKind.Renamed" />).</summary>
+    /// <summary>
+    ///     The kinds of change this source can report (a polling source that cannot see renames omits
+    ///     <see cref="DataChangeKind.Renamed" />).
+    /// </summary>
     DataChangeKind ObservableChanges { get; }
 
     /// <summary>How the source observes itself; see <see cref="ObservationFlags" />.</summary>
@@ -45,7 +50,10 @@ public interface IObservableDataSource : IDataSource
     IAsyncEnumerable<DataChangeBatch> WatchAsync(WatchOptions? options = null, CancellationToken cancel = default);
 }
 
-/// <summary>What happened to an item of an <see cref="IObservableDataSource" />. Combined, the values describe which kinds a source reports or a watcher wants.</summary>
+/// <summary>
+///     What happened to an item of an <see cref="IObservableDataSource" />. Combined, the values describe which kinds
+///     a source reports or a watcher wants.
+/// </summary>
 [Flags]
 public enum DataChangeKind
 {
@@ -78,7 +86,10 @@ public enum ObservationFlags
 {
     None = 0,
 
-    /// <summary>The source is told of changes (file system events, a subscription). Without it the source polls, at <see cref="WatchOptions.PollInterval" />.</summary>
+    /// <summary>
+    ///     The source is told of changes (file system events, a subscription). Without it the source polls, at
+    ///     <see cref="WatchOptions.PollInterval" />.
+    /// </summary>
     Push = 1,
 
     /// <summary>The source honours <see cref="WatchStart.Cursor" />, so a watch can resume where an earlier one stopped.</summary>
@@ -90,7 +101,10 @@ public enum ObservationFlags
     /// <summary>Changes are reported in the order they happened; otherwise only the order within a batch is arbitrary.</summary>
     Ordered = 8,
 
-    /// <summary>A <see cref="DataChangeKind.Changed" /> lists the fields that changed (see <see cref="DataChange.ChangedFields" />).</summary>
+    /// <summary>
+    ///     A <see cref="DataChangeKind.Changed" /> lists the fields that changed (see
+    ///     <see cref="DataChange.ChangedFields" />).
+    /// </summary>
     FieldLevel = 16
 }
 
@@ -100,18 +114,24 @@ public enum WatchStart
     /// <summary>Only changes after the watch started. The default: "tell me about new items".</summary>
     Now,
 
-    /// <summary>First report everything already there as <see cref="DataChangeKind.Added" /> (in batches marked <see cref="DataChangeBatch.IsSnapshot" />), then carry on live.</summary>
+    /// <summary>
+    ///     First report everything already there as <see cref="DataChangeKind.Added" /> (in batches marked
+    ///     <see cref="DataChangeBatch.IsSnapshot" />), then carry on live.
+    /// </summary>
     Snapshot,
 
     /// <summary>Report what happened after <see cref="WatchOptions.Cursor" />, then carry on live.</summary>
     Cursor
 }
 
-/// <summary>What a watch should report and how. Every property is optional; a source uses its own defaults for what is not set.</summary>
+/// <summary>
+///     What a watch should report and how. Every property is optional; a source uses its own defaults for what is not
+///     set.
+/// </summary>
 public sealed record WatchOptions
 {
-    /// <summary>Where to begin.</summary>
-    public WatchStart Start { get; init; } = WatchStart.Now;
+    /// <summary>How long to gather changes before reporting them, so a burst becomes one batch.</summary>
+    public TimeSpan? CoalesceWindow { get; init; }
 
     /// <summary>The bookmark to resume from; required with <see cref="WatchStart.Cursor" />.</summary>
     public string? Cursor { get; init; }
@@ -119,41 +139,51 @@ public sealed record WatchOptions
     /// <summary>The kinds of change to report. <see cref="DataChangeKind.Reset" /> is always reported.</summary>
     public DataChangeKind Kinds { get; init; } = DataChangeKind.All;
 
-    /// <summary>How often a polling source (one without <see cref="ObservationFlags.Push" />) looks. Ignored by sources that are told.</summary>
-    public TimeSpan? PollInterval { get; init; }
-
-    /// <summary>How long to gather changes before reporting them, so a burst becomes one batch.</summary>
-    public TimeSpan? CoalesceWindow { get; init; }
-
     /// <summary>The most changes in one batch; a larger burst is split.</summary>
     public int? MaxBatchSize { get; init; }
+
+    /// <summary>
+    ///     How often a polling source (one without <see cref="ObservationFlags.Push" />) looks. Ignored by sources that
+    ///     are told.
+    /// </summary>
+    public TimeSpan? PollInterval { get; init; }
+
+    /// <summary>Where to begin.</summary>
+    public WatchStart Start { get; init; } = WatchStart.Now;
 }
 
 /// <summary>One thing that happened to one item.</summary>
 /// <param name="Kind">What happened; always a single kind, never a combination.</param>
-/// <param name="Key">The item's key; for <see cref="DataChangeKind.Renamed" />, the new key; empty for <see cref="DataChangeKind.Reset" />.</param>
+/// <param name="Key">
+///     The item's key; for <see cref="DataChangeKind.Renamed" />, the new key; empty for
+///     <see cref="DataChangeKind.Reset" />.
+/// </param>
 /// <param name="Item">
 ///     The item as it is now, in whatever form the source's items take (a file entry, a row, a feed entry, or an
 ///     <c>IValue</c> when the source can say more); for <see cref="DataChangeKind.Removed" />, the last known item, or
 ///     null if the source no longer has it. Null when the source reports only that something happened.
 /// </param>
 /// <param name="PreviousKey">For <see cref="DataChangeKind.Renamed" />, the key the item had before.</param>
-/// <param name="ChangedFields">For <see cref="DataChangeKind.Changed" /> from a source with <see cref="ObservationFlags.FieldLevel" />, the names of the fields that changed.</param>
+/// <param name="ChangedFields">
+///     For <see cref="DataChangeKind.Changed" /> from a source with
+///     <see cref="ObservationFlags.FieldLevel" />, the names of the fields that changed.
+/// </param>
 /// <param name="Time">When it happened, in UTC, if the source knows (not when it was noticed).</param>
 public sealed record DataChange(
-    DataChangeKind                Kind,
-    string                        Key,
-    object?                       Item          = null,
-    string?                       PreviousKey   = null,
-    IReadOnlyCollection<string>?  ChangedFields = null,
-    DateTime?                     Time          = null)
+    DataChangeKind               Kind,
+    string                       Key,
+    object?                      Item          = null,
+    string?                      PreviousKey   = null,
+    IReadOnlyCollection<string>? ChangedFields = null,
+    DateTime?                    Time          = null)
 {
     public static DataChange Added(string key, object? item = null, DateTime? time = null)
     {
         return new DataChange(DataChangeKind.Added, key, item, Time: time);
     }
 
-    public static DataChange Changed(string key, object? item = null, IReadOnlyCollection<string>? changedFields = null, DateTime? time = null)
+    public static DataChange Changed(string    key, object? item = null, IReadOnlyCollection<string>? changedFields = null,
+                                     DateTime? time = null)
     {
         return new DataChange(DataChangeKind.Changed, key, item, ChangedFields: changedFields, Time: time);
     }
@@ -180,8 +210,14 @@ public sealed record DataChange(
 ///     <see cref="Cursor" /> as the point to resume from.
 /// </summary>
 /// <param name="Changes">The changes, in the order the source reports them.</param>
-/// <param name="Cursor">The bookmark that means "everything up to and including this batch has been reported"; null if the source cannot resume.</param>
-/// <param name="IsSnapshot">True for the batches that report what was already there when a <see cref="WatchStart.Snapshot" /> watch began.</param>
+/// <param name="Cursor">
+///     The bookmark that means "everything up to and including this batch has been reported"; null if the
+///     source cannot resume.
+/// </param>
+/// <param name="IsSnapshot">
+///     True for the batches that report what was already there when a
+///     <see cref="WatchStart.Snapshot" /> watch began.
+/// </param>
 public sealed record DataChangeBatch(IReadOnlyList<DataChange> Changes, string? Cursor = null, bool IsSnapshot = false)
 {
     /// <summary>When the batch was put together, in UTC.</summary>
@@ -197,11 +233,11 @@ public static class ObservableDataSourceExtensions
     }
 
     /// <summary>Turns a sequence of batches into a sequence of the changes in them, for a consumer that does not checkpoint.</summary>
-    public static async IAsyncEnumerable<DataChange> Flatten(this IAsyncEnumerable<DataChangeBatch> batches,
-                                                             [EnumeratorCancellation] CancellationToken cancel = default)
+    public static async IAsyncEnumerable<DataChange> Flatten(this                     IAsyncEnumerable<DataChangeBatch> batches,
+                                                             [EnumeratorCancellation] CancellationToken                 cancel = default)
     {
         await foreach (var batch in batches.WithCancellation(cancel).ConfigureAwait(false))
-        foreach (var change in batch.Changes)
-            yield return change;
+            foreach (var change in batch.Changes)
+                yield return change;
     }
 }

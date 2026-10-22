@@ -122,6 +122,30 @@ public sealed class ExplorerNode : INotifyPropertyChanged, IOverridableNode, ICo
     /// </summary>
     public Func<Task>? LoadChildren { get; init; }
 
+    /// <summary>
+    ///     Reads the node's children again (Refresh, F5), for a node whose children are read on demand: what was read is forgotten and
+    ///     the node reads its contents anew (the nodes below it, when expanded, are read again as they open). Null for any other node.
+    /// </summary>
+    public Func<Task>? Reload { get; init; }
+
+    /// <summary>Rebuilds the whole tree from the Silo, keeping what is expanded and selected. Set by the tree.</summary>
+    public Action? RebuildTree { get; set; }
+
+    /// <summary>
+    ///     The node Refresh acts on: this one when it reads its children on demand (<see cref="Reload" />), else the node above it when
+    ///     that does (the list this node is in is read again), else none (Refresh then rebuilds the tree).
+    /// </summary>
+    public ExplorerNode? RefreshTarget => Reload is not null ? this : Parent?.Reload is not null ? Parent : null;
+
+    /// <summary>Refresh (F5): reads <see cref="RefreshTarget" />'s children again, or rebuilds the tree when there is no such node.</summary>
+    public async Task RefreshAsync()
+    {
+        if (RefreshTarget is { Reload: { } reload })
+            await reload();
+        else
+            RebuildTree?.Invoke();
+    }
+
     public bool IsExpanded
     {
         get => _isExpanded;

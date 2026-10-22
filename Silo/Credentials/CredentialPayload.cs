@@ -1,32 +1,39 @@
-﻿using System.Text;
-using System.Text.Json;
+﻿using System.Text.Json;
 using System.Text.Json.Serialization;
-using Silo.Contracts.Providers.Crypto;
 using Silo.Model;
+using Silo.Providers.Crypto;
 
 namespace Silo.Credentials;
 
 /// <summary>
-///     What goes inside the sealed bytes of a credential: everything but its name. JSON, so a later version can add fields without
+///     What goes inside the sealed bytes of a credential: everything but its name. JSON, so a later version can add fields
+///     without
 ///     breaking old rows.
 /// </summary>
 public sealed class CredentialPayload
 {
-    /// <summary>The context the payload is sealed under (see <see cref="Silo.Contracts.Providers.Crypto.ISiloEncryption.Encrypt" />).</summary>
+    /// <summary>The context the payload is sealed under (see <see cref="ISiloEncryption.Encrypt" />).</summary>
     public const string Context = "credential";
 
-    [JsonPropertyName("v")]        public int     Version  { get; set; } = 1;
+    [JsonPropertyName("domain")]   public string? Domain   { get; set; }
+    [JsonPropertyName("notes")]    public string? Notes    { get; set; }
+    [JsonPropertyName("password")] public string? Password { get; set; }
 
-    /// <summary>The realm by name (stable if the enum is reordered); null in a credential saved before realms existed, which is read as <see cref="AuthRealm.Conventional" />.</summary>
+    /// <summary>
+    ///     The realm by name (stable if the enum is reordered); null in a credential saved before realms existed, which
+    ///     is read as <see cref="AuthRealm.Conventional" />.
+    /// </summary>
     [JsonPropertyName("realm")]
     public string? Realm { get; set; }
 
-    [JsonPropertyName("user")]     public string? Username { get; set; }
-    [JsonPropertyName("domain")]   public string? Domain   { get; set; }
-    [JsonPropertyName("password")] public string? Password { get; set; }
-    [JsonPropertyName("notes")]    public string? Notes    { get; set; }
+    [JsonPropertyName("user")] public string? Username { get; set; }
 
-    /// <summary>The realm the payload names; <see cref="AuthRealm.Conventional" /> when it names none (it was saved before realms) or one this version does not know.</summary>
+    [JsonPropertyName("v")] public int Version { get; set; } = 1;
+
+    /// <summary>
+    ///     The realm the payload names; <see cref="AuthRealm.Conventional" /> when it names none (it was saved before
+    ///     realms) or one this version does not know.
+    /// </summary>
     public AuthRealm ReadRealm()
     {
         return Enum.TryParse<AuthRealm>(Realm, true, out var realm) && Enum.IsDefined(realm) ? realm : AuthRealm.Conventional;

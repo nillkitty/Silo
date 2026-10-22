@@ -10,7 +10,7 @@ namespace Silo;
 ///     the app starts, before a Silo is open.
 /// </summary>
 [Singleton(typeof(IConnector))]
-public class LocalConnection : VirtualRoot
+public class LocalConnection : VirtualRoot<LocalNode>
 {
     public LocalConnection() : base(false)
     {

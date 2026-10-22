@@ -50,7 +50,8 @@
             <Setter Property="Command" Value="{Binding}" />
         </Style>
     </Menu.Resources>
-    <MenuItem Header="_File" DataContext="{Binding App}">
+
+    <MenuItem Header="_File" Name="FileMenu" DataContext="{Binding App}">
         <MenuItem Header="_New Silo" InputGestureText="Ctrl+N" Command="{Binding NewSiloCommand}" />
         <MenuItem Header="_Open Silo" InputGestureText="Ctrl+O" Command="{Binding OpenSiloCommand}" />
         <MenuItem Header="Open from _URL..." InputGestureText="Ctrl+Shift+O" Command="{Binding OpenSiloFromUrlCommand}" />
@@ -71,7 +72,8 @@
         <Separator />
         <MenuItem Header="E_xit" InputGestureText="Alt+F4" Command="{Binding ExitCommand}" />
     </MenuItem>
-    <MenuItem Header="_Silo"
+
+    <MenuItem Header="_Silo" Name="SiloMenu"
                    IsEnabled="{Binding ., Converter={StaticResource ObjectExistsToBool}}"
                    DataContext="{Binding App.ActiveSilo}">
         <MenuItem Header="_New Connection"
@@ -200,9 +202,12 @@
     </MenuItem>
     <!--
         The commands of the node selected in the Explorer (filled in each time the menu opens, NodeMenu_SubmenuOpened); the
-        same list is in the Explorer's right-click menu and on the toolbar. Disabled while the selected node offers none.
+        same list is in the Explorer's right-click menu and on the toolbar.
     -->
-    <MenuItem x:Name="NodeMenu" Header="_Node" IsEnabled="False" SubmenuOpened="NodeMenu_SubmenuOpened" />
+    <MenuItem x:Name="NodeMenu" Header="_Node" SubmenuOpened="NodeMenu_SubmenuOpened">
+        <!-- an empty menu item cannot open, so SubmenuOpened would never come: this stand-in is replaced each time the menu opens -->
+        <MenuItem Header="(select a node in the Explorer)" IsEnabled="False" />
+    </MenuItem>
     <!--
         One entry per Lab the container knows (Labs/LabHost.cs), filled each time the menu opens
         (AnalysisMenu_SubmenuOpened): a Lab that is added shows up here without a change to this file. An empty menu item
@@ -211,7 +216,7 @@
     <MenuItem x:Name="AnalysisMenu" Header="_Analysis" SubmenuOpened="AnalysisMenu_SubmenuOpened">
         <MenuItem Header="(no labs)" IsEnabled="False" />
     </MenuItem>
-    <MenuItem Header="_Tools"
+    <MenuItem Header="_Tools" Name="ToolsMenu"
                    DataContext="{Binding App.Tools}">
         <MenuItem Header="Manage Tools..."
                        Visibility="{Binding HasToolsAuthoring, Converter={StaticResource BoolToVisibility}}" />
@@ -221,7 +226,7 @@
         <!-- One MenuItem per ITool, appended here and kept in sync with Tools -->
         <l:MenuGroup ItemsSource="{Binding Tools}" ItemContainerStyle="{StaticResource ToolMenuItemStyle}" />
     </MenuItem>
-    <MenuItem Header="_Help">
+    <MenuItem Header="_Help" Name="HelpMenu">
         <MenuItem Header="_About Silo..."
                        Command="{Binding App.About}"/>
     </MenuItem>

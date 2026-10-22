@@ -1,4 +1,4 @@
-﻿namespace Silo.Shell;
+﻿namespace Silo.Providers.Shell;
 
 /// <summary>
 ///     Pairs a shell configuration element with an Action indicating

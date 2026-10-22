@@ -1,6 +1,7 @@
 ﻿using System.Windows.Input;
 using Silo.Commanding;
 using Silo.Explorer;
+using Silo.Ui;
 
 namespace Silo.Toolbar;
 
@@ -81,6 +82,50 @@ public static class NodeCommandHub
     /// </summary>
     public static IReadOnlyList<NodeCommand> CommandsFor(ExplorerNode? node)
     {
+        // the general Refresh is added by ContextCommands.For itself (see AddRefresh), so the right-click menu has it too
         return node is null ? [] : ContextCommands.For(node);
+    }
+
+    /// <summary>
+    ///     Adds the general Refresh (F5) to the commands of an Explorer node -- unless one of them already uses F5 (a folder's
+    ///     "Refresh Contents" keeps its own). Called by <see cref="ContextCommands.For" /> whenever the target is an Explorer node.
+    /// </summary>
+    internal static void AddRefresh(List<NodeCommand> commands, ExplorerNode node)
+    {
+        if (commands.Any(c => c.SelfAndDescendants().Any(d => string.Equals(d.Gesture?.Trim(), RefreshGesture, StringComparison.OrdinalIgnoreCase))))
+            return;
+
+        commands.Add(RefreshCommand(node));
+    }
+
+    /// <summary>The shortcut of Refresh.</summary>
+    public const string RefreshGesture = "F5";
+
+    /// <summary>
+    ///     Refresh for any node: reads its children again when they are read on demand (so a node that was expanded, loaded and is now out of
+    ///     date -- or one that came back empty or failed -- can be expanded afresh), else rebuilds the Explorer's tree.
+    /// </summary>
+    public static NodeCommand RefreshCommand(ExplorerNode node)
+    {
+        string what = node.Reload is not null ? "Reads this node's children again" : node.RefreshTarget is not null ? "Reads the list this node is in again" : "Rebuilds the Explorer tree";
+        var provided = ProvidedCommand.From("node.refresh", "_Refresh", () => _ = RunRefreshAsync(node), "Refresh", null, what,
+                                            NodeCommand.ActionsGroup, CommandPlacement.Menu) with { Gesture = RefreshGesture };
+        return NodeCommand.From(provided);
+    }
+
+    private static async Task RunRefreshAsync(ExplorerNode node)
+    {
+        var target = node.RefreshTarget ?? node;
+        using var op = AppStatus.Instance.Begin($"Refreshing {target.Display}");
+        try
+        {
+            await node.RefreshAsync();
+            op.Done($"Refreshed {target.Display}");
+        }
+        catch (Exception ex)
+        {
+            Serilog.Log.Warning(ex, "Refreshing the Explorer node {Key} failed", node.Key);
+            op.Fail($"Refreshing {target.Display} failed: {ex.Message}");
+        }
     }
 }

@@ -1,13 +1,26 @@
 ﻿using System.Reflection;
+using Silo.Extensions;
+using Silo.Model;
+using Silo.Providers.Reflection;
 using Silo.ViewModel;
 using Telefrag.DI;
 
 namespace Silo.Connectors.Virtual;
 
+public class DiModel(IConnection Connection) : ModelBase(Connection)
+{
+}
+
 [Transient(typeof(IConnector))]
-public class RuntimeConnector : VirtualRoot, INodeProvider<AppDomain>
+public class RuntimeConnector : VirtualRoot<AppDomain, ConnectionlessState>, INodeProvider<AppDomain>
 {
     public AppDomain? Data => AppDomain.CurrentDomain;
+
+    protected override IConnection OnCreateConnection(ConnectionRequest crq)
+    {
+        // never called because the connector is the connection
+        return this;
+    }
 
     public RuntimeConnector()
     {
@@ -36,19 +49,33 @@ public record AppDomainNode : SiloNode
 {
     public AppDomain Domain { get; init; }
 
+    [Toggle("Show Stock Assemblies", "showStockAssemblies", "Whether to show Microsoft and CLR/Core types", false)]
+    public bool? ShowStockAssemblies { get; set; } = false;
+
     public AppDomainNode(AppDomain Domain) : base(Domain)
     {
+        var isThis = Domain == AppDomain.CurrentDomain;
         this.Domain = Domain.Required();
         Icon        = RuntimeIcons.AppDomain;
         TypeName    = "App Domain";
-        Text        = Domain.FriendlyName;
+        Text        = isThis ? $"Current App Domain ({Domain.FriendlyName})" : $"App Domain: {Domain.FriendlyName}";
 
-        // the assemblies loaded now, by name; read off the UI thread
-        ChildLoader = cancel => Task.Run(() => (IReadOnlyList<SiloNode>)Domain.GetAssemblies()
-                                                                              .OrderBy(a => a.GetName().Name,
-                                                                                       StringComparer.OrdinalIgnoreCase)
-                                                                              .Select(a => (SiloNode)new AssemblyNode(a))
-                                                                              .ToList(), cancel);
+
+        var reflection = App.Resolve<IReflectionProvider>();
+
+
+        // The assemblies loaded when the node is opened, less those the reflection filters ignore (IReflectionProvider.Filter is true for
+        // an assembly to leave out), by name. Read off the UI thread; the reflection provider is asked for here and not in this
+        // constructor, which runs while the container is still creating connectors.
+        ChildLoader = cancel => Task.Run(() =>
+                                         {
+                                             return (IReadOnlyList<SiloNode>)Domain.GetAssemblies()
+                                                                                   .Where(a => reflection is null || !reflection.Filter(a))
+                                                                                   .OrderBy(a => a.GetName().Name,
+                                                                                            StringComparer.OrdinalIgnoreCase)
+                                                                                   .Select(a => (SiloNode)new AssemblyNode(a))
+                                                                                   .ToList();
+                                         }, cancel);
     }
 }
 
@@ -120,7 +147,7 @@ public record TypeNode : SiloNode
     public TypeNode(Type Type) : base(Type)
     {
         this.Type = Type.Required();
-        Text      = Type.FullName ?? Type.Name;
+        Text      = Type.ShortDisplayName();
         TypeName  = "Type";
         Icon      = RuntimeIcons.Type;
     }
@@ -141,5 +168,21 @@ public record AssemblyResourceNode : SiloNode
         Text      = name.Required();
         TypeName  = "Manifest Resource";
         Icon      = RuntimeIcons.Resource;
+    }
+}
+
+//[Singleton(typeof(IAssemblyFilter))]
+public class StockAssemblyFilter : IAssemblyFilter
+{
+    public bool IsIgnore(object o)
+    {
+        if (o is Assembly a)
+        {
+            var an = a.FullName?.ToLower() ?? "?";
+
+            return an.StartsWith("microsoft.") || an.StartsWith("system.");
+        }
+
+        return false;
     }
 }

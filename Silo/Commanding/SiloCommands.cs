@@ -1,10 +1,9 @@
-﻿using System.Windows;
-using System.Windows.Controls;
-using Microsoft.Win32;
+﻿using Microsoft.Win32;
 using Serilog;
-using Silo.Contracts.Providers.Data;
 using Silo.Extensions;
 using Silo.Model;
+using Silo.Providers.Data;
+using Silo.Tabular;
 using Silo.Ui;
 
 namespace Silo.Commanding;
@@ -15,16 +14,14 @@ public abstract record SiloCommand(
     Checker.CheckerFunc? Checker     = null,
     string?              ToolTip     = null,
     object?              Icon        = null,
-    bool                 IsCheckable = false)
-    : AppCommand(Header, null, null, ToolTip, Icon, IsCheckable, Checker)
+    bool                 IsCheckable = false) : AppCommand(Header, null, null, ToolTip, Icon, IsCheckable, Checker)
 {
 }
 
 /// <summary>
 ///     File -> Close Silo: closes the Silo, first offering to save unsaved changes (cancelling the offer keeps it open).
 /// </summary>
-public record CloseSiloCommand(OpenSilo Silo)
-    : SiloCommand("_Close Silo", Enabler.IsSiloLoaded)
+public record CloseSiloCommand(OpenSilo Silo) : SiloCommand("_Close Silo", Enabler.IsSiloLoaded)
 {
     protected override async Task OnExecute(object? parameter)
     {
@@ -45,15 +42,14 @@ public record NewTableCommand(OpenSilo Silo)
     protected override Task OnExecute(object? parameter)
     {
         if (parameter as string == "clipboard")
-            Tabular.TablePaste.AsNewTable(Silo.Required());
+            TablePaste.AsNewTable(Silo.Required());
         else
-            Tabular.TableEditors.CreateAndOpen(Silo.Required(), Tabular.TableTemplate.FromKey(parameter as string));
+            TableEditors.CreateAndOpen(Silo.Required(), TableTemplate.FromKey(parameter as string));
         return Task.CompletedTask;
     }
 }
 
-public record SaveSiloCommand(OpenSilo Silo)
-    : SiloCommand("_Save", Enabler.IsSiloLoaded)
+public record SaveSiloCommand(OpenSilo Silo) : SiloCommand("_Save", Enabler.IsSiloLoaded)
 {
     protected override async Task OnExecute(object? parameter)
     {
@@ -83,8 +79,7 @@ public record SaveSiloCommand(OpenSilo Silo)
     }
 }
 
-public record ExportLogsCommand(OpenSilo Silo)
-    : SiloCommand("Export _Logs...", Enabler.IsSiloLoaded)
+public record ExportLogsCommand(OpenSilo Silo) : SiloCommand("Export _Logs...", Enabler.IsSiloLoaded)
 {
     protected override Task OnExecute(object? parameter)
     {
@@ -92,14 +87,12 @@ public record ExportLogsCommand(OpenSilo Silo)
     }
 }
 
-public record ImportDataCommand(OpenSilo Silo)
-    : SiloCommand("_Import Data...", Enabler.IsSiloLoaded)
+public record ImportDataCommand(OpenSilo Silo) : SiloCommand("_Import Data...", Enabler.IsSiloLoaded)
 {
-    protected async override Task OnExecute(object? parameter)
+    protected override async Task OnExecute(object? parameter)
     {
-        var s = Silo.Required()!;
-        var inFiles = Dialogs.OpenFiles("Select file(s) to import...",
-                                        "All files (*.*)|*.*");
+        var s       = Silo.Required()!;
+        var inFiles = Dialogs.OpenFiles("Select file(s) to import...", "All files (*.*)|*.*");
         if (inFiles is null or [])
         {
             s.Debug("User cancelled out of Import File(s) dialog");
@@ -110,20 +103,16 @@ public record ImportDataCommand(OpenSilo Silo)
         int ok  = 0;
         int ng  = 0;
         foreach (var fn in inFiles)
-        {
             if (await s.Data.ImportFileAsync(fn))
                 ok++;
             else
                 ng++;
-        }
 
-        s.Debug("Finished processing {num} input files.  Success={ok} Failed={ng}",
-                num, ok, ng);
+        s.Debug("Finished processing {num} input files.  Success={ok} Failed={ng}", num, ok, ng);
     }
 }
 
-public record ExportAllCommand(OpenSilo Silo)
-    : SiloCommand("Export _All...", Enabler.IsSiloLoaded)
+public record ExportAllCommand(OpenSilo Silo) : SiloCommand("Export _All...", Enabler.IsSiloLoaded)
 {
     protected override Task OnExecute(object? parameter)
     {
@@ -131,8 +120,7 @@ public record ExportAllCommand(OpenSilo Silo)
     }
 }
 
-public record ExportStateCommand(OpenSilo Silo)
-    : SiloCommand("Export S_tate...", Enabler.IsSiloLoaded)
+public record ExportStateCommand(OpenSilo Silo) : SiloCommand("Export S_tate...", Enabler.IsSiloLoaded)
 {
     protected override Task OnExecute(object? parameter)
     {
@@ -140,8 +128,8 @@ public record ExportStateCommand(OpenSilo Silo)
     }
 }
 
-public record ConvertToArchiveCommand(OpenSilo Silo)
-    : SiloCommand("Convert to _Archive Format", Enabler.IsSiloLoaded, ToolTip: "Splits a single-file Silo into the multi-file archive format")
+public record ConvertToArchiveCommand(OpenSilo Silo) : SiloCommand("Convert to _Archive Format", Enabler.IsSiloLoaded,
+                                                                   ToolTip: "Splits a single-file Silo into the multi-file archive format")
 {
     protected override async Task OnExecute(object? parameter)
     {
@@ -163,24 +151,26 @@ public record ConvertToArchiveCommand(OpenSilo Silo)
         catch (Exception ex)
         {
             Log.Error(ex, "Converting {path} failed", s.FilePath);
-            MessageBox.Show($"The Silo could not be converted:\n{ex.Message}", AppIdentity.AppName, MessageBoxButton.OK, MessageBoxImage.Error);
+            MessageBox.Show($"The Silo could not be converted:\n{ex.Message}", AppIdentity.AppName, MessageBoxButton.OK,
+                            MessageBoxImage.Error);
         }
     }
 }
 
-public record SaveSiloAsCommand(OpenSilo Silo)
-    : SiloCommand("Save _As...", Enabler.IsSiloLoaded)
+public record SaveSiloAsCommand(OpenSilo Silo) : SiloCommand("Save _As...", Enabler.IsSiloLoaded)
 {
-    public Task ExecuteAsync(object? parameter) => OnExecute(parameter);
+    public Task ExecuteAsync(object? parameter)
+    {
+        return OnExecute(parameter);
+    }
 
     protected override async Task OnExecute(object? parameter)
     {
         var s = Silo.Required()!;
-        var sfd = new SaveFileDialog()
+        var sfd = new SaveFileDialog
                   {
-                      DefaultExt = ".silo",
-                      Filter =
-                          "Silo files (*.silo)|*.silo",
+                      DefaultExt  = ".silo",
+                      Filter      = "Silo files (*.silo)|*.silo",
                       FilterIndex = 1,
                       Title       = "Save Silo file as...",
                       FileName    = s.FilePath

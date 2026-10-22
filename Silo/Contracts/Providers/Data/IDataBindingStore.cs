@@ -1,6 +1,6 @@
 using DataBinding = Silo.DbModel.Global.DataBinding;
 
-namespace Silo.Contracts.Providers.Data;
+namespace Silo.Providers.Data;
 
 /// <summary>
 ///     Reads and writes the <see cref="DataBinding" />s stored inside a Silo document.

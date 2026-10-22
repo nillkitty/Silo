@@ -1,23 +1,31 @@
 using System.Globalization;
-using Silo.Contracts.Providers.Data;
+using System.Numerics;
 using Silo.DbModel.Meta;
+using Silo.Providers.Data;
 
 namespace Silo.Providers.Definitions;
 
 /// <summary>
-///     The rules a defined enum has to follow, kept apart from storage and screens so they can be tested alone: what a value
-///     of each <see cref="EnumType" /> looks like (and its one canonical text form), and what makes a whole enum acceptable.
+///     The rules a defined enum has to follow, kept apart from storage and screens so they can be tested alone: what a
+///     value
+///     of each <see cref="EnumType" /> looks like (and its one canonical text form), and what makes a whole enum
+///     acceptable.
 /// </summary>
 public static class EnumRules
 {
     public const int MaxLabelLength = 128;
 
     /// <summary>Whether an enum of this type can be a bitmask (<see cref="EnumFlags.Bitmask" />): only integral and byte ones.</summary>
-    public static bool SupportsBitmask(EnumType type) => type is EnumType.Integral or EnumType.Byte;
+    public static bool SupportsBitmask(EnumType type)
+    {
+        return type is EnumType.Integral or EnumType.Byte;
+    }
 
     /// <summary>
-    ///     Reads a value of the given type and gives it in its canonical text form: decimal for integers (hex like <c>0x1F</c> is accepted),
-    ///     the shortest round-trip form for floats, <c>true</c>/<c>false</c> for bools (also yes/no, on/off, 1/0), the <c>D</c> form for guids,
+    ///     Reads a value of the given type and gives it in its canonical text form: decimal for integers (hex like <c>0x1F</c>
+    ///     is accepted),
+    ///     the shortest round-trip form for floats, <c>true</c>/<c>false</c> for bools (also yes/no, on/off, 1/0), the
+    ///     <c>D</c> form for guids,
     ///     the text as written for strings.
     /// </summary>
     public static bool TryNormalizeValue(EnumType type, string? text, out string canonical, out string? error)
@@ -116,33 +124,45 @@ public static class EnumRules
     {
         if (t.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
         {
-            bool ok = ulong.TryParse(t.AsSpan(2), NumberStyles.AllowHexSpecifier, CultureInfo.InvariantCulture, out ulong hex) && hex <= long.MaxValue;
-            value   = ok ? (long)hex : 0;
+            bool ok = ulong.TryParse(t.AsSpan(2), NumberStyles.AllowHexSpecifier, CultureInfo.InvariantCulture, out ulong hex) &&
+                      hex <= long.MaxValue;
+            value = ok ? (long)hex : 0;
             return ok;
         }
 
         return long.TryParse(t, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out value);
     }
 
-    /// <summary>The enum with names trimmed, empty descriptions dropped and every value that can be read given in its canonical form (ones that cannot are left as typed, for <see cref="Validate" /> to report).</summary>
+    /// <summary>
+    ///     The enum with names trimmed, empty descriptions dropped and every value that can be read given in its
+    ///     canonical form (ones that cannot are left as typed, for <see cref="Validate" /> to report).
+    /// </summary>
     public static EnumRecord Normalize(EnumRecord definition)
     {
         var values = new List<EnumValueRecord>(definition.Values.Count);
         foreach (var v in definition.Values)
         {
-            string? value = v.Value;
+            string? value                                                                     = v.Value;
             if (TryNormalizeValue(definition.Type, value, out string canonical, out _)) value = canonical;
             values.Add(v with { Name = (v.Name ?? string.Empty).Trim(), Value = value, Description = Blank(v.Description) });
         }
 
-        return definition with { Name = (definition.Name ?? string.Empty).Trim(), Description = Blank(definition.Description), Values = values };
+        return definition with
+               {
+                   Name = (definition.Name ?? string.Empty).Trim(), Description = Blank(definition.Description), Values = values
+               };
     }
 
-    private static string? Blank(string? text) => string.IsNullOrWhiteSpace(text) ? null : text.Trim();
+    private static string? Blank(string? text)
+    {
+        return string.IsNullOrWhiteSpace(text) ? null : text.Trim();
+    }
 
     /// <summary>
-    ///     Everything wrong with the enum, one message each (empty when it is acceptable). <paramref name="otherEnumNames" /> are the names of the
-    ///     other enums in the Silo, which this one's name must not repeat (case is ignored). Expects a normalized enum; normalizes it itself otherwise.
+    ///     Everything wrong with the enum, one message each (empty when it is acceptable). <paramref name="otherEnumNames" />
+    ///     are the names of the
+    ///     other enums in the Silo, which this one's name must not repeat (case is ignored). Expects a normalized enum;
+    ///     normalizes it itself otherwise.
     /// </summary>
     public static IReadOnlyList<string> Validate(EnumRecord definition, IEnumerable<string> otherEnumNames)
     {
@@ -150,11 +170,13 @@ public static class EnumRules
         var problems = new List<string>();
 
         if (DefinitionNames.Check("The name", e.Name) is { } nameProblem) problems.Add(nameProblem);
-        else if (otherEnumNames.Any(n => string.Equals(n, e.Name, StringComparison.OrdinalIgnoreCase))) problems.Add($"There is already an enum named \"{e.Name}\".");
+        else if (otherEnumNames.Any(n => string.Equals(n, e.Name, StringComparison.OrdinalIgnoreCase)))
+            problems.Add($"There is already an enum named \"{e.Name}\".");
 
         if (!Enum.IsDefined(e.Type)) problems.Add("The enum's type is not one of the known types.");
 
-        if ((e.Flags & EnumFlags.Bitmask) != 0 && !SupportsBitmask(e.Type)) problems.Add($"A {e.Type} enum cannot be a bitmask; only Integral and Byte ones can.");
+        if ((e.Flags & EnumFlags.Bitmask) != 0 && !SupportsBitmask(e.Type))
+            problems.Add($"A {e.Type} enum cannot be a bitmask; only Integral and Byte ones can.");
 
         if (e.Type == EnumType.Bool && e.Values.Count > 2) problems.Add("A Bool enum can have at most two values (true and false).");
 
@@ -168,28 +190,26 @@ public static class EnumRules
             }
             else
             {
-                if (v.Name.Length > MaxLabelLength) problems.Add($"The name \"{Shorten(v.Name)}\" is longer than {MaxLabelLength} characters.");
+                if (v.Name.Length > MaxLabelLength)
+                    problems.Add($"The name \"{Shorten(v.Name)}\" is longer than {MaxLabelLength} characters.");
                 if (!names.Add(v.Name)) problems.Add($"The name \"{v.Name}\" is used by more than one value.");
             }
 
             if (!TryNormalizeValue(e.Type, v.Value, out string canonical, out string? error))
-            {
                 problems.Add($"Value \"{(v.Name.Length > 0 ? v.Name : "(unnamed)")}\": {error}");
-            }
             else if (values.TryGetValue(canonical, out string? first))
-            {
                 problems.Add($"The value {canonical} is given to both \"{first}\" and \"{v.Name}\".");
-            }
             else
-            {
                 values[canonical] = v.Name;
-            }
         }
 
         return problems;
     }
 
-    private static string Shorten(string text) => text.Length <= 24 ? text : text[..24] + "...";
+    private static string Shorten(string text)
+    {
+        return text.Length <= 24 ? text : text[..24] + "...";
+    }
 
     /// <summary>Throws a <see cref="DefinitionException" /> listing every problem, if there are any.</summary>
     public static EnumRecord Require(EnumRecord definition, IEnumerable<string> otherEnumNames)
@@ -216,27 +236,41 @@ public static class EnumRules
     }
 
     /// <summary>
-    ///     A value to offer for the next one added to the enum, in canonical form: one more than the largest for numbers (the next bit, for a bitmask),
-    ///     false then true for bools, a fresh guid for guids; empty when there is nothing sensible (strings, or the numbers have run out).
+    ///     A value to offer for the next one added to the enum, in canonical form: one more than the largest for numbers (the
+    ///     next bit, for a bitmask),
+    ///     false then true for bools, a fresh guid for guids; empty when there is nothing sensible (strings, or the numbers
+    ///     have run out).
     /// </summary>
     public static string SuggestNextValue(EnumRecord definition)
     {
-        var taken = definition.Values.Select(v => TryNormalizeValue(definition.Type, v.Value, out string c, out _) ? c : null).Where(c => c is not null).Select(c => c!).ToList();
+        var taken = definition.Values.Select(v => TryNormalizeValue(definition.Type, v.Value, out string c, out _) ? c : null)
+                              .Where(c => c is not null)
+                              .Select(c => c!)
+                              .ToList();
         bool bitmask = (definition.Flags & EnumFlags.Bitmask) != 0;
 
         switch (definition.Type)
         {
             case EnumType.Integral or EnumType.Byte:
             {
-                var numbers = taken.Select(c => ulong.Parse(c, CultureInfo.InvariantCulture)).ToList();
-                ulong max   = numbers.Count == 0 ? 0 : numbers.Max();
+                var   numbers = taken.Select(c => ulong.Parse(c, CultureInfo.InvariantCulture)).ToList();
+                ulong max     = numbers.Count == 0 ? 0 : numbers.Max();
                 ulong next;
-                if (numbers.Count == 0) next = bitmask ? 1UL : 0UL;
-                else if (!bitmask) next = max == ulong.MaxValue ? max : max + 1;
-                else if (max == 0) next = 1;
+                if (numbers.Count == 0)
+                {
+                    next = bitmask ? 1UL : 0UL;
+                }
+                else if (!bitmask)
+                {
+                    next = max == ulong.MaxValue ? max : max + 1;
+                }
+                else if (max == 0)
+                {
+                    next = 1;
+                }
                 else
                 {
-                    int top = System.Numerics.BitOperations.Log2(max);
+                    int top = BitOperations.Log2(max);
                     next = top >= 63 ? 0 : 1UL << (top + 1);
                 }
 
@@ -271,13 +305,17 @@ public static class EnumRules
         }
     }
 
-    /// <summary>The label a value goes by in the enum, or null when none of its known values matches (the value is compared in its canonical form).</summary>
+    /// <summary>
+    ///     The label a value goes by in the enum, or null when none of its known values matches (the value is compared in
+    ///     its canonical form).
+    /// </summary>
     public static string? LabelFor(EnumRecord definition, string? value)
     {
         if (!TryNormalizeValue(definition.Type, value, out string wanted, out _)) return null;
 
         foreach (var v in definition.Values)
-            if (TryNormalizeValue(definition.Type, v.Value, out string have, out _) && string.Equals(have, wanted, StringComparison.Ordinal))
+            if (TryNormalizeValue(definition.Type, v.Value, out string have, out _) &&
+                string.Equals(have, wanted, StringComparison.Ordinal))
                 return v.Name;
 
         return null;
@@ -289,7 +327,8 @@ public static class EnumRules
         if (label is null) return null;
 
         foreach (var v in definition.Values)
-            if (string.Equals(v.Name, label.Trim(), StringComparison.OrdinalIgnoreCase) && TryNormalizeValue(definition.Type, v.Value, out string canonical, out _))
+            if (string.Equals(v.Name, label.Trim(), StringComparison.OrdinalIgnoreCase) &&
+                TryNormalizeValue(definition.Type, v.Value, out string canonical, out _))
                 return canonical;
 
         return null;

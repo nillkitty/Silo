@@ -1,11 +1,14 @@
 using Silo.DbModel.Meta;
 
-namespace Silo.Contracts.Providers.Data;
+namespace Silo.Providers.Data;
 
 /// <summary>One known value of a defined enum.</summary>
 /// <param name="Id">The row's id; 0 for a value not saved yet.</param>
 /// <param name="Name">The label shown for the value. Unique within its enum, without regard to case.</param>
-/// <param name="Value">The value in its canonical text form for the enum's <see cref="EnumType" /> (see <c>EnumRules.Normalize</c>).</param>
+/// <param name="Value">
+///     The value in its canonical text form for the enum's <see cref="EnumType" /> (see
+///     <c>EnumRules.Normalize</c>).
+/// </param>
 /// <param name="Description">What the value means, when the label does not say it.</param>
 public sealed record EnumValueRecord(int Id, string Name, string? Value, string? Description = null);
 
@@ -16,16 +19,27 @@ public sealed record EnumValueRecord(int Id, string Name, string? Value, string?
 /// <param name="Type">What the values are (integers, strings, guids ...).</param>
 /// <param name="Flags">Whether the enum is a bitmask, accepts only known values, or always shows numbers.</param>
 /// <param name="Values">The known values, in the order they were added.</param>
-public sealed record EnumRecord(int Id, string Name, string? Description, EnumType Type, EnumFlags Flags, IReadOnlyList<EnumValueRecord> Values)
+public sealed record EnumRecord(
+    int                            Id,
+    string                         Name,
+    string?                        Description,
+    EnumType                       Type,
+    EnumFlags                      Flags,
+    IReadOnlyList<EnumValueRecord> Values)
 {
     /// <summary>A new, empty enum of the given type.</summary>
-    public static EnumRecord Create(string name, EnumType type = EnumType.Integral, EnumFlags flags = EnumFlags.None) => new(0, name, null, type, flags, []);
+    public static EnumRecord Create(string name, EnumType type = EnumType.Integral, EnumFlags flags = EnumFlags.None)
+    {
+        return new EnumRecord(0, name, null, type, flags, []);
+    }
 }
 
 /// <summary>
-///     The enums defined in a Silo (the <c>MvEnum</c> and <c>MvEnumValue</c> tables), listed, created, changed and deleted.
+///     The enums defined in a Silo (the <c>MvEnum</c> and <c>MvEnumValue</c> tables), listed, created, changed and
+///     deleted.
 ///     Saving checks the definition (<c>EnumRules</c>) and throws <see cref="DefinitionException" /> when it is not
-///     acceptable. Every successful change is a real change to the Silo: it raises <see cref="IDatabaseChanges.Changed" />.
+///     acceptable. Every successful change is a real change to the Silo: it raises <see cref="IDatabaseChanges.Changed" />
+///     .
 /// </summary>
 public interface IEnumStore
 {
@@ -48,7 +62,10 @@ public interface IEnumStore
     /// <summary>Deletes the enum and all its values. Returns whether there was one.</summary>
     bool DeleteEnum(int id);
 
-    /// <summary>Adds the value (<see cref="EnumValueRecord.Id" /> 0) to the enum, or changes the one it names. Returns what was stored.</summary>
+    /// <summary>
+    ///     Adds the value (<see cref="EnumValueRecord.Id" /> 0) to the enum, or changes the one it names. Returns what
+    ///     was stored.
+    /// </summary>
     EnumValueRecord SaveEnumValue(int enumId, EnumValueRecord value);
 
     /// <summary>Deletes one value of an enum. Returns whether there was one.</summary>

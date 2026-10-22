@@ -1,7 +1,9 @@
 using System.IO;
 using System.Xml.Linq;
 using Newtonsoft.Json.Linq;
+using Silo.Providers.Data.Source;
 using Silo.Providers.Document;
+using Silo.Providers.Reflection;
 using Telefrag.DI;
 
 namespace Silo.Providers.Format;
@@ -10,10 +12,10 @@ namespace Silo.Providers.Format;
 public class XmlFormat : IFileFormat, IDocumentProvider<XDocument>
 {
     public LoadOptions Options     { get; set; } = LoadOptions.SetBaseUri | LoadOptions.SetLineInfo;
-    public string      ContentType { get; }      = "application/xml";
     public string      DisplayName { get; }      = "XML File";
 
     public string FileExtension { get; } = "xml";
+    public string ContentType   { get; } = "application/xml";
 
     public IEnumerable<DataVerb> GetSupportedVerbs()
     {

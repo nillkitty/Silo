@@ -1,6 +1,6 @@
 ﻿using Telefrag.DI;
 
-namespace Silo.Contracts.Providers;
+namespace Silo.Providers;
 
 public interface IContainerHost
 {

@@ -1,7 +1,7 @@
 using Microsoft.Data.Sqlite;
-using Silo.Contracts.Providers.Data;
 using Silo.DbModel.Global;
 using Silo.DbModel.Sqlite;
+using Silo.Providers.Data;
 
 namespace Silo.Tests.DbModel;
 

@@ -7,7 +7,8 @@ using System.Numerics;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Text.RegularExpressions;
-using Silo.Contracts.Providers.Data.Shape;
+using Silo.Providers.Data.Shape;
+using Silo.Providers.Reflection;
 using Telefrag.DI;
 
 namespace Silo.Providers;
@@ -39,8 +40,10 @@ public class RuntimeTypeProvider : ITypeProvider
 
     /// <summary>
     ///     Finds the runtime type a <c>clr:</c> reference names, in the loaded assemblies. The name may be fully qualified
-    ///     (<c>System.Collections.Generic.List</c>), partly (<c>Collections.Generic.List</c> from inside <c>clr-namespace:System</c>)
-    ///     or just a name (<c>String</c> from inside <c>clr-namespace:System</c>); see <see cref="IReflectionProvider.FindType" />.
+    ///     (<c>System.Collections.Generic.List</c>), partly (<c>Collections.Generic.List</c> from inside
+    ///     <c>clr-namespace:System</c>)
+    ///     or just a name (<c>String</c> from inside <c>clr-namespace:System</c>); see
+    ///     <see cref="IReflectionProvider.FindType" />.
     /// </summary>
     public IType? Lookup(TypeLookup lookup)
     {
@@ -75,16 +78,17 @@ public class RuntimeType(Type clrType) : IType
         typeof(Complex)
     ];
 
+    public Uri Namespace => RuntimeTypeProvider.GetUriForClrNamespace(Value.Namespace ?? "");
+    public Uri Uri       => UriFromType(Value);
+
     public Type Value { get; } = clrType.Required();
 
     public DataKind Kind => GetKind(Value);
 
 
-    public string    Name      => Value.Name;
-    public Uri       Namespace => RuntimeTypeProvider.GetUriForClrNamespace(Value.Namespace ?? "");
-    public string    Prefix    => "clr";
-    public DataShape Shape     => GetShape(Value);
-    public Uri       Uri       => UriFromType(Value);
+    public string    Name   => Value.Name;
+    public string    Prefix => "clr";
+    public DataShape Shape  => GetShape(Value);
 
     /// <summary>
     ///     Builds the URI of a runtime type:

@@ -1,4 +1,4 @@
-﻿namespace Silo.Contracts.Providers.Data;
+﻿namespace Silo.Providers.Data;
 
 /// <summary>
 ///     Values indicating to what degree data from connected sources is stored locally.

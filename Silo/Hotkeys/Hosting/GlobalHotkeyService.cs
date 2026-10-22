@@ -6,48 +6,49 @@ using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Threading;
 using Serilog;
-using Silo.Contracts.Core;
-using Silo.Contracts.Providers.Data;
-using Silo.Expressions;
+using Silo.Providers.Data;
 using Silo.Storage;
 
 namespace Silo.Hotkeys;
 
 /// <summary>
-///     Makes the shortcut keys of the active Silo (<see cref="GlobalShortcutPrefs" />) work: the global ones as Windows hot keys, which work
-///     in every application, and the application ones as keys pressed in any of Silo's windows. It also supplies what the action verbs do (type into the
-///     focused window, copy to the clipboard) and is where the rest of the app finds the Silo's stored values (<see cref="Stored.DefaultStore" />).
+///     Makes the shortcut keys of the active Silo (<see cref="GlobalShortcutPrefs" />) work: the global ones as Windows
+///     hot keys, which work
+///     in every application, and the application ones as keys pressed in any of Silo's windows. It also supplies what the
+///     action verbs do (type into the
+///     focused window, copy to the clipboard) and is where the rest of the app finds the Silo's stored values (
+///     <see cref="Stored.DefaultStore" />).
 /// </summary>
 /// <remarks>
-///     Registering a hot key can fail (another program has it); the reason is kept in <see cref="Failures" /> and shown where bindings are managed.
+///     Registering a hot key can fail (another program has it); the reason is kept in <see cref="Failures" /> and shown
+///     where bindings are managed.
 ///     The service reloads when the active Silo changes and when a binding is saved, changed or removed.
 /// </remarks>
 public sealed class GlobalHotkeyService : IDisposable
 {
-    private readonly Dictionary<int, string>           _idToName      = [];
-    private readonly Dictionary<ShortcutKey, string>   _appBindings   = [];
-    private readonly Dictionary<string, string>        _failures      = new(StringComparer.OrdinalIgnoreCase);
-    private readonly object                            _typingLock    = new();
-    private Task                                       _typing        = Task.CompletedTask;
-    private HwndSource?                                _window;
-    private Dispatcher?                                _dispatcher;
-    private bool                                       _started;
-    private bool                                       _reloadQueued;
-    private int                                        _suspended;
-    private bool                                       _classHandlerAdded;
-
-    private GlobalHotkeyService()
-    {
-        // what the verbs do
-        Verbs = new ShortcutVerbs().Add(ShortcutVerbs.Type, TypeText).Add(ShortcutVerbs.Copy, CopyText);
-        Prefs = new GlobalShortcutPrefs(() => Stored.DefaultStore(), Verbs, () => YourConstants.Default.AsScope());
-
-        // where the Silo's stored values are
-        Stored.DefaultStore = static () => App.Instance?.ActiveSilo is { IsClosing: false } silo ? silo.Data as IStoredStore : null;
-    }
+    private readonly Dictionary<ShortcutKey, string> _appBindings = [];
+    private readonly Dictionary<string, string>      _failures    = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<int, string>         _idToName    = [];
+    private readonly object                          _typingLock  = new();
+    private          bool                            _classHandlerAdded;
+    private          Dispatcher?                     _dispatcher;
+    private          bool                            _reloadQueued;
+    private          bool                            _started;
+    private          int                             _suspended;
+    private          Task                            _typing = Task.CompletedTask;
+    private          HwndSource?                     _window;
 
     /// <summary>The service (there is one per application).</summary>
     public static GlobalHotkeyService Current { get; } = new();
+
+    /// <summary>The shortcuts that could not be registered, by name, with the reason.</summary>
+    public IReadOnlyDictionary<string, string> Failures => _failures;
+
+    /// <summary>
+    ///     The last problem typing text into another window (nothing is thrown there: the typing runs behind the key
+    ///     press); null if it went well.
+    /// </summary>
+    public string? LastTypingError { get; private set; }
 
     /// <summary>The shortcut keys of the active Silo.</summary>
     public GlobalShortcutPrefs Prefs { get; }
@@ -55,16 +56,13 @@ public sealed class GlobalHotkeyService : IDisposable
     /// <summary>What the action verbs do.</summary>
     public ShortcutVerbs Verbs { get; }
 
-    /// <summary>The shortcuts that could not be registered, by name, with the reason.</summary>
-    public IReadOnlyDictionary<string, string> Failures => _failures;
-
-    /// <summary>The last problem typing text into another window (nothing is thrown there: the typing runs behind the key press); null if it went well.</summary>
-    public string? LastTypingError { get; private set; }
-
     /// <summary>Raised after the shortcuts were registered again, or a problem came up while one ran.</summary>
     public event EventHandler? StatusChanged;
 
-    /// <summary>Starts watching the Silo and registers the shortcuts. Does nothing when it already started. Call it on the UI thread.</summary>
+    /// <summary>
+    ///     Starts watching the Silo and registers the shortcuts. Does nothing when it already started. Call it on the UI
+    ///     thread.
+    /// </summary>
     public void Start()
     {
         if (_started) return;
@@ -73,7 +71,8 @@ public sealed class GlobalHotkeyService : IDisposable
 
         try
         {
-            var parameters = new HwndSourceParameters("SiloHotkeys") { ParentWindow = new IntPtr(NativeKeyboard.HWND_MESSAGE), WindowStyle = 0 };
+            var parameters = new HwndSourceParameters("SiloHotkeys")
+                             { ParentWindow = new IntPtr(NativeKeyboard.HWND_MESSAGE), WindowStyle = 0 };
             _window = new HwndSource(parameters);
             _window.AddHook(WndProc);
         }
@@ -107,11 +106,9 @@ public sealed class GlobalHotkeyService : IDisposable
         _window = null;
     }
 
-    /// <inheritdoc />
-    public void Dispose() => Stop();
-
     /// <summary>
-    ///     Stops the shortcuts from acting until the returned object is disposed: while a key is being chosen for a new shortcut, pressing the key of
+    ///     Stops the shortcuts from acting until the returned object is disposed: while a key is being chosen for a new
+    ///     shortcut, pressing the key of
     ///     an existing one must reach the box that is choosing, not run that shortcut.
     /// </summary>
     public IDisposable Suspend()
@@ -189,7 +186,9 @@ public sealed class GlobalHotkeyService : IDisposable
                 id++;
                 uint mods = NativeKeyboard.ToHotKeyModifiers(pref.Shortcut.Modifiers) | NativeKeyboard.MOD_NOREPEAT;
                 if (NativeKeyboard.RegisterHotKey(_window.Handle, id, mods, (uint)pref.Shortcut.VirtualKey))
+                {
                     _idToName[id] = pref.Name;
+                }
                 else
                 {
                     int error = Marshal.GetLastWin32Error();
@@ -206,7 +205,8 @@ public sealed class GlobalHotkeyService : IDisposable
     private void UnregisterAll()
     {
         if (_window is not null)
-            foreach (int id in _idToName.Keys) NativeKeyboard.UnregisterHotKey(_window.Handle, id);
+            foreach (int id in _idToName.Keys)
+                NativeKeyboard.UnregisterHotKey(_window.Handle, id);
         _idToName.Clear();
     }
 
@@ -230,7 +230,10 @@ public sealed class GlobalHotkeyService : IDisposable
         }
     }
 
-    private void Report() => StatusChanged?.Invoke(this, EventArgs.Empty);
+    private void Report()
+    {
+        StatusChanged?.Invoke(this, EventArgs.Empty);
+    }
 
     // ---- keys pressed in Silo's own windows ------------------------------------------------------------------------
 
@@ -239,12 +242,13 @@ public sealed class GlobalHotkeyService : IDisposable
         if (_suspended > 0 || _appBindings.Count == 0 || e.Handled) return;
 
         var key = e.Key == Key.System ? e.SystemKey : e.Key;
-        if (key is Key.LeftCtrl or Key.RightCtrl or Key.LeftAlt or Key.RightAlt or Key.LeftShift or Key.RightShift or Key.LWin or Key.RWin or Key.None) return;
+        if (key is Key.LeftCtrl or Key.RightCtrl or Key.LeftAlt or Key.RightAlt or Key.LeftShift or Key.RightShift or Key.LWin or Key.RWin
+                or Key.None) return;
 
-        var mods = ShortcutModifiers.None;
+        var mods                                                   = ShortcutModifiers.None;
         if (Keyboard.Modifiers.HasFlag(ModifierKeys.Control)) mods |= ShortcutModifiers.Control;
-        if (Keyboard.Modifiers.HasFlag(ModifierKeys.Alt)) mods |= ShortcutModifiers.Alt;
-        if (Keyboard.Modifiers.HasFlag(ModifierKeys.Shift)) mods |= ShortcutModifiers.Shift;
+        if (Keyboard.Modifiers.HasFlag(ModifierKeys.Alt)) mods     |= ShortcutModifiers.Alt;
+        if (Keyboard.Modifiers.HasFlag(ModifierKeys.Shift)) mods   |= ShortcutModifiers.Shift;
         if (Keyboard.Modifiers.HasFlag(ModifierKeys.Windows)) mods |= ShortcutModifiers.Windows;
 
         var pressed = new ShortcutKey(mods, KeyInterop.VirtualKeyFromKey(key));
@@ -264,6 +268,7 @@ public sealed class GlobalHotkeyService : IDisposable
     {
         // typing waits for the hot key to be let go of, so it runs behind the key press, one text after the other
         lock (_typingLock)
+        {
             _typing = _typing.ContinueWith(_ =>
                                            {
                                                try
@@ -278,6 +283,7 @@ public sealed class GlobalHotkeyService : IDisposable
                                                    Report();
                                                }
                                            }, TaskScheduler.Default);
+        }
     }
 
     private static void CopyText(string text)
@@ -285,8 +291,7 @@ public sealed class GlobalHotkeyService : IDisposable
         var dispatcher = Application.Current.Dispatcher;
         dispatcher.Invoke(() =>
                           {
-                              for (int attempt = 0; ; attempt++)
-                              {
+                              for (int attempt = 0;; attempt++)
                                   try
                                   {
                                       Clipboard.SetText(text);
@@ -300,8 +305,23 @@ public sealed class GlobalHotkeyService : IDisposable
                                   {
                                       throw new InvalidOperationException("The clipboard is in use by another program.");
                                   }
-                              }
                           });
+    }
+
+    private GlobalHotkeyService()
+    {
+        // what the verbs do
+        Verbs = new ShortcutVerbs().Add(ShortcutVerbs.Type, TypeText).Add(ShortcutVerbs.Copy, CopyText);
+        Prefs = new GlobalShortcutPrefs(() => Stored.DefaultStore(), Verbs, () => YourConstants.Default.AsScope());
+
+        // where the Silo's stored values are
+        Stored.DefaultStore = static () => App.Instance?.ActiveSilo is { IsClosing: false } silo ? silo.Data as IStoredStore : null;
+    }
+
+    /// <inheritdoc />
+    public void Dispose()
+    {
+        Stop();
     }
 
     private sealed class Resume(GlobalHotkeyService owner) : IDisposable

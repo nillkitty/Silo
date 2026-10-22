@@ -1,11 +1,11 @@
-using System.IO;
 using System.Security.Principal;
 using Microsoft.Data.Sqlite;
 using Serilog;
-using Silo.Contracts.Providers.Data;
 using Silo.DbModel.Global;
+using Silo.Providers.Data.Validation;
 using Silo.Settings;
 using Telefrag.DI;
+using DataBinding = Silo.DbModel.Global.DataBinding;
 
 namespace Silo.DbModel.Sqlite;
 
@@ -96,10 +96,10 @@ public class SqliteNewSiloBuilder : INewSiloBuilder
                 {
                     added = i switch
                             {
-                                Diagram d     => x.SaveDiagram(d) is not null,
+                                Diagram d         => x.SaveDiagram(d) is not null,
                                 DiagramTemplate t => x.SaveDiagram(t.ToDiagram()) is not null,
-                                Global.DataBinding b => x.SaveDataBinding(b) is not null,
-                                _             => x.AddItem(i)
+                                DataBinding b     => x.SaveDataBinding(b) is not null,
+                                _                 => x.AddItem(i)
                             };
                 }
                 catch (Exception ex)
@@ -158,7 +158,7 @@ public class SqliteSiloLoader : ISiloLoader
             }
             else
             {
-                var sourceCopy = dir + ".src";
+                var       sourceCopy = dir + ".src";
                 DiskState disk;
                 try
                 {
@@ -167,7 +167,7 @@ public class SqliteSiloLoader : ISiloLoader
                 }
                 finally
                 {
-                    if (System.IO.File.Exists(sourceCopy)) System.IO.File.Delete(sourceCopy);
+                    if (File.Exists(sourceCopy)) File.Delete(sourceCopy);
                 }
 
                 var conn = SqliteConnectionFactory.OpenAndAttachFixed(dir);

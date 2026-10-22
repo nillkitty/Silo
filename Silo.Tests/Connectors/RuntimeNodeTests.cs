@@ -1,4 +1,5 @@
-﻿using System.Reflection;
+﻿using System.IO;
+using System.Reflection;
 using System.Reflection.Emit;
 using System.Text.RegularExpressions;
 using Silo.Connectors.Virtual;
@@ -17,8 +18,8 @@ public class RuntimeNodeTests
         await node.LoadChildrenAsync();
 
         var names = node.Children.OfType<AssemblyNode>().Select(a => a.Assembly.GetName().Name!).ToList();
-        Assert.That(names, Does.Contain(SiloAssembly.GetName().Name));
-        Assert.That(names, Is.EqualTo(names.Order(StringComparer.OrdinalIgnoreCase).ToList()));
+        Assert.That(names,         Does.Contain(SiloAssembly.GetName().Name));
+        Assert.That(names,         Is.EqualTo(names.Order(StringComparer.OrdinalIgnoreCase).ToList()));
         Assert.That(node.Children, Has.All.InstanceOf<AssemblyNode>());
     }
 
@@ -34,7 +35,7 @@ public class RuntimeNodeTests
         Assert.That(types.Select(t => t.Text), Is.EqualTo(types.Select(t => t.Text).Order(StringComparer.Ordinal).ToList()));
 
         int firstResource = node.Children.ToList().FindIndex(c => c is AssemblyResourceNode);
-        Assert.That(firstResource, Is.GreaterThan(0), "the Silo plugin script is embedded");
+        Assert.That(firstResource,                     Is.GreaterThan(0), "the Silo plugin script is embedded");
         Assert.That(node.Children.Skip(firstResource), Has.All.InstanceOf<AssemblyResourceNode>());
     }
 
@@ -46,7 +47,7 @@ public class RuntimeNodeTests
         await node.LoadChildrenAsync();
 
         var resource = node.Children.OfType<AssemblyResourceNode>().SingleOrDefault(r => r.Text == "silo-plugin.js");
-        Assert.That(resource, Is.Not.Null);
+        Assert.That(resource,           Is.Not.Null);
         Assert.That(resource!.TypeName, Is.EqualTo("Manifest Resource"));
         Assert.That(resource.Info,      Is.Not.Null);
     }
@@ -60,9 +61,9 @@ public class RuntimeNodeTests
         var node = new AssemblyNode(emitted);
         await node.LoadChildrenAsync();
 
-        Assert.That(node.LoadError, Is.Null);
+        Assert.That(node.LoadError,                               Is.Null);
         Assert.That(node.Children.OfType<AssemblyResourceNode>(), Is.Empty);
-        Assert.That(AssemblyNode.ResourceNames(emitted), Is.Empty);
+        Assert.That(AssemblyNode.ResourceNames(emitted),          Is.Empty);
     }
 
     [Test]

@@ -1,11 +1,10 @@
-﻿using System.Linq;
+﻿using System.Security.Authentication;
 using System.Text;
 using Silo.Contracts.Core;
-using Silo.Contracts.Providers.Crypto;
-using System.Security.Authentication;
 using Silo.Credentials;
 using Silo.Crypto;
 using Silo.Model;
+using Silo.Providers.Crypto;
 
 namespace Silo.Tests.Security;
 
@@ -17,15 +16,15 @@ public class CredentialModelTests
         var c = new Credential { Name = "Sales server", Username = "sa", Password = "hunter2" };
 
         Assert.That(c.ToString(), Is.EqualTo("Sales server"));
-        Assert.That($"{c}", Does.Not.Contain("hunter2"));
+        Assert.That($"{c}",       Does.Not.Contain("hunter2"));
     }
 
     [Test]
     public void The_account_is_the_user_with_its_domain()
     {
         Assert.That(new Credential { Username = "nill", Domain = "CONTOSO" }.Account, Is.EqualTo("CONTOSO\\nill"));
-        Assert.That(new Credential { Username = "sa" }.Account, Is.EqualTo("sa"));
-        Assert.That(new Credential { Password = "x" }.Account, Is.Null);
+        Assert.That(new Credential { Username = "sa" }.Account,                       Is.EqualTo("sa"));
+        Assert.That(new Credential { Password = "x" }.Account,                        Is.Null);
     }
 
     [Test]
@@ -49,7 +48,10 @@ public class CredentialRulesTests
 {
     private static readonly (int, string)[] Others = [(1, "Sales server"), (2, "Contoso admin")];
 
-    private static Credential Valid(string name = "New one") => new() { Name = name, Username = "u", Password = "p" };
+    private static Credential Valid(string name = "New one")
+    {
+        return new Credential { Name = name, Username = "u", Password = "p" };
+    }
 
     [Test]
     public void A_good_credential_is_accepted()
@@ -83,9 +85,9 @@ public class CredentialRulesTests
     [Test]
     public void A_name_cannot_look_like_a_reserved_row_or_be_very_long()
     {
-        Assert.That(CredentialRules.Check(Valid("$datakey"), Others), Is.Not.Null);
+        Assert.That(CredentialRules.Check(Valid("$datakey"),                                         Others), Is.Not.Null);
         Assert.That(CredentialRules.Check(Valid(new string('x', CredentialRules.MaxNameLength + 1)), Others), Is.Not.Null);
-        Assert.That(CredentialRules.Check(Valid(new string('x', CredentialRules.MaxNameLength)), Others), Is.Null);
+        Assert.That(CredentialRules.Check(Valid(new string('x', CredentialRules.MaxNameLength)),     Others), Is.Null);
     }
 
     [Test]
@@ -100,8 +102,10 @@ public class CredentialRulesTests
     [Test]
     public void A_domain_account_needs_a_user_name_and_password_but_not_the_domain()
     {
-        Assert.That(CredentialRules.Check(new Credential { Name = "x", Realm = AuthRealm.Domain, Username = "u" }, Others), Does.Contain("password"));
-        Assert.That(CredentialRules.Check(new Credential { Name = "x", Realm = AuthRealm.Domain, Username = "u", Password = "p" }, Others), Is.Null);
+        Assert.That(CredentialRules.Check(new Credential { Name = "x", Realm = AuthRealm.Domain, Username = "u" }, Others),
+                    Does.Contain("password"));
+        Assert.That(CredentialRules.Check(new Credential { Name = "x", Realm = AuthRealm.Domain, Username = "u", Password = "p" }, Others),
+                    Is.Null);
     }
 
     [TestCase(AuthRealm.DefaultCredential)]
@@ -112,19 +116,20 @@ public class CredentialRulesTests
         Assert.That(CredentialRules.Check(new Credential { Name = "x", Realm = realm }, Others), Is.Null);
     }
 
-    [TestCase(AuthRealm.Bearer, "token")]
+    [TestCase(AuthRealm.Bearer,      "token")]
     [TestCase(AuthRealm.Certificate, "thumbprint")]
-    [TestCase(AuthRealm.RsaKey, "key")]
+    [TestCase(AuthRealm.RsaKey,      "key")]
     public void A_token_thumbprint_or_key_is_the_only_thing_those_realms_need(AuthRealm realm, string called)
     {
-        Assert.That(CredentialRules.Check(new Credential { Name = "x", Realm = realm }, Others), Does.Contain(called));
+        Assert.That(CredentialRules.Check(new Credential { Name = "x", Realm = realm },                 Others), Does.Contain(called));
         Assert.That(CredentialRules.Check(new Credential { Name = "x", Realm = realm, Password = "s" }, Others), Is.Null);
     }
 
     [Test]
     public void A_realm_that_does_not_exist_is_refused()
     {
-        Assert.That(CredentialRules.Check(new Credential { Name = "x", Realm = (AuthRealm)99, Username = "u", Password = "p" }, Others), Is.Not.Null);
+        Assert.That(CredentialRules.Check(new Credential { Name = "x", Realm = (AuthRealm)99, Username = "u", Password = "p" }, Others),
+                    Is.Not.Null);
     }
 
     [Test]
@@ -132,13 +137,13 @@ public class CredentialRulesTests
     {
         foreach (var realm in Enum.GetValues<AuthRealm>())
         {
-            Assert.That(CredentialRules.Describe(realm), Is.Not.Empty, realm.ToString());
+            Assert.That(CredentialRules.Describe(realm),    Is.Not.Empty, realm.ToString());
             Assert.That(CredentialRules.SecretLabel(realm), Is.Not.Empty, realm.ToString());
         }
 
-        Assert.That(CredentialRules.Uses(AuthRealm.Domain), Is.EqualTo(new RealmFields(true, true, true)));
-        Assert.That(CredentialRules.Uses(AuthRealm.Conventional), Is.EqualTo(new RealmFields(true, false, true)));
-        Assert.That(CredentialRules.Uses(AuthRealm.Anonymous), Is.EqualTo(new RealmFields(false, false, false)));
+        Assert.That(CredentialRules.Uses(AuthRealm.Domain),       Is.EqualTo(new RealmFields(true,  true,  true)));
+        Assert.That(CredentialRules.Uses(AuthRealm.Conventional), Is.EqualTo(new RealmFields(true,  false, true)));
+        Assert.That(CredentialRules.Uses(AuthRealm.Anonymous),    Is.EqualTo(new RealmFields(false, false, false)));
     }
 }
 
@@ -147,7 +152,11 @@ public class CredentialPayloadTests
     [Test]
     public void Everything_but_the_name_round_trips_including_odd_characters()
     {
-        var c = new Credential { Name = "n", Username = "nill@nill.dev", Domain = "CONTOSO", Password = "p\"a\\ss\u00e9 \U0001F511\n", Notes = "line 1\nline 2" };
+        var c = new Credential
+                {
+                    Name  = "n", Username = "nill@nill.dev", Domain = "CONTOSO", Password = "p\"a\\ss\u00e9 \U0001F511\n",
+                    Notes = "line 1\nline 2"
+                };
 
         var back = CredentialPayload.Read(CredentialPayload.Write(c));
 
@@ -162,7 +171,7 @@ public class CredentialPayloadTests
     {
         var bytes = CredentialPayload.Write(new Credential { Realm = AuthRealm.Domain, Username = "u" });
 
-        Assert.That(System.Text.Encoding.UTF8.GetString(bytes), Does.Contain("\"realm\":\"Domain\""));
+        Assert.That(Encoding.UTF8.GetString(bytes),            Does.Contain("\"realm\":\"Domain\""));
         Assert.That(CredentialPayload.Read(bytes).ReadRealm(), Is.EqualTo(AuthRealm.Domain));
     }
 
@@ -188,7 +197,7 @@ public class CredentialPayloadTests
         var back = CredentialPayload.Read(CredentialPayload.Write(new Credential { Username = "u" }));
 
         Assert.That(back.Password, Is.Null);
-        Assert.That(back.Notes, Is.Null);
+        Assert.That(back.Notes,    Is.Null);
     }
 
     [Test]
@@ -209,9 +218,9 @@ public class CredentialPayloadTests
 
 public class CredentialServiceTests
 {
-    private InMemorySecretStore _store = null!;
     private SiloEncryption      _encryption = null!;
-    private CredentialService   _service = null!;
+    private CredentialService   _service    = null!;
+    private InMemorySecretStore _store      = null!;
 
     [SetUp]
     public void SetUp()
@@ -222,10 +231,15 @@ public class CredentialServiceTests
     }
 
     [TearDown]
-    public void TearDown() => _encryption.Dispose();
+    public void TearDown()
+    {
+        _encryption.Dispose();
+    }
 
-    private Credential Save(string name, string user = "u", string? password = "p") =>
-        _service.Save(new Credential { Name = name, Username = user, Password = password });
+    private Credential Save(string name, string user = "u", string? password = "p")
+    {
+        return _service.Save(new Credential { Name = name, Username = user, Password = password });
+    }
 
     [Test]
     public void A_saved_credential_comes_back_with_its_password()
@@ -233,7 +247,7 @@ public class CredentialServiceTests
         var saved = _service.Save(new Credential { Name = "Sales", Username = "sa", Domain = "D", Password = "hunter2", Notes = "n" });
 
         var got = _service.Get(saved.Id)!;
-        Assert.That(saved.Id, Is.Not.Zero);
+        Assert.That(saved.Id,                                                      Is.Not.Zero);
         Assert.That((got.Name, got.Username, got.Domain, got.Password, got.Notes), Is.EqualTo(("Sales", "sa", "D", "hunter2", "n")));
     }
 
@@ -256,8 +270,8 @@ public class CredentialServiceTests
         var row  = _store.GetSecrets(CredentialService.Kind).Single();
         var text = Encoding.UTF8.GetString(row.Data);
         Assert.That(row.Key, Is.EqualTo("Sales"));
-        Assert.That(text, Does.Not.Contain("hunter2"));
-        Assert.That(text, Does.Not.Contain("sa-account"));
+        Assert.That(text,    Does.Not.Contain("hunter2"));
+        Assert.That(text,    Does.Not.Contain("sa-account"));
     }
 
     [Test]
@@ -265,7 +279,7 @@ public class CredentialServiceTests
     {
         Save("Sales");
 
-        Assert.That(_store.GetSecrets(), Has.Count.EqualTo(2)); // the credential and the data key
+        Assert.That(_store.GetSecrets(),                 Has.Count.EqualTo(2)); // the credential and the data key
         Assert.That(_service.List().Select(c => c.Name), Is.EqualTo(new[] { "Sales" }));
     }
 
@@ -277,10 +291,10 @@ public class CredentialServiceTests
 
         var list = _service.List();
 
-        Assert.That(list.Select(c => c.Name), Is.EqualTo(new[] { "A-server", "b-server" }));
-        Assert.That(list[0].Account, Is.EqualTo("D\\alice"));
+        Assert.That(list.Select(c => c.Name),    Is.EqualTo(new[] { "A-server", "b-server" }));
+        Assert.That(list[0].Account,             Is.EqualTo("D\\alice"));
         Assert.That(list.All(c => c.IsReadable), Is.True);
-        Assert.That(list[0].ToString(), Does.Not.Contain("secret"));
+        Assert.That(list[0].ToString(),          Does.Not.Contain("secret"));
     }
 
     [Test]
@@ -293,12 +307,12 @@ public class CredentialServiceTests
 
         var second = _service.Save(edit);
 
-        Assert.That(_service.List(), Has.Count.EqualTo(1));
-        Assert.That(second.Id, Is.EqualTo(first.Id));
-        Assert.That(second.Created, Is.EqualTo(first.Created));
-        Assert.That(second.Modified, Is.GreaterThanOrEqualTo(first.Modified));
+        Assert.That(_service.List(),                  Has.Count.EqualTo(1));
+        Assert.That(second.Id,                        Is.EqualTo(first.Id));
+        Assert.That(second.Created,                   Is.EqualTo(first.Created));
+        Assert.That(second.Modified,                  Is.GreaterThanOrEqualTo(first.Modified));
         Assert.That(_service.Get(first.Id)!.Password, Is.EqualTo("new"));
-        Assert.That(_service.Get(first.Id)!.Name, Is.EqualTo("Sales (new)"));
+        Assert.That(_service.Get(first.Id)!.Name,     Is.EqualTo("Sales (new)"));
     }
 
     [Test]
@@ -322,10 +336,10 @@ public class CredentialServiceTests
     [Test]
     public void Find_looks_a_credential_up_by_name_ignoring_case()
     {
-        Save("Sales", "sa", "p");
+        Save("Sales", "sa");
 
         Assert.That(_service.Find("SALES")!.Username, Is.EqualTo("sa"));
-        Assert.That(_service.Find("nope"), Is.Null);
+        Assert.That(_service.Find("nope"),            Is.Null);
     }
 
     [Test]
@@ -334,7 +348,7 @@ public class CredentialServiceTests
         var saved = Save("Sales");
 
         Assert.That(_service.Delete(saved.Id), Is.True);
-        Assert.That(_service.List(), Is.Empty);
+        Assert.That(_service.List(),           Is.Empty);
         Assert.That(_service.Delete(saved.Id), Is.False);
     }
 
@@ -344,8 +358,8 @@ public class CredentialServiceTests
         Save("Sales");
         int keyId = _store.GetSecrets(SiloEncryption.KeyKind).Single().Id;
 
-        Assert.That(_service.Get(keyId), Is.Null);
-        Assert.That(_service.Delete(keyId), Is.False);
+        Assert.That(_service.Get(keyId),     Is.Null);
+        Assert.That(_service.Delete(keyId),  Is.False);
         Assert.That(_store.GetSecret(keyId), Is.Not.Null);
     }
 
@@ -354,21 +368,22 @@ public class CredentialServiceTests
     {
         Save("Fine");
         _store.SaveSecret(new SecretRecord(0, "Foreign", CredentialService.Kind, string.Empty,
-                                           SecretEnvelope.Seal(SecretEnvelope.NewKey(), 77, [1, 2, 3], CredentialPayload.Context), DateTime.UtcNow, DateTime.UtcNow));
+                                           SecretEnvelope.Seal(SecretEnvelope.NewKey(), 77, [1, 2, 3], CredentialPayload.Context),
+                                           DateTime.UtcNow, DateTime.UtcNow));
 
         var list = _service.List();
 
-        Assert.That(list.Single(c => c.Name == "Fine").IsReadable, Is.True);
+        Assert.That(list.Single(c => c.Name   == "Fine").IsReadable, Is.True);
         var foreign = list.Single(c => c.Name == "Foreign");
         Assert.That(foreign.IsReadable, Is.False);
-        Assert.That(foreign.Account, Is.Null);
+        Assert.That(foreign.Account,    Is.Null);
         Assert.Throws<SecretException>(() => _service.Get(foreign.Id));
     }
 
     [Test]
     public void Changed_is_raised_after_a_save_and_after_a_delete()
     {
-        int raised = 0;
+        int          raised  = 0;
         EventHandler handler = (_, _) => raised++;
         CredentialService.Changed += handler;
         try
@@ -387,9 +402,9 @@ public class CredentialServiceTests
     [Test]
     public void Moving_the_protector_keeps_every_credential_readable()
     {
-        var other = new ScramblingProtector("scramble-b", 0x33);
-        using var enc = new SiloEncryption(_store, [new ScramblingProtector("scramble-a", 0x5A), other], "scramble-a");
-        var service = new CredentialService(_store, enc);
+        var       other   = new ScramblingProtector("scramble-b", 0x33);
+        using var enc     = new SiloEncryption(_store, [new ScramblingProtector("scramble-a", 0x5A), other], "scramble-a");
+        var       service = new CredentialService(_store, enc);
         service.Save(new Credential { Name = "Sales", Username = "u", Password = "p" });
 
         enc.ChangeProvider("scramble-b");
@@ -399,23 +414,8 @@ public class CredentialServiceTests
     }
 }
 
-
 public class CredentialConfigureTests
 {
-    private sealed class Sink : IUserPasswordSink
-    {
-        public int     Calls;
-        public string? User, Password, Domain;
-
-        public void SetUserPassword(string? userName, string? password, string? domain)
-        {
-            Calls++;
-            (User, Password, Domain) = (userName, password, domain);
-        }
-
-        public void ConfigureFrom(ICredential credential) => credential.Configure(this);
-    }
-
     [Test]
     public void A_user_name_and_password_credential_hands_over_both_and_leaves_the_domain_out()
     {
@@ -469,5 +469,22 @@ public class CredentialConfigureTests
     public void An_unknown_realm_is_an_error()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => new Credential { Realm = (AuthRealm)99 }.Configure(new Sink()));
+    }
+
+    private sealed class Sink : IUserPasswordSink
+    {
+        public int     Calls;
+        public string? User, Password, Domain;
+
+        public void SetUserPassword(string? userName, string? password, string? domain)
+        {
+            Calls++;
+            (User, Password, Domain) = (userName, password, domain);
+        }
+
+        public void ConfigureFrom(ICredential credential)
+        {
+            credential.Configure(this);
+        }
     }
 }

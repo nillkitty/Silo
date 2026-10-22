@@ -2,9 +2,9 @@
 using System.Dynamic;
 using Microsoft.Win32;
 using Silo.Connectors.System;
-using Silo.Contracts.Providers.Data.Shape;
 using Silo.Providers;
-using Silo.Shell;
+using Silo.Providers.Data.Shape;
+using Silo.Providers.Shell;
 
 namespace Silo.Tests.Providers;
 
@@ -66,21 +66,21 @@ public class RuntimeTypeTests
 {
     private static readonly Uri Anywhere = new("clr-namespace:System", UriKind.Absolute);
 
-    [TestCase(typeof(int),                      DataShape.Scalar)]
-    [TestCase(typeof(int?),                     DataShape.Scalar)]
-    [TestCase(typeof(string),                   DataShape.Scalar)]
-    [TestCase(typeof(DateTime),                 DataShape.Scalar)]
-    [TestCase(typeof(DayOfWeek),                DataShape.Scalar)]
-    [TestCase(typeof(KeyValuePair<int, int>),   DataShape.Columnar)]
-    [TestCase(typeof((int, string)),            DataShape.Columnar)]
-    [TestCase(typeof(int[]),                    DataShape.Linear)]
-    [TestCase(typeof(List<int>),                DataShape.Linear)]
-    [TestCase(typeof(int[,]),                   DataShape.Tabular)]
-    [TestCase(typeof(DataTable),                DataShape.Tabular)]
-    [TestCase(typeof(DataSet),                  DataShape.Multitabular)]
-    [TestCase(typeof(Dictionary<string, int>),  DataShape.Container)]
-    [TestCase(typeof(ExpandoObject),            DataShape.Dynamic)]
-    [TestCase(typeof(object),                   DataShape.Object)]
+    [TestCase(typeof(int),                     DataShape.Scalar)]
+    [TestCase(typeof(int?),                    DataShape.Scalar)]
+    [TestCase(typeof(string),                  DataShape.Scalar)]
+    [TestCase(typeof(DateTime),                DataShape.Scalar)]
+    [TestCase(typeof(DayOfWeek),               DataShape.Scalar)]
+    [TestCase(typeof(KeyValuePair<int, int>),  DataShape.Columnar)]
+    [TestCase(typeof((int, string)),           DataShape.Columnar)]
+    [TestCase(typeof(int[]),                   DataShape.Linear)]
+    [TestCase(typeof(List<int>),               DataShape.Linear)]
+    [TestCase(typeof(int[,]),                  DataShape.Tabular)]
+    [TestCase(typeof(DataTable),               DataShape.Tabular)]
+    [TestCase(typeof(DataSet),                 DataShape.Multitabular)]
+    [TestCase(typeof(Dictionary<string, int>), DataShape.Container)]
+    [TestCase(typeof(ExpandoObject),           DataShape.Dynamic)]
+    [TestCase(typeof(object),                  DataShape.Object)]
     public void A_runtime_type_has_the_shape_of_the_data_it_holds(Type type, DataShape shape)
     {
         Assert.That(RuntimeType.GetShape(type), Is.EqualTo(shape));
@@ -100,8 +100,8 @@ public class RuntimeTypeTests
     {
         var type = new RuntimeTypeProvider().Lookup(typeof(List<string>))!;
 
-        Assert.That(type.Name,      Is.EqualTo("List`1"));
-        Assert.That(type.Prefix,    Is.EqualTo("clr"));
+        Assert.That(type.Name,                                                 Is.EqualTo("List`1"));
+        Assert.That(type.Prefix,                                               Is.EqualTo("clr"));
         Assert.That(RuntimeTypeProvider.GetClrNamespace(type.Namespace, true), Is.EqualTo("System.Collections.Generic"));
     }
 
@@ -140,7 +140,8 @@ public class RuntimeTypeTests
     public void Only_a_clr_reference_is_looked_up_here_and_a_namespace_is_read_from_its_uri()
     {
         Assert.That(new RuntimeTypeProvider().Lookup(new TypeLookup(Anywhere, "dyn", "String")), Is.Null);
-        Assert.That(RuntimeTypeProvider.GetClrNamespace(RuntimeTypeProvider.GetUriForClrNamespace("System.Text"), true), Is.EqualTo("System.Text"));
+        Assert.That(RuntimeTypeProvider.GetClrNamespace(RuntimeTypeProvider.GetUriForClrNamespace("System.Text"), true),
+                    Is.EqualTo("System.Text"));
         Assert.That(RuntimeTypeProvider.GetClrNamespace(new Uri("http://x/"), false), Is.Null);
         Assert.Throws<NotSupportedException>(() => RuntimeTypeProvider.GetClrNamespace(new Uri("http://x/"), true));
     }
@@ -148,16 +149,16 @@ public class RuntimeTypeTests
 
 public class ShellPathsTests
 {
-    [TestCase(ShellConfigurationScope.User,           RegistryHive.CurrentUser)]
-    [TestCase(ShellConfigurationScope.TattooUser,     RegistryHive.CurrentUser)]
-    [TestCase(ShellConfigurationScope.System,         RegistryHive.LocalMachine)]
-    [TestCase(ShellConfigurationScope.TattooSystem,   RegistryHive.LocalMachine)]
+    [TestCase(ShellConfigurationScope.User,         RegistryHive.CurrentUser)]
+    [TestCase(ShellConfigurationScope.TattooUser,   RegistryHive.CurrentUser)]
+    [TestCase(ShellConfigurationScope.System,       RegistryHive.LocalMachine)]
+    [TestCase(ShellConfigurationScope.TattooSystem, RegistryHive.LocalMachine)]
     public void The_scope_decides_the_hive_the_paths_are_in(ShellConfigurationScope scope, RegistryHive hive)
     {
         var paths = new ShellPaths(scope);
 
-        Assert.That(paths.Scope,       Is.EqualTo(scope));
-        Assert.That(paths.ClassesRoot, Is.EqualTo(new RegistryPath(hive, @"Software\Classes", null)));
+        Assert.That(paths.Scope,          Is.EqualTo(scope));
+        Assert.That(paths.ClassesRoot,    Is.EqualTo(new RegistryPath(hive, @"Software\Classes", null)));
         Assert.That(paths.ShellRoot.Hive, Is.EqualTo(hive));
     }
 
@@ -166,7 +167,8 @@ public class ShellPathsTests
     {
         var paths = new ShellPaths(ShellConfigurationScope.NewProfiles);
 
-        Assert.That(paths.ClassesRoot, Is.EqualTo(new RegistryPath(RegistryHive.Users, $@"{ShellPaths.NewProfileHiveKey}\Software\Classes", null)));
+        Assert.That(paths.ClassesRoot,
+                    Is.EqualTo(new RegistryPath(RegistryHive.Users, $@"{ShellPaths.NewProfileHiveKey}\Software\Classes", null)));
     }
 
     [Test]

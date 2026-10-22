@@ -1,5 +1,5 @@
 ﻿using System.Dynamic;
-using Silo.Contracts.Providers.Data.Shape;
+using Silo.Providers.Data.Shape;
 using Telefrag.DI;
 
 namespace Silo.Providers;
@@ -35,14 +35,14 @@ public class DynamicTypeProvider : ITypeProvider
 
 public abstract record DynamicType(DynamicKind Kind) : IType
 {
-    public static DynamicType Dto     { get; } = new DynamicDto();
-    public static DynamicType Dynamic { get; } = new FullyDynamic();
+    public abstract Uri         Uri       { get; }
+    public static   DynamicType Dto       { get; } = new DynamicDto();
+    public static   DynamicType Dynamic   { get; } = new FullyDynamic();
+    public          Uri         Namespace => new("ns://*", UriKind.Absolute);
 
-    public abstract string    Name      { get; }
-    public abstract Uri       Uri       { get; }
-    public          Uri       Namespace => new("ns://*", UriKind.Absolute);
-    public          string    Prefix    => "dyn";
-    public          DataShape Shape     => DataShape.Dynamic;
+    public abstract string    Name   { get; }
+    public          string    Prefix => "dyn";
+    public          DataShape Shape  => DataShape.Dynamic;
 
     DataKind IType.Kind => DataKind.Dynamic;
 

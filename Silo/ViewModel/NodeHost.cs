@@ -194,12 +194,15 @@ public sealed class NodeHost : INavManager
     {
         node.Children.CollectionChanged -= OnChildrenChanged;
         node.Children.CollectionChanged += OnChildrenChanged;
+        node.ChildrenLoadedChanged      -= OnChildrenLoaded;
+        node.ChildrenLoadedChanged      += OnChildrenLoaded;
         foreach (var child in node.Children.ToList()) Watch(child);
     }
 
     private void Unwatch(SiloNode node)
     {
         node.Children.CollectionChanged -= OnChildrenChanged;
+        node.ChildrenLoadedChanged      -= OnChildrenLoaded;
         foreach (var child in node.Children.ToList()) Unwatch(child);
     }
 
@@ -209,6 +212,12 @@ public sealed class NodeHost : INavManager
             foreach (var added in e.NewItems.OfType<SiloNode>())
                 Watch(added);
 
+        RaiseChanged();
+    }
+
+    // a lazy node that turned out to have no children changes what the tree shows (its "Loading..." entry goes) without adding anything
+    private void OnChildrenLoaded(object? sender, EventArgs e)
+    {
         RaiseChanged();
     }
 

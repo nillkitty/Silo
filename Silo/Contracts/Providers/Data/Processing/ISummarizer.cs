@@ -1,4 +1,4 @@
-﻿namespace Silo.Contracts.Providers.Data.Processing;
+﻿namespace Silo.Providers.Data.Processing;
 
 public interface ISummarizer
 {

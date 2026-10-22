@@ -53,6 +53,25 @@ public static class ClipboardCommands
         if (context.Targets.Count > 0) yield return Item("_Paste", ApplicationCommands.Paste, commandTarget);
     }
 
+    /// <summary>
+    ///     The same Cut, Copy and Paste entries for a menu that is not a right-click menu (the Node menu): they act on
+    ///     <paramref name="context" /> directly rather than on whatever has the keyboard focus when they are chosen, because by then the
+    ///     focus is in the menu. Only what applies is listed.
+    /// </summary>
+    public static IEnumerable<MenuItem> Items(ClipboardContext context)
+    {
+        if (context.Selection.Count > 0 && context.Selection.All(s => s is ICuttable)) yield return Direct("Cu_t", "Ctrl+X", Kind.Cut, context);
+        if (context.Selection.Count > 0) yield return Direct("_Copy", "Ctrl+C", Kind.Copy, context);
+        if (context.Targets.Count > 0) yield return Direct("_Paste", "Ctrl+V", Kind.Paste, context);
+    }
+
+    private static MenuItem Direct(string header, string gesture, Kind kind, ClipboardContext context)
+    {
+        var item = new MenuItem { Header = header, InputGestureText = gesture, IsEnabled = Can(kind, context) };
+        item.Click += (_, _) => Run(kind, context);
+        return item;
+    }
+
     private static MenuItem Item(string header, RoutedCommand command, IInputElement target)
     {
         return new MenuItem { Header = header, Command = command, CommandTarget = target };

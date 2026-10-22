@@ -70,6 +70,10 @@ public static class ProvidedNodes
                        LoadChildren =
                            lazy
                                ? () => source.LoadChildrenAsync()
+                               : null,
+                       Reload =
+                           source.ChildLoader is not null
+                               ? () => source.ReloadChildrenAsync()
                                : null
                    };
 

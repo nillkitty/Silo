@@ -1,9 +1,47 @@
-﻿namespace Silo;
+﻿using Serilog;
+using Silo.Extensions;
+using Silo.Providers;
+
+namespace Silo;
 
 public static class UriExtensions
 {
     extension(Uri uri)
     {
+        public object? ResolvePublic()
+        {
+            return uri._resolve(UriContext.Public);
+        }
+
+        public object? ResolvePrivate()
+        {
+            return uri._resolve(UriContext.Private);
+        }
+
+        private object? _resolve(UriContext context)
+        {
+            var ur = App.RequireAny<IUriResolver>();
+            ur = App.ResolveAll<IUriResolver>();
+            foreach (var u in ur)
+            {
+                if (u is null) continue;
+
+                var rr = u.Resolve(uri, context);
+                if (rr is null)
+                {
+                    Log.Debug("Trying '{uri}' via '{resolver}'; result: no result", uri, u.GetType().ShortDisplayName());
+                    continue;
+                }
+
+                Log.Debug("Trying '{uri}' via '{resolver}'; result: {obj}", uri, u.GetType().ShortDisplayName(), rr);
+
+                return rr;
+            }
+
+            Log.Debug("Trying '{uri}' failed via {num} resolvers", uri, ur.Count);
+            return null;
+        }
+
         public Uri Append(params string[] newFragments)
         {
             ArgumentNullException.ThrowIfNull(uri);

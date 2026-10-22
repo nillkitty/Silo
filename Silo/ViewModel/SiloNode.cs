@@ -25,6 +25,13 @@ public record SiloNode
     public bool ChildrenLoaded { get; private set; }
 
     /// <summary>
+    ///     Raised (on the calling context of <see cref="LoadChildrenAsync" />) when <see cref="ChildrenLoaded" /> becomes true. A load
+    ///     that finds no children adds nothing to <see cref="Children" />, so this is how the Explorer hears that the "Loading..."
+    ///     entry of a lazy node is to go.
+    /// </summary>
+    public event EventHandler? ChildrenLoadedChanged;
+
+    /// <summary>
     ///     The raw thing the node stands for: the <see cref="INodeProvider.Data" /> of its provider (a <c>FileSystemInfo</c>,
     ///     say), or the <see cref="DataContext" /> itself when that is not a provider.
     /// </summary>
@@ -83,14 +90,31 @@ public record SiloNode
     ///     Forgets the children read so far and reads them again with the <see cref="ChildLoader" /> (Refresh Contents). Does
     ///     nothing for a node whose children are not read on demand. Call it from the UI thread.
     /// </summary>
-    public Task ReloadChildrenAsync(CancellationToken cancel = default)
+    public async Task ReloadChildrenAsync(CancellationToken cancel = default)
     {
-        if (ChildLoader is null) return Task.CompletedTask;
+        if (ChildLoader is null) return;
 
+        // a read that is still going would add its (old) children after they were cleared: let it finish first
+        if (_loading is { IsCompleted: false } running)
+        {
+            try
+            {
+                await running;
+            }
+            catch
+            {
+                // it reports its own failure (see LoadCoreAsync)
+            }
+        }
+
+        _loading = null; // a finished read stays in the field when its loader completed synchronously: it must not stand for this one
         Children.Clear();
         ChildrenLoaded = false;
         LoadError      = null;
-        return LoadChildrenAsync(cancel);
+
+        // a node with no children has nothing to clear, so nothing was said yet: the Explorer is to show "Loading..." again
+        ChildrenLoadedChanged?.Invoke(this, EventArgs.Empty);
+        await LoadChildrenAsync(cancel);
     }
 
     private async Task LoadCoreAsync(CancellationToken cancel)
@@ -101,6 +125,7 @@ public record SiloNode
             foreach (var child in loaded)
                 Children.Add(child);
             ChildrenLoaded = true;
+            ChildrenLoadedChanged?.Invoke(this, EventArgs.Empty);
         }
         catch (OperationCanceledException)
         {
@@ -136,7 +161,8 @@ public record SiloNode
         o.Required();
         if (o is SiloNode already) return already;
         if (o is INodeProvider provider && provider.GetNode() is { } own) return own;
-        if (o is INodeDetails details) return new SiloNode(o, details.Name, details.Uri, details.Icon, null) { TypeName = details.TypeName };
+        if (o is INodeDetails details)
+            return new SiloNode(o, details.Name, details.Uri, details.Icon, null) { TypeName = details.TypeName };
 
         return new SiloNode(o, o.ToString(), null, null, null);
     }

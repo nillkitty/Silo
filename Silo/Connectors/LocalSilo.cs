@@ -2,10 +2,11 @@
 using System.Windows.Threading;
 using Serilog;
 using Silo.Connectors.Virtual;
-using Silo.Contracts.Providers.Data.Shape;
 using Silo.Design;
 using Silo.Model;
 using Silo.Providers;
+using Silo.Providers.Data;
+using Silo.Providers.Data.Shape;
 using Silo.Storage;
 using Silo.ViewModel;
 using Telefrag.DI;
@@ -30,7 +31,7 @@ namespace Silo.Connectors;
 ///     itself when something is stored (see <see cref="Stored.Changed" />) or the design level changes.
 /// </remarks>
 [Transient(typeof(IConnector))]
-public class LocalSilo : VirtualRoot, INodeProvider<OpenSilo>
+public class LocalSilo : VirtualRoot<OpenSilo>, INodeProvider<OpenSilo>
 {
     private bool      _refreshQueued;
     private SiloNode? _saved;
@@ -79,25 +80,31 @@ public class LocalSilo : VirtualRoot, INodeProvider<OpenSilo>
     }
 
     /// <summary>A folder node; its children (if there are any to read) are read when it is first expanded.</summary>
-    private static SiloNode Folder(string text, Uri uri, string icon, Func<IEnumerable<SiloNode>>? children = null, string kind = "Folder", bool expanded = false)
+    private static SiloNode Folder(string text, Uri uri, string icon, Func<IEnumerable<SiloNode>>? children = null, string kind = "Folder",
+                                   bool   expanded = false)
     {
         var iconUri = Icon(icon);
         return new SiloNode(new FolderModel(text, kind, uri, iconUri), text, uri, iconUri, expanded ? 1 : null)
                {
-                   ChildLoader = children is null
-                                     ? null
-                                     : _ => Task
-                                          .FromResult<
-                                               IReadOnlyList
-                                               <SiloNode>>(children()
-                                                              .ToList())
+                   ChildLoader =
+                       children is null
+                           ? null
+                           : _ => Task
+                                .FromResult
+                                 <IReadOnlyList
+                                     <SiloNode>>(children()
+                                                    .ToList())
                };
     }
 
-    /// <summary>A leaf that says a folder has nothing in it yet and what will show up there, so an empty folder is not mistaken for a broken one.</summary>
+    /// <summary>
+    ///     A leaf that says a folder has nothing in it yet and what will show up there, so an empty folder is not
+    ///     mistaken for a broken one.
+    /// </summary>
     private static SiloNode Nothing(string text, Uri parent)
     {
-        return new SiloNode(new FolderModel(text, "Note", parent.Append("none"), Icon("Document")), text, parent.Append("none"), Icon("Document"), null);
+        return new SiloNode(new FolderModel(text, "Note", parent.Append("none"), Icon("Document")), text, parent.Append("none"),
+                            Icon("Document"), null);
     }
 
     private IEnumerable<SiloNode> MakeTopFolders()
@@ -151,11 +158,12 @@ public class LocalSilo : VirtualRoot, INodeProvider<OpenSilo>
 
             any = true;
             string name = shape.ToString();
-            yield return Folder($"{name} ({ofShape.Count})", Under("saved-objects", name), "DataStructure",
+            yield return Folder($"{name} ({ofShape.Count})",                         Under("saved-objects", name), "DataStructure",
                                 () => MakeTypeFolders(shape, "saved-objects", name), expanded: true);
         }
 
-        if (!any) yield return Nothing("(nothing saved yet: keyboard shortcuts and other saved objects appear here)", Under("saved-objects"));
+        if (!any)
+            yield return Nothing("(nothing saved yet: keyboard shortcuts and other saved objects appear here)", Under("saved-objects"));
     }
 
     private IEnumerable<SiloNode> MakeTypeFolders(DataShape shape, string root = "saved-scalars", string? shapeFolder = null)
@@ -171,7 +179,7 @@ public class LocalSilo : VirtualRoot, INodeProvider<OpenSilo>
             any = true;
             string label = group.Key;
             var    path  = shapeFolder is null ? new[] { root, label } : new[] { root, shapeFolder, label };
-            yield return Folder($"{label} ({group.Count()})", Under(path), "Cube", () => group.Select(MakeItemNode).ToList(), "Type", expanded: true);
+            yield return Folder($"{label} ({group.Count()})", Under(path), "Cube", () => group.Select(MakeItemNode).ToList(), "Type", true);
         }
 
         if (!any && shapeFolder is null)
