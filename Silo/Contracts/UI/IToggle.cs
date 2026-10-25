@@ -3,7 +3,7 @@
 public interface IToggle
 {
     string  Header      { get; }
-    object? Icon        { get; }
+    IconRef? Icon       { get; }
     bool    IsCheckable { get; }
     bool    IsChecked   { get; set; }
     bool    IsEnabled   { get; }

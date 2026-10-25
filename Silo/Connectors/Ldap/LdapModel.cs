@@ -86,9 +86,9 @@ public class LdapModel : ModelBase, INodeProvider, INodeDetails
     protected virtual bool IsLoaded => true;
 
     /// <summary>
-    ///     The key of the icon (see <c>Resources/NavIcons.xaml</c>) as a relative URI, which is how the Explorer reads one.
+    ///     The icon (a key in <c>Resources/NavIcons.xaml</c>).
     /// </summary>
-    public Uri Icon { get; private set; }
+    public IconRef Icon { get; private set; }
 
     /// <summary>
     ///     The entry's name as people write it (<c>Smith, John</c>), not its relative distinguished name (
@@ -455,7 +455,7 @@ public class LdapModel : ModelBase, INodeProvider, INodeDetails
         SchemaClass = SchemaClassOf(entry);
         Kind        = KindOf(SchemaClass, Category);
         TypeName    = TypeNameOf(Kind, GroupType, Category ?? SchemaClass);
-        Icon        = new Uri(IconKeyOf(Kind), UriKind.Relative);
+        Icon        = IconRef.FromKey(IconKeyOf(Kind));
     }
 
     /// <summary>
@@ -482,7 +482,7 @@ public class LdapModel : ModelBase, INodeProvider, INodeDetails
         Kind       = "domaindns";
         Name       = requested.Host.Length > 0 ? requested.Host : "Directory";
         TypeName   = TypeNameOf(Kind, 0);
-        Icon       = new Uri(IconKeyOf(Kind), UriKind.Relative);
+        Icon       = IconRef.FromKey(IconKeyOf(Kind));
     }
 
     /// <summary>

@@ -1,9 +1,5 @@
-using System;
-using System.Collections.Generic;
-using System.Text;
-using System.Windows;
 using System.Windows.Controls;
-using Silo.Extensions;
+using Silo.ViewModel;
 
 namespace Silo.Ui;
 
@@ -17,9 +13,9 @@ public static class Ui
         // property editor (its arbitrary-object fallback - see Ui/DefaultUiBuilder.cs)
         // rather than duplicating that editor UI here.
         var form    = new DefaultUiBuilder<TModel>().Build(m);
-        var button1 = new Button() { Content          = "Cancel", IsCancel = true };
-        var button2 = new Button() { Content          = "OK", IsDefault    = true };
-        var dock = new DockPanel()
+        var button1 = new Button { Content = "Cancel", IsCancel = true };
+        var button2 = new Button { Content = "OK", IsDefault    = true };
+        var dock = new DockPanel
                    {
                        LastChildFill = false,
                        Children =
@@ -38,7 +34,7 @@ public static class Ui
         button1.Click += Handlers.OkButton;
         button2.Click += Handlers.CancelButton;
 
-        var stack = new StackPanel()
+        var stack = new StackPanel
                     {
                         Children =
                         {
@@ -46,7 +42,7 @@ public static class Ui
                             dock
                         }
                     };
-        var w = new Window()
+        var w = new Window
                 {
                     Title   = title ?? m.GetType().FullName,
                     Content = stack

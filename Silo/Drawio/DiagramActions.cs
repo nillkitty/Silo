@@ -2,6 +2,8 @@
 using Silo.Model;
 using Silo.Tools;
 using Silo.Ui.Windows;
+using Silo.Drawio.Mx;
+using Silo.Drawio.Options;
 
 namespace Silo.Drawio;
 

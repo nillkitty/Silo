@@ -59,12 +59,8 @@ public class FileModel : INodeProvider<FileSystemInfo>, INodeDetails, INodeViewP
     /// <summary><see cref="NodeText" />, for the node records below.</summary>
     internal string NodeLabel => NodeText;
 
-    /// <summary>
-    ///     The icon as a node's <see cref="SiloNode.Icon" />: the resource key as a relative URI (that is how the Explorer
-    ///     reads
-    ///     one).
-    /// </summary>
-    public Uri Icon => new(IconKey, UriKind.Relative);
+    /// <summary>The icon, as a node's <see cref="SiloNode.Icon" />: <see cref="IconKey" />.</summary>
+    public IconRef Icon => IconRef.FromKey(IconKey);
 
     /// <summary>What to call the item: its name, or the full path for a drive.</summary>
     public string Name => Kind == FileKind.Volume ? Path : Data.Name;

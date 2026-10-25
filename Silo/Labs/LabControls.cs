@@ -1,18 +1,22 @@
-﻿using System.Windows.Controls;
+﻿using System.Windows.Automation;
+using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using Silo.Converters;
+using Silo.Labs.Menus;
 using Silo.Toolbar;
 
 namespace Silo.Labs;
 
 /// <summary>
-///     Lays its children out in equal-width columns (as many as fit), so a list of check boxes lines up as a grid instead of ragged
+///     Lays its children out in equal-width columns (as many as fit), so a list of check boxes lines up as a grid instead
+///     of ragged
 ///     wrapped rows. The column is as wide as the widest child.
 /// </summary>
 internal sealed class EqualColumnPanel : Panel
 {
-    private int    _columns = 1;
     private double _cell;
+    private int    _columns = 1;
     private double _rowHeight;
 
     /// <summary>The most columns to use (0: as many as fit).</summary>
@@ -25,7 +29,7 @@ internal sealed class EqualColumnPanel : Panel
         foreach (UIElement child in InternalChildren)
         {
             child.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
-            width  = Math.Max(width, child.DesiredSize.Width);
+            width  = Math.Max(width,  child.DesiredSize.Width);
             height = Math.Max(height, child.DesiredSize.Height);
         }
 
@@ -44,7 +48,7 @@ internal sealed class EqualColumnPanel : Panel
         _cell      = width;
         _rowHeight = height;
         int rows = (count + columns - 1) / columns;
-        return new Size(columns * width, rows * height);
+        return new Size(columns          * width, rows * height);
     }
 
     protected override Size ArrangeOverride(Size finalSize)
@@ -62,7 +66,8 @@ internal sealed class EqualColumnPanel : Panel
 }
 
 /// <summary>
-///     Names the icon a button gets when its caller gave none, from the words on it, so every button in the Labs carries an icon and its text
+///     Names the icon a button gets when its caller gave none, from the words on it, so every button in the Labs carries
+///     an icon and its text
 ///     (never one without the other).
 /// </summary>
 internal static class LabIcons
@@ -88,12 +93,14 @@ internal static class LabIcons
         (["record", "capture"], "Record"),
         (["build"], "Build"),
         (["compile"], "Compile"),
-        (["export", "download", "write", "send", "generate", "render"], "TbExport"),
+        (["export", "download", "write", "send", "generate", "render"],
+         "TbExport"),
         (["find", "search", "next", "previous", "locate", "match"], "Search"),
         (["refresh", "reload", "sync", "update", "rescan"], "Refresh"),
         (["check", "validate", "verify", "ok", "accept", "approve"], "Check"),
         (["settings", "options", "preferences", "configure"], "Sliders"),
-        (["template", "built in", "library", "example", "sample"], "Template"),
+        (["template", "built in", "library", "example", "sample"],
+         "Template"),
         (["up", "earlier", "raise"], "ArrowUp"),
         (["down", "later", "lower"], "ArrowDown"),
         (["indent", "into"], "Indent"),
@@ -111,14 +118,18 @@ internal static class LabIcons
     /// <summary>The key of an icon that fits the text on a button.</summary>
     public static string For(string? text)
     {
-        string t = (text ?? string.Empty).Replace("_", string.Empty).Replace("&", string.Empty).Replace("…", string.Empty).Replace(".", string.Empty).Trim().ToLowerInvariant();
+        string t = (text ?? string.Empty).Replace("_", string.Empty)
+                                         .Replace("&", string.Empty)
+                                         .Replace("…", string.Empty)
+                                         .Replace(".", string.Empty)
+                                         .Trim()
+                                         .ToLowerInvariant();
         foreach (var (words, icon) in Map)
         {
             foreach (string word in words)
-            {
-                if (t == word || t.StartsWith(word + " ", StringComparison.Ordinal) || t.EndsWith(" " + word, StringComparison.Ordinal) || word.Contains(' ') && t.Contains(word, StringComparison.Ordinal))
+                if (t == word || t.StartsWith(word + " ", StringComparison.Ordinal) || t.EndsWith(" " + word, StringComparison.Ordinal) ||
+                    (word.Contains(' ') && t.Contains(word, StringComparison.Ordinal)))
                     return icon;
-            }
         }
 
         return "Command";
@@ -134,7 +145,10 @@ internal static partial class LabUi
         return geometry is null ? null : new AppIcon { Icon = geometry, Size = size, VerticalAlignment = VerticalAlignment.Center };
     }
 
-    /// <summary>A button with an icon and its text. No icon is named: one that fits the text is used, so no button is just text.</summary>
+    /// <summary>
+    ///     A button with an icon and its text. No icon is named: one that fits the text is used, so no button is just
+    ///     text.
+    /// </summary>
     public static Button Tool(string text, string? icon, Action click, string? tip = null, bool enabled = true)
     {
         var content = new StackPanel { Orientation = Orientation.Horizontal };
@@ -145,7 +159,11 @@ internal static partial class LabUi
         }
 
         content.Children.Add(new TextBlock { Text = text.Replace("_", string.Empty), VerticalAlignment = VerticalAlignment.Center });
-        var button = new Button { Content = content, Padding = new Thickness(7, 2, 8, 2), Margin = new Thickness(2, 0, 2, 0), ToolTip = tip ?? text.Replace("_", string.Empty), IsEnabled = enabled };
+        var button = new Button
+                     {
+                         Content = content, Padding = new Thickness(7, 2, 8, 2), Margin = new Thickness(2, 0, 2, 0),
+                         ToolTip = tip ?? text.Replace("_", string.Empty), IsEnabled = enabled
+                     };
         button.Click += (_, _) => click();
         return button;
     }
@@ -153,8 +171,12 @@ internal static partial class LabUi
     /// <summary>A button that is just an icon (the tip says what it does).</summary>
     public static Button IconButton(string icon, Action click, string tip, bool enabled = true)
     {
-        var button = new Button { Content = Icon(icon, 15), Padding = new Thickness(5, 2, 5, 2), Margin = new Thickness(2, 0, 2, 0), ToolTip = tip, IsEnabled = enabled, MinWidth = 26 };
-        System.Windows.Automation.AutomationProperties.SetName(button, tip);
+        var button = new Button
+                     {
+                         Content = Icon(icon, 15), Padding = new Thickness(5, 2, 5, 2), Margin = new Thickness(2, 0, 2, 0),
+                         ToolTip = tip, IsEnabled          = enabled, MinWidth                 = 26
+                     };
+        AutomationProperties.SetName(button, tip);
         button.Click += (_, _) => click();
         return button;
     }
@@ -173,7 +195,8 @@ internal static partial class LabUi
     }
 
     /// <summary>
-    ///     The banner over a pane full of ready-made entries (templates, built-in examples): the template icon and a line saying these are
+    ///     The banner over a pane full of ready-made entries (templates, built-in examples): the template icon and a line
+    ///     saying these are
     ///     not data of the Silo.
     /// </summary>
     public static Border TemplateBanner(string text = "Templates: built in to the app, not saved in your Silo")
@@ -185,14 +208,21 @@ internal static partial class LabUi
             row.Children.Add(glyph);
         }
 
-        row.Children.Add(Label(text, muted: true));
-        var border = new Border { Child = row, Padding = new Thickness(8, 3, 8, 3), BorderThickness = new Thickness(0, 0, 0, 1), ToolTip = "These come with the app. Use one as a starting point; it is yours once you save it." };
-        border.SetResourceReference(Border.BackgroundProperty, "Theme.Surface");
+        row.Children.Add(Label(text, true));
+        var border = new Border
+                     {
+                         Child   = row, Padding = new Thickness(8, 3, 8, 3), BorderThickness = new Thickness(0, 0, 0, 1),
+                         ToolTip = "These come with the app. Use one as a starting point; it is yours once you save it."
+                     };
+        border.SetResourceReference(Border.BackgroundProperty,  "Theme.Surface");
         border.SetResourceReference(Border.BorderBrushProperty, "Theme.Border");
         return border;
     }
 
-    /// <summary>A heading between groups of a list. <paramref name="template" /> marks a group of ready-made entries with the template icon.</summary>
+    /// <summary>
+    ///     A heading between groups of a list. <paramref name="template" /> marks a group of ready-made entries with the
+    ///     template icon.
+    /// </summary>
     public static ListBoxItem Section(string text, bool template = false, string? icon = null)
     {
         var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 6, 0, 1) };
@@ -212,16 +242,23 @@ internal static partial class LabUi
     }
 
     /// <summary>A line of explanation in a list ("No Silo is open"); it cannot be chosen.</summary>
-    public static ListBoxItem Note(string text) => new() { Content = Label(text, muted: true, wrap: true), IsEnabled = false };
+    public static ListBoxItem Note(string text)
+    {
+        return new ListBoxItem { Content = Label(text, true, wrap: true), IsEnabled = false };
+    }
 
-    /// <summary>An entry of a list: <paramref name="row" /> (see <see cref="Row" />) that gives <paramref name="tag" /> when it is chosen.</summary>
+    /// <summary>
+    ///     An entry of a list: <paramref name="row" /> (see <see cref="Row" />) that gives <paramref name="tag" /> when
+    ///     it is chosen.
+    /// </summary>
     public static ListBoxItem Item(object? tag, UIElement row, string? tip = null)
     {
         return new ListBoxItem { Tag = tag, Content = row, ToolTip = tip, HorizontalContentAlignment = HorizontalAlignment.Stretch };
     }
 
     /// <summary>
-    ///     One entry of a list: [indent and expander] icon | name | kind (a column all the rows share, so the kinds line up) | detail. The list
+    ///     One entry of a list: [indent and expander] icon | name | kind (a column all the rows share, so the kinds line up) |
+    ///     detail. The list
     ///     (or a parent) must have <see cref="Grid.IsSharedSizeScopeProperty" /> set; <see cref="List" /> does.
     /// </summary>
     /// <param name="icon">The icon key of what the entry is.</param>
@@ -231,10 +268,14 @@ internal static partial class LabUi
     /// <param name="template">The entry is a ready-made one that comes with the app (it gets the template mark).</param>
     /// <param name="tree">The list is a tree: the row has room for the indent and the expander.</param>
     /// <param name="level">How deep the entry is in the tree.</param>
-    /// <param name="expanded">Null: not expandable; else whether it is open (the expander is clicked to <paramref name="toggle" />).</param>
+    /// <param name="expanded">
+    ///     Null: not expandable; else whether it is open (the expander is clicked to
+    ///     <paramref name="toggle" />).
+    /// </param>
     /// <param name="iconBrush">A color for the icon (a test that failed is red); null for the text color.</param>
-    public static Grid Row(string? icon, string name, string? kind = null, string? detail = null, bool template = false, bool tree = false, int level = 0,
-                           bool? expanded = null, Action? toggle = null, Brush? iconBrush = null, bool bold = false, bool mono = false)
+    public static Grid Row(string? icon, string name, string? kind = null, string? detail = null, bool template = false, bool tree = false,
+                           int     level = 0, bool? expanded = null, Action? toggle = null, Brush? iconBrush = null, bool bold = false,
+                           bool    mono  = false)
     {
         var grid = new Grid { Margin = new Thickness(2, 1, 2, 1), Background = Brushes.Transparent };
         if (tree)
@@ -246,12 +287,16 @@ internal static partial class LabUi
         int first = grid.ColumnDefinitions.Count;
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(22) });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star), MinWidth = 60 });
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto, SharedSizeGroup = "kind" });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto, SharedSizeGroup               = "kind" });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
         if (tree && expanded is { } open)
         {
-            var arrow = new TextBlock { Text = open ? "\u25BE" : "\u25B8", HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, Cursor = Cursors.Hand };
+            var arrow = new TextBlock
+                        {
+                            Text              = open ? "\u25BE" : "\u25B8", HorizontalAlignment = HorizontalAlignment.Center,
+                            VerticalAlignment = VerticalAlignment.Center, Cursor                = Cursors.Hand
+                        };
             arrow.SetResourceReference(TextBlock.ForegroundProperty, "Theme.TextMuted");
             arrow.MouseLeftButtonDown += (_, e) =>
                                          {
@@ -274,7 +319,7 @@ internal static partial class LabUi
         Grid.SetColumn(title, first + 1);
         grid.Children.Add(title);
 
-        var type = Label(kind ?? string.Empty, muted: true);
+        var type = Label(kind ?? string.Empty, true);
         type.Margin = new Thickness(12, 0, 8, 0);
         Grid.SetColumn(type, first + 2);
         grid.Children.Add(type);
@@ -292,7 +337,7 @@ internal static partial class LabUi
 
             if (!string.IsNullOrEmpty(detail))
             {
-                var more = Label(detail, muted: true);
+                var more = Label(detail, true);
                 more.TextTrimming = TextTrimming.CharacterEllipsis;
                 more.MaxWidth     = 220;
                 end.Children.Add(more);
@@ -306,7 +351,8 @@ internal static partial class LabUi
     }
 
     /// <summary>
-    ///     A box that takes a key or a combination as it is pressed and reports it the way the Menu Lab writes shortcuts ("Ctrl+Shift+K").
+    ///     A box that takes a key or a combination as it is pressed and reports it the way the Menu Lab writes shortcuts
+    ///     ("Ctrl+Shift+K").
     ///     Backspace or Delete alone empties it.
     /// </summary>
     public static TextBox KeyBox(string? text, Action<string> changed, double width = 140, string? tip = null)
@@ -340,7 +386,8 @@ internal static partial class LabUi
 
                                   e.Handled = true;
                                   var mods = Keyboard.Modifiers;
-                                  if (key is Key.LeftCtrl or Key.RightCtrl or Key.LeftAlt or Key.RightAlt or Key.LeftShift or Key.RightShift or Key.LWin or Key.RWin or Key.None) return;
+                                  if (key is Key.LeftCtrl or Key.RightCtrl or Key.LeftAlt or Key.RightAlt or Key.LeftShift or Key.RightShift
+                                          or Key.LWin or Key.RWin or Key.None) return;
 
                                   if (mods == ModifierKeys.None && key is Key.Back or Key.Delete)
                                   {
@@ -356,7 +403,7 @@ internal static partial class LabUi
                                   if (mods.HasFlag(ModifierKeys.Windows)) parts.Add("Win");
                                   parts.Add(KeyName(key));
                                   string typed = string.Join("+", parts);
-                                  if (Silo.Labs.Menus.MenuGesture.TryNormalize(typed, out string normal, out string? why))
+                                  if (MenuGesture.TryNormalize(typed, out string normal, out string? why))
                                   {
                                       box.Text    = normal;
                                       box.ToolTip = tip ?? "Click here and press the key or combination (Backspace clears it)";

@@ -1,7 +1,9 @@
 using System.IO;
 using System.Linq;
 using System.Threading;
-using Silo.Drawio;
+using Silo.Drawio.Host;
+using Silo.Drawio.Live;
+using Silo.Drawio.Options;
 using Telefrag.DI;
 
 namespace Silo.Tools;

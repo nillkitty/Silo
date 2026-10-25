@@ -2,7 +2,7 @@
 using Silo.ViewModel;
 using Telefrag.DI;
 
-namespace Silo;
+namespace Silo.Connectors;
 
 /// <summary>
 ///     The connection of everything that has none of its own (<see cref="App.LocalConnection" />): this computer. It is

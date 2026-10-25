@@ -71,7 +71,7 @@ public class HierarchyBuilder
     private SiloNode?                                               _built;
     private int?                                                    _expand;
     private bool                                                    _hasLevel;
-    private Uri?                                                    _icon;
+    private IconRef?                                                _icon;
     private Func<CancellationToken, Task<IReadOnlyList<SiloNode>>>? _loader;
     private object?                                                 _model;
     private string?                                                 _text;
@@ -175,10 +175,10 @@ public class HierarchyBuilder
         return this;
     }
 
-    /// <summary>The icon of this level: a key in <c>Resources/NavIcons.xaml</c>, as a relative URI.</summary>
+    /// <summary>The icon of this level: a key in <c>Resources/NavIcons.xaml</c>.</summary>
     public HierarchyBuilder Icon(string resourceKey)
     {
-        _icon = new Uri(resourceKey.Required(), UriKind.Relative);
+        _icon = IconRef.FromKey(resourceKey.Required());
         return this;
     }
 
@@ -230,9 +230,9 @@ public class HierarchyBuilder
 /// <summary>
 ///     The object behind a plain folder node: says what it is for the Properties pane.
 /// </summary>
-public sealed class FolderModel(string name, string typeName, Uri? uri, Uri? icon) : INodeDetails
+public sealed class FolderModel(string name, string typeName, Uri? uri, IconRef? icon) : INodeDetails
 {
-    public Uri?   Icon     { get; } = icon;
+    public IconRef? Icon   { get; } = icon;
     public string Name     { get; } = name;
     public string TypeName { get; } = typeName;
     public Uri    Uri      { get; } = uri!;
@@ -243,7 +243,7 @@ public sealed class FolderModel(string name, string typeName, Uri? uri, Uri? ico
     }
 }
 
-public record DynModel(string Caption, string TypeName, Uri Icon, Uri NodeUri)
+public record DynModel(string Caption, string TypeName, IconRef? Icon, Uri NodeUri)
 {
     [JsonExtensionData]
     public FragTable<object, string> Properties { get; } = [];

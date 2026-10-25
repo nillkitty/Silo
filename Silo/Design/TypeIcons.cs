@@ -4,6 +4,7 @@ using System.Text.RegularExpressions;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Media;
+using Silo.Converters;
 using Silo.ViewModel;
 
 namespace Silo.Design;
@@ -75,6 +76,7 @@ public static class TypeIcons
         {
             switch (Read(o, name))
             {
+                case IconRef r when IconResolver.Resolve(r) is { } resolved: return resolved;
                 case Geometry g:              return g;
                 case ImageSource i:           return i;
                 case AppIcon { Icon: { } g }: return g;

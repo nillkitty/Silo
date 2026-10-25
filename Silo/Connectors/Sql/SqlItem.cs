@@ -77,10 +77,9 @@ public class SqlItem : INodeDetails, ICommandProvider, INodeProvider
     public string  Version => GetServerVersion();
 
     /// <summary>
-    ///     The key of the icon (see <c>Resources/NavIcons.xaml</c>) as a relative URI, which is how the Explorer reads
-    ///     one.
+    ///     The icon (a key in <c>Resources/NavIcons.xaml</c>).
     /// </summary>
-    public Uri? Icon => new(IconKeyOf(Kind, IsAccessible), UriKind.Relative);
+    public IconRef? Icon => IconRef.FromKey(IconKeyOf(Kind, IsAccessible));
 
     public string Name { get; }
 

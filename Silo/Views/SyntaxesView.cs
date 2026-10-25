@@ -5,10 +5,10 @@ using System.Windows.Input;
 using System.Windows.Threading;
 using Serilog;
 using Silo.Commanding;
-using Silo.Definitions;
 using Silo.Model;
-using Silo.Providers.Data;
 using Silo.Providers.Definitions;
+using Silo.Typing;
+using Typing;
 
 namespace Silo.Views;
 

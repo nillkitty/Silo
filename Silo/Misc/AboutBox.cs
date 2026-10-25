@@ -3,7 +3,7 @@ using Silo.Commanding;
 using Silo.Model;
 using Silo.Ui.Controls;
 
-namespace Silo.UI;
+namespace Silo.Ui;
 
 /// <summary>
 ///     Imterface for app components which contributes to the About Box

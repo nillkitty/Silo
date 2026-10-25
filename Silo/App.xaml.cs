@@ -1,11 +1,13 @@
 ﻿using System.Collections.ObjectModel;
 using System.Diagnostics;
-using System.IO;
 using System.Media;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.ExceptionServices;
 using System.Windows.Threading;
+using AvalonDock;
+using AvalonDock.Serializer.Xml;
+using AvalonDock.Themes;
 using Microsoft.Win32;
 using Serilog;
 using Serilog.Debugging;
@@ -13,6 +15,7 @@ using Serilog.Events;
 using Silo.Assets;
 using Silo.Bindings;
 using Silo.Commanding;
+using Silo.Connectors;
 using Silo.DbModel.Sqlite;
 using Silo.Design;
 using Silo.Extensions;
@@ -25,7 +28,6 @@ using Silo.Settings;
 using Silo.Theming;
 using Silo.Tools.UnicodeExplorer;
 using Silo.Ui;
-using Silo.UI;
 using Silo.Ui.Windows;
 using Silo.ViewModel;
 using Telefrag.DI;
@@ -471,20 +473,24 @@ public partial class App : Application, IContainerHost
     ///     Returns at once.
     /// </summary>
     /// <summary>
-    ///     Loads the embedded assemblies the main window's XAML uses, here on the UI thread, before the background discovery starts.
+    ///     Loads the embedded assemblies the main window's XAML uses, here on the UI thread, before the background discovery
+    ///     starts.
     /// </summary>
     /// <remarks>
-    ///     Costura loads each embedded assembly from its bytes, and every such load gets a load context of its own. When two threads
-    ///     ask for the same assembly at once (the discovery's <c>GetCustomAttributes</c> loading a type that mentions AvalonDock, and
-    ///     the main window's BAML) each can get its own copy, and the window then fails with "[A]AvalonDock.DockingManager cannot be
+    ///     Costura loads each embedded assembly from its bytes, and every such load gets a load context of its own. When two
+    ///     threads
+    ///     ask for the same assembly at once (the discovery's <c>GetCustomAttributes</c> loading a type that mentions
+    ///     AvalonDock, and
+    ///     the main window's BAML) each can get its own copy, and the window then fails with "[A]AvalonDock.DockingManager
+    ///     cannot be
     ///     cast to [B]AvalonDock.DockingManager". Loaded once here, both threads find the same copy.
     /// </remarks>
     [MethodImpl(MethodImplOptions.NoInlining)]
     private static void PreloadUiAssemblies()
     {
-        _ = typeof(AvalonDock.DockingManager).Assembly;
-        _ = typeof(AvalonDock.Themes.Vs2013DarkTheme).Assembly;
-        _ = typeof(AvalonDock.Serializer.Xml.XmlLayoutSerializer).Assembly;
+        _ = typeof(DockingManager).Assembly;
+        _ = typeof(Vs2013DarkTheme).Assembly;
+        _ = typeof(XmlLayoutSerializer).Assembly;
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]

@@ -1084,15 +1084,8 @@ public class DefaultPlaceholderPopulationDialog : IPlaceholderPopulationDialog
 
         private static UIElement IconFor(ComponentInfo info, double size)
         {
-            if (info.Icon is { } uri)
-                try
-                {
-                    return new Image { Source = new BitmapImage(uri), Width = size, Height = size, Stretch = Stretch.Uniform };
-                }
-                catch
-                {
-                    // a bad icon uri falls back to the glyph or letter
-                }
+            // an icon key or a picture; one that cannot be found or read falls back to the glyph or letter
+            if (Silo.Design.IconResolver.ElementFor(info.Icon, size) is { } icon) return icon;
 
             var colors = BadgeColors[(int)((uint)info.Name.Aggregate(7, (h, c) => unchecked(h * 31 + c)) % (uint)BadgeColors.Length)];
             var badge = new Border

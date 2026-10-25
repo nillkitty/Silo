@@ -1,8 +1,7 @@
-using System.IO;
 using System.Windows.Markup;
-using Silo.Providers.Data;
+using Silo.DataDefs;
 
-namespace Silo;
+namespace Silo.Parsing;
 
 /// <summary>
 ///     An object permitted to be declared as a child of a Definition

@@ -4,6 +4,7 @@
              xmlns:local="clr-namespace:Silo"
              xmlns:design="clr-namespace:Silo.Design"
              xmlns:sys="clr-namespace:System;assembly=System.Runtime"
+             xmlns:converters="clr-namespace:Silo.Converters"
              StartupUri="/Ui/Windows/MainWindow.xaml">
     <Application.Resources>
         <ResourceDictionary>
@@ -44,7 +45,7 @@
             <sys:String x:Key="AboutMemory">
                 Ryley Raines, whom we lost way too soon
             </sys:String>
-            <local:ObjectExistsToBoolConverter x:Key="ObjectExistsToBool" />
+            <converters:ObjectExistsToBoolConverter x:Key="ObjectExistsToBool" />
 
             <!--
                 Default template for AppIcon (see AppIcon.cs). Implicit (no x:Key -> applies
@@ -55,7 +56,7 @@
                 Foreground, so an AppIcon placed anywhere automatically matches its container's
                 text color, with no ancestor-type binding or hardcoded fallback color needed.
             -->
-            <Style TargetType="{x:Type local:AppIcon}">
+            <Style TargetType="{x:Type converters:AppIcon}">
                 <!--
                     Live icon size: every AppIcon that doesn't set its own Size follows the Author-mode "Icon Size"
                     slider (Design/AppDesignSettings.cs). An explicit Size= on an instance still wins.
@@ -63,7 +64,7 @@
                 <Setter Property="Size" Value="{Binding IconSize, Source={x:Static design:AppDesignSettings.Instance}}" />
                 <Setter Property="Template">
                     <Setter.Value>
-                        <ControlTemplate TargetType="{x:Type local:AppIcon}">
+                        <ControlTemplate TargetType="{x:Type converters:AppIcon}">
                             <Viewbox Width="{TemplateBinding Size}" Height="{TemplateBinding Size}">
                                 <Path Data="{TemplateBinding Icon}"
                                       Stretch="Uniform"

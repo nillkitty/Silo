@@ -1,4 +1,5 @@
 ﻿using System.Windows.Controls;
+using Silo.Converters;
 using Silo.Design;
 
 namespace Silo.Explorer;
@@ -6,13 +7,10 @@ namespace Silo.Explorer;
 /// <summary>The Properties pane: name, kind and details of whatever is selected in the Explorer tree.</summary>
 public sealed class PropertiesView : UserControl
 {
-    private readonly StackPanel _body = new() { Margin = new Thickness(12) };
+    /// <summary>The size of the icon in the heading (the tree's own is the person's "Icon Size" setting, 16 by default).</summary>
+    private const double IconSize = 40;
 
-    public PropertiesView()
-    {
-        Content = new ScrollViewer { VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Content = _body };
-        Show(null);
-    }
+    private readonly StackPanel _body = new() { Margin = new Thickness(12) };
 
     public void Show(ExplorerNode? node)
     {
@@ -45,14 +43,18 @@ public sealed class PropertiesView : UserControl
     private static UIElement Heading(ExplorerNode node)
     {
         var names = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
-        names.Children.Add(new TextBlock { Text = node.Header, FontSize = 16, FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap });
+        names.Children.Add(new TextBlock
+                           {
+                               Text         = node.Header, FontSize = 16, FontWeight = FontWeights.SemiBold,
+                               TextWrapping = TextWrapping.Wrap
+                           });
         names.Children.Add(Muted(node.Kind));
 
         if (node.Icon is null) return names;
 
         // the same icon the tree shows, at a fixed larger size, with the realm badge on its corner as in the tree
-        var picture = new Grid { Margin = new Thickness(0, 0, 12, 0), VerticalAlignment = VerticalAlignment.Center };
-        picture.Children.Add(new AppIcon { Icon = node.Icon, Size = IconSize });
+        var picture = new Grid { Margin         = new Thickness(0, 0, 12, 0), VerticalAlignment = VerticalAlignment.Center };
+        picture.Children.Add(new AppIcon { Icon = node.Icon, Size                               = IconSize });
         if (node.Realm != Realm.None)
             picture.Children.Add(new RealmBadge
                                  {
@@ -71,8 +73,14 @@ public sealed class PropertiesView : UserControl
         return row;
     }
 
-    /// <summary>The size of the icon in the heading (the tree's own is the person's "Icon Size" setting, 16 by default).</summary>
-    private const double IconSize = 40;
+    private static TextBlock Muted(string text)
+    {
+        return NodeViews.Muted(text);
+    }
 
-    private static TextBlock Muted(string text) => NodeViews.Muted(text);
+    public PropertiesView()
+    {
+        Content = new ScrollViewer { VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Content = _body };
+        Show(null);
+    }
 }

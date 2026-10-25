@@ -30,8 +30,8 @@ public abstract record WmiLocation(string Namespace)
     /// <summary>What to call this one in the Explorer: the last namespace name, the class, or the class and its key.</summary>
     public abstract string Label { get; }
 
-    /// <summary>The key of this kind of thing's icon in the icon dictionary, as a relative URI.</summary>
-    public abstract Uri Icon { get; }
+    /// <summary>This kind of thing's icon (a key in the icon dictionary).</summary>
+    public abstract IconRef Icon { get; }
 
     // a record compares its properties one by one, which would compare the list of properties by reference
     public virtual bool Equals(WmiLocation? other)
@@ -242,7 +242,7 @@ public record WmiRoot(string Namespace) : WmiLocation(Namespace)
 {
     public override string TypeName => "WMI Namespace";
     public override string Label    => Namespace.Split('\\', StringSplitOptions.RemoveEmptyEntries).LastOrDefault() ?? Namespace;
-    public override Uri    Icon     => new("Folder17", UriKind.Relative);
+    public override IconRef Icon    => IconRef.FromKey("Folder17");
 }
 
 /// <summary>A class, to look for instances of.</summary>
@@ -250,7 +250,7 @@ public record WmiClass(string Namespace, string ClassName) : WmiLocation(Namespa
 {
     public override string TypeName => "WMI Class";
     public override string Label    => ClassName;
-    public override Uri    Icon     => new("Cube", UriKind.Relative);
+    public override IconRef Icon    => IconRef.FromKey("Cube");
 }
 
 /// <summary>An instance of a class.</summary>
@@ -258,7 +258,7 @@ public record WmiPath(string Namespace, params WmiHop[] Hops) : WmiLocation(Name
 {
     public override string TypeName => "WMI Instance";
     public override string Label    => Hops.LastOrDefault() is { } hop ? hop.KeyProperty is null ? hop.ClassName : $"{hop.ClassName} ({hop.KeyProperty}={hop.Key})" : Namespace;
-    public override Uri    Icon     => new("Record", UriKind.Relative);
+    public override IconRef Icon    => IconRef.FromKey("Record");
 
     // the hops are an array, which a record compares by reference
     public virtual bool Equals(WmiPath? other)

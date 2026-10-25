@@ -6,7 +6,8 @@
 /// </summary>
 public interface INodeDetails
 {
-    Uri?   Icon { get; }
+    /// <summary>The node's icon: an icon key ("Plug") or a picture's address.</summary>
+    IconRef? Icon { get; }
     string Name { get; }
 
     /// <summary>What the node is, in words ("Folder", "Drive", "Junction"...).</summary>

@@ -407,14 +407,29 @@ public sealed partial class UnicodeExplorerView
         yield return UiKit.Rule();
         yield return Check("Codepoints", _settings.ShowCodepoints, () => SetPane(s => s.ShowCodepoints = !s.ShowCodepoints));
         yield return Check("Details", _settings.ShowDetails, () => SetPane(s => s.ShowDetails = !s.ShowDetails));
-        yield return Check("Collection", _settings.ShowCollection || IsCollectionUndocked, () => SetPane(s => s.ShowCollection = !s.ShowCollection), enabled: !IsCollectionUndocked,
-                           tip: IsCollectionUndocked ? "The collection is in a pane of its own (Dock Collection in Explorer puts it back)" : null);
-        yield return IsCollectionUndocked
-                         ? UiKit.Item("Dock Collection in Explorer", DockCollection, tip: "Put the collection back in its tab")
-                         : UiKit.Item("Undock Collection", UndockCollection, CanUndockCollection,
-                                      "Move the collection into a pane of its own beside the explorer; drag it anywhere, close it to put it back");
-        yield return Check("Generators", _settings.ShowGenerators, () => SetPane(s => s.ShowGenerators = !s.ShowGenerators));
-        yield return Check("Saved", _settings.ShowSaved, () => SetPane(s => s.ShowSaved = !s.ShowSaved));
+        foreach (var item in PartViewItems()) yield return item;
+    }
+
+    /// <summary>View items for the tabs under the list: show or hide each, and undock it into a pane of its own or dock it back.</summary>
+    private IEnumerable<Control> PartViewItems()
+    {
+        foreach (var part in _parts)
+        {
+            var  p        = part;
+            bool undocked = p.Pane is not null;
+            yield return Check(p.Name, p.IsShown(_settings) || undocked, () => SetPane(s => p.SetShown(s, !p.IsShown(s))), enabled: !undocked,
+                               tip: undocked ? $"The {p.Name.ToLowerInvariant()} is in a pane of its own (Dock {p.Name} in Explorer puts it back)" : null);
+        }
+
+        yield return UiKit.Rule();
+        foreach (var part in _parts)
+        {
+            var p = part;
+            yield return p.Pane is not null
+                             ? UiKit.Item($"Dock {p.Name} in Explorer", () => DockBack(p.Key), tip: $"Put the {p.Name.ToLowerInvariant()} back in its tab")
+                             : UiKit.Item($"Undock {p.Name}", () => Undock(p.Key), CanUndock(p.Key),
+                                          $"Move the {p.Name.ToLowerInvariant()} into a pane of its own beside the explorer; drag it anywhere, close it to put it back");
+        }
     }
 
     private void SetResultsView(bool list)

@@ -29,7 +29,7 @@ public sealed partial class UnicodeExplorerView : UserControl
     private readonly TabControl _bottomTabs = new() { Padding = new Thickness(4), Margin = new Thickness(0) };
     private readonly TabItem    _collectionTab = new() { Header = "Collection" };
     private readonly TabItem    _generateTab   = new() { Header = "Generate" };
-    private readonly TabItem    _savedTab      = new() { Header = "Saved" };
+    private readonly TabItem    _savedTab      = new() { Header = "Library" };
     private SavedItemsPanel     _saved = null!;
 
     private Grid         _rootGrid = null!;   // search bar, browser and details, collection tabs, status
@@ -55,9 +55,6 @@ public sealed partial class UnicodeExplorerView : UserControl
         Loaded   += OnLoaded;
         Unloaded += (_, _) => UnhookSiloWhenHidden();
 
-        // the collection may be showing in a pane of its own while the explorer is not: either one showing keeps the Silo hooked
-        _trayRoot.Loaded   += OnLoaded;
-        _trayRoot.Unloaded += (_, _) => UnhookSiloWhenHidden();
         PresentationSource.AddSourceChangedHandler(this, (_, _) => ApplyAlwaysOnTop());
         IsVisibleChanged += (_, _) => ApplyAlwaysOnTop();
     }
@@ -105,19 +102,26 @@ public sealed partial class UnicodeExplorerView : UserControl
         Grid.SetRow(_hsplit, 2);
         root.Children.Add(_hsplit);
 
-        _trayRoot              = (FrameworkElement)BuildTray(); // a DockPanel
-        _trayHome.Child        = _trayRoot;
-        _collectionTab.Content = _trayHome; // the collection can be undocked into a pane of its own (see .Dock)
-        _collectionTab.ContextMenu = new ContextMenu();
-        _collectionTab.ContextMenuOpening += (_, _) =>
-                                             {
-                                                 _collectionTab.ContextMenu!.Items.Clear();
-                                                 _collectionTab.ContextMenu.Items.Add(UiKit.Item("Undock Collection", UndockCollection, CanUndockCollection,
-                                                                                                 "Move the collection into a pane of its own beside the explorer; drag it anywhere, close it to put it back here"));
-                                             };
-        _saved                 = BuildSaved();
-        _savedTab.Content      = _saved;
-        _generateTab.Content   = BuildGenerate();
+        // each tab's contents can be undocked into a pane of their own (see .Dock)
+        AddPart(new DockPart
+                {
+                    Key = CollectionPaneKey, Name = "Collection", Tab = _collectionTab, Root = (FrameworkElement)BuildTray(),
+                    Title    = () => _tray.Count == 0 ? "Collection" : $"Collection ({_tray.Count:N0})",
+                    IsShown  = s => s.ShowCollection, SetShown = (s, v) => s.ShowCollection = v
+                });
+        AddPart(new DockPart
+                {
+                    Key = GeneratePaneKey, Name = "Generate", Tab = _generateTab, Root = (FrameworkElement)BuildGenerate(),
+                    Title    = () => "Generate",
+                    IsShown  = s => s.ShowGenerators, SetShown = (s, v) => s.ShowGenerators = v
+                });
+        _saved = BuildSaved();
+        AddPart(new DockPart
+                {
+                    Key = LibraryPaneKey, Name = "Library", Tab = _savedTab, Root = _saved,
+                    Title    = () => _saved.Count == 0 ? "Library" : $"Library ({_saved.Count:N0})",
+                    IsShown  = s => s.ShowSaved, SetShown = (s, v) => s.ShowSaved = v
+                });
         _bottomTabs.Items.Add(_collectionTab);
         _bottomTabs.Items.Add(_generateTab);
         _bottomTabs.Items.Add(_savedTab);
@@ -164,7 +168,7 @@ public sealed partial class UnicodeExplorerView : UserControl
     {
         Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () =>
                                                           {
-                                                              if (!IsLoaded && !_trayRoot.IsLoaded) UnhookSilo();
+                                                              if (!IsLoaded && !AnyPartLoaded) UnhookSilo();
                                                           });
     }
 

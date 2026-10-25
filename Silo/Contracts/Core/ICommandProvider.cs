@@ -85,7 +85,7 @@ public sealed record ProvidedCommand(
                                      CommandPlacement placement = CommandPlacement.Menu, string? gesture = null,
                                      bool isDefault = false, bool isDestructive = false, Func<bool>? isChecked = null)
     {
-        return new ProvidedCommand(id, command.Header, command, parameter, command.Icon as string, command.ToolTip, group, placement,
+        return new ProvidedCommand(id, command.Header, command, parameter, command.Icon?.Key, command.ToolTip, group, placement,
                                    gesture, isChecked, isDefault, isDestructive);
     }
 

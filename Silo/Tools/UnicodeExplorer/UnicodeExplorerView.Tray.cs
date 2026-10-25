@@ -2,6 +2,7 @@
 using System.Text;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media;
 using Microsoft.Win32;
 using Silo.Storage;
 using Silo.Ui.Windows;
@@ -24,9 +25,12 @@ public sealed partial class UnicodeExplorerView
     private readonly WrapPanel                _trayPanel = new() { Margin = new Thickness(2) };
     private readonly ScrollViewer             _trayScroll = new() { VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled, Focusable = true };
     private readonly TextBlock                _trayTitle = UiKit.Text("Collection", weight: FontWeights.SemiBold);
-    private readonly TextBlock                _trayHint  = UiKit.Text("Double-click a character above (or press Enter) to collect it. Paste text to collect its characters.", muted: true, wrap: true);
+    private readonly TextBlock                _trayHint  = UiKit.Text("Double-click a character above (or press Enter) to collect it, or drag characters here. Paste text to collect its characters.", muted: true, wrap: true);
     private int                               _trayAnchor = -1;
     private bool                              _trayLoading;
+    private Point?                            _trayPressAt;          // where the left button went down on a cell (a drag starts from there)
+    private int                               _trayPressIndex = -1;
+    private int                               _trayDeferredSelect = -1; // a plain click on one of several selected cells: selects just it on release, unless it was a drag
 
     // ---- building ------------------------------------------------------------------------------------------------
 
@@ -50,7 +54,11 @@ public sealed partial class UnicodeExplorerView
         var frame = new Border { BorderThickness = new Thickness(1) };
         frame.SetResourceReference(Border.BorderBrushProperty, "Theme.Border");
         frame.SetResourceReference(Border.BackgroundProperty, "Theme.BackgroundAlt");
-        var inner = new Grid();
+        var inner = new Grid { Background = Brushes.Transparent, AllowDrop = true }; // transparent: the empty area takes drops too
+        inner.DragEnter += OnTrayDragOver;
+        inner.DragOver  += OnTrayDragOver;
+        inner.DragLeave += (_, _) => GlyphDrag.Unmark(_trayPanel);
+        inner.Drop      += OnTrayDrop;
         _trayHint.Margin = new Thickness(8);
         _trayHint.VerticalAlignment = VerticalAlignment.Center;
         _trayHint.HorizontalAlignment = HorizontalAlignment.Center;
@@ -280,11 +288,33 @@ public sealed partial class UnicodeExplorerView
             cell.MouseLeave += (_, _) => UiKit.Paint(cell, _traySel.Contains(index));
             cell.MouseLeftButtonDown += (_, e) =>
                                         {
-                                            TrayClick(index);
+                                            _trayPressAt    = e.GetPosition(_trayPanel);
+                                            _trayPressIndex = index;
+
+                                            // pressing one of several selected cells may start dragging them all: what it selects waits for the release
+                                            if (Keyboard.Modifiers == ModifierKeys.None && _traySel.Count > 1 && _traySel.Contains(index) && e.ClickCount == 1)
+                                                _trayDeferredSelect = index;
+                                            else TrayClick(index);
+
                                             _trayScroll.Focus();
                                             if (e.ClickCount == 2) LabelSelected();
                                             e.Handled = true;
                                         };
+            cell.MouseMove += (_, e) =>
+                              {
+                                  if (_trayPressAt is not { } start || _trayPressIndex != index || e.LeftButton != MouseButtonState.Pressed) return;
+                                  if (!GlyphDrag.FarEnough(start, e.GetPosition(_trayPanel))) return;
+
+                                  _trayPressAt        = null;
+                                  _trayDeferredSelect = -1;
+                                  DragFromTray(cell, index);
+                              };
+            cell.MouseLeftButtonUp += (_, _) =>
+                                      {
+                                          if (_trayDeferredSelect == index) SelectTray(index);
+                                          _trayDeferredSelect = -1;
+                                          _trayPressAt        = null;
+                                      };
             cell.ContextMenu = new ContextMenu();
             cell.ContextMenuOpening += (_, _) =>
                                        {
@@ -404,6 +434,78 @@ public sealed partial class UnicodeExplorerView
         }
 
         e.Handled = true;
+    }
+
+    // ---- drag and drop ------------------------------------------------------------------------------------------
+
+    /// <summary>Drags the selected characters (or the one under the mouse when it is not selected): out to a palette, another program, or to a new place in the collection.</summary>
+    private void DragFromTray(Border cell, int index)
+    {
+        var indexes = _traySel.Contains(index) ? _traySel.Where(i => i < _tray.Count).OrderBy(i => i).ToList() : new List<int> { index };
+        if (!_traySel.Contains(index)) SelectTray(index);
+
+        var codePoints = indexes.Select(i => _tray[i].CodePoint.Value).ToList();
+        DragDrop.DoDragDrop(cell, GlyphDrag.Create(codePoints, _tray, indexes), DragDropEffects.Copy | DragDropEffects.Move);
+        GlyphDrag.Unmark(_trayPanel);
+    }
+
+    private void OnTrayDragOver(object sender, DragEventArgs e)
+    {
+        if (GlyphDrag.Read(e.Data) is not { } payload)
+        {
+            e.Effects = DragDropEffects.None;
+            GlyphDrag.Unmark(_trayPanel);
+        }
+        else
+        {
+            e.Effects = ReferenceEquals(payload.Source, _tray) ? DragDropEffects.Move : DragDropEffects.Copy;
+            GlyphDrag.Mark(_trayPanel, GlyphDrag.DropIndex(_trayPanel, e.GetPosition(_trayPanel)));
+        }
+
+        e.Handled = true;
+    }
+
+    /// <summary>Characters from the collection move to where they are dropped; characters from anywhere else are collected there (ones already collected are not).</summary>
+    private void OnTrayDrop(object sender, DragEventArgs e)
+    {
+        GlyphDrag.Unmark(_trayPanel);
+        e.Handled = true;
+        if (GlyphDrag.Read(e.Data) is not { } payload) return;
+
+        int at = GlyphDrag.DropIndex(_trayPanel, e.GetPosition(_trayPanel));
+        if (ReferenceEquals(payload.Source, _tray))
+        {
+            int first = PaletteRules.Move(_tray, payload.Indexes, at);
+            if (first < 0) return;
+
+            _traySel.Clear();
+            for (int i = 0; i < payload.Indexes.Count; i++) _traySel.Add(first + i);
+            _trayAnchor = first;
+            RefreshTray();
+            SaveTray();
+            e.Effects = DragDropEffects.Move;
+            return;
+        }
+
+        var have  = _tray.Select(c => c.CodePoint.Value).ToHashSet();
+        var fresh = payload.CodePoints.Where(have.Add).Where(IsCollectable).ToList();
+        if (fresh.Count == 0)
+        {
+            Say("Those characters are already in the collection.");
+            return;
+        }
+
+        if (!HasTrayRoom(fresh.Count)) return;
+
+        at = Math.Clamp(at, 0, _tray.Count);
+        _tray.InsertRange(at, fresh.Select(v => new CollectedCharacter(new CodePoint(v))));
+        _traySel.Clear();
+        for (int i = 0; i < fresh.Count; i++) _traySel.Add(at + i);
+        _trayAnchor = at;
+        RefreshTray();
+        SaveTray();
+        Say($"Collected {fresh.Count:N0} character{(fresh.Count == 1 ? "" : "s")}.");
+        e.Effects = DragDropEffects.Copy;
     }
 
     // ---- copy ----------------------------------------------------------------------------------------------------

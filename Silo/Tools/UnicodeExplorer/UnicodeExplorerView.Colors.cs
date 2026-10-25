@@ -91,6 +91,7 @@ public sealed partial class UnicodeExplorerView
         if (_colors.Set(codePoints, index))
         {
             SaveColors();
+            PaletteService.Current.RefreshAll(); // the palettes show the marks too
             _view.Refresh();
             if (_tray.Count > 0) RefreshTray();
             if (ColorFilter is not null) Schedule(immediate: true);

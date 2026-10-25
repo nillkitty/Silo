@@ -1,15 +1,14 @@
 ﻿using System.Collections.ObjectModel;
 using System.Collections.Specialized;
-using System.IO;
 using Microsoft.Win32;
 using Serilog;
+using Silo.Commanding;
 using Silo.Connectors;
 using Silo.Credentials;
 using Silo.Crypto;
 using Silo.DbModel.Sqlite;
 using Silo.Hosting;
 using Silo.Providers.Crypto;
-using Silo.Providers.Data;
 using Silo.Providers.Data.Validation;
 using Silo.Remote;
 using Silo.Settings;
@@ -201,7 +200,7 @@ public partial class OpenSilo : ModelBase
                          Components = cc
                      };
         a.NotifySiloOpening(c, c);
-        c.Attach(Database.Load(file));
+        c.Attach(App.Require<ISiloLoader>().Load(new FileInfo(full)));
         a.NotifySiloOpened(c, c);
         c.BeginRestoreConnections();
         return c;
@@ -218,7 +217,7 @@ public partial class OpenSilo : ModelBase
             return;
 
         Log.Warning("'{Path}' contains program files that this version of Silo does not load: {Files}", path, string.Join(", ", programs));
-        MessageBox.Show(SiloContentScan.WarningText(programs), AppIdentity.AppName, MessageBoxButton.OK, MessageBoxImage.Warning);
+        MessageBox.Show(SiloContentScan.WarningText(programs), AppIdentity.Get().AppName, MessageBoxButton.OK, MessageBoxImage.Warning);
     }
 
     /// <summary>

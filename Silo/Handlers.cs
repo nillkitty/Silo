@@ -1,10 +1,6 @@
-using System;
-using System.Collections.Generic;
-using System.Text;
-using System.Windows;
 using Silo.Extensions;
 
-namespace Silo;
+namespace Silo.ViewModel;
 
 internal static class Handlers
 {

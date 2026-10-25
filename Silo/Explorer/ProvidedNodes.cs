@@ -133,10 +133,11 @@ public static class ProvidedNodes
                };
     }
 
-    // a node's Icon is a URI; here a resource key (e.g. "Plug") written as a relative URI is understood, anything else falls back to the kind's icon
+    // the Explorer draws icon geometry: a node's icon key (e.g. "Plug") is used when there is such an icon; a picture, or no icon,
+    // falls back to the kind's icon
     private static string IconKeyOf(SiloNode source, string kind)
     {
-        string? given = source.Icon is { IsAbsoluteUri: false } icon ? icon.OriginalString : null;
+        string? given = source.Icon?.Key;
         if (!string.IsNullOrEmpty(given) && Application.Current?.TryFindResource(given) is Geometry) return given;
 
         return kind switch

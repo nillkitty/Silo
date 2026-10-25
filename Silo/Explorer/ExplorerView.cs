@@ -12,14 +12,14 @@ using Silo.Bindings;
 using Silo.Clipboarding;
 using Silo.Commanding;
 using Silo.Connectors;
-using Silo.Definitions;
+using Silo.Converters;
 using Silo.Design;
 using Silo.Drawio;
 using Silo.Model;
-using Silo.Providers.Data;
 using Silo.Tabular;
 using Silo.Toolbar;
 using Silo.Ui;
+using Typing;
 
 namespace Silo.Explorer;
 

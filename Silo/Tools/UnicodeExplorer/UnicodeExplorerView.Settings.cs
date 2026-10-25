@@ -160,6 +160,7 @@ public sealed partial class UnicodeExplorerView
         _settings.ColorMode = mode;
         SaveSettings();
         _view.ColorMode = mode;
+        PaletteService.Current.RefreshAll();
         if (_tray.Count > 0) RefreshTray();
         UpdateColorStrip();
     }
@@ -190,13 +191,17 @@ public sealed partial class UnicodeExplorerView
         inspectorColumn.MinWidth  = details && list ? 220 : 0;
 
         // the tabs below
-        bool collectionHere = _settings.ShowCollection && !IsCollectionUndocked; // an undocked collection has a pane of its own (see .Dock)
-        _collectionTab.Visibility = collectionHere ? Visibility.Visible : Visibility.Collapsed;
-        _generateTab.Visibility   = _settings.ShowGenerators ? Visibility.Visible : Visibility.Collapsed;
-        _savedTab.Visibility      = _settings.ShowSaved ? Visibility.Visible : Visibility.Collapsed;
-        bool anyTab = collectionHere || _settings.ShowGenerators || _settings.ShowSaved;
+        // a tab whose contents are undocked has a pane of its own (see .Dock)
+        bool anyTab = false;
+        foreach (var part in _parts)
+        {
+            bool here = part.IsShown(_settings) && part.Pane is null;
+            part.Tab.Visibility = here ? Visibility.Visible : Visibility.Collapsed;
+            anyTab |= here;
+        }
+
         if (_bottomTabs.SelectedItem is TabItem { Visibility: not Visibility.Visible } || _bottomTabs.SelectedItem is null)
-            _bottomTabs.SelectedItem = new[] { _collectionTab, _generateTab, _savedTab }.FirstOrDefault(t => t.Visibility == Visibility.Visible);
+            _bottomTabs.SelectedItem = _parts.Select(p => p.Tab).FirstOrDefault(t => t.Visibility == Visibility.Visible);
 
         bool anyTop = list || details;
         var bottomRow = _rootGrid.RowDefinitions[3];

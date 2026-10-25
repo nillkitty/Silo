@@ -1,10 +1,10 @@
 using Silo.Model;
-using Silo.Providers.Data;
 using Silo.Providers.Definitions;
 using Silo.Ui.Windows;
+using Typing;
 using EnumType = Silo.DbModel.Meta.EnumType;
 
-namespace Silo.Definitions;
+namespace Silo.Typing;
 
 /// <summary>
 ///     What can be done to the enums and syntaxes of a Silo from the screens (the lists and the Explorer's menus): create,

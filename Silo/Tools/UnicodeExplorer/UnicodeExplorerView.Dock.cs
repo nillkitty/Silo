@@ -1,41 +1,91 @@
 using System.ComponentModel;
 using System.Windows.Controls;
 using AvalonDock.Layout;
+using Silo.Unicode;
 
 namespace Silo.Tools.UnicodeExplorer;
 
 /// <summary>
-///     The collection can leave its tab: Undock Collection puts it in a dock pane of its own, placed beside the explorer's pane (in the main
-///     window's dock area, or in the explorer's floating window). From there it can be dragged anywhere AvalonDock allows, including back next to
-///     the explorer as a tab or a split. Closing that pane puts the collection back in its tab. The pane is part of the main window's saved dock
-///     layout (ContentId <c>tool:unicodeexplorer/collection</c>, see <see cref="ToolBase.ExtraPaneKeys" />).
+///     The tabs under the list (Collection, Generate, Library) can each leave the explorer: Undock puts the tab's contents in a dock pane of its own,
+///     placed beside the explorer's pane (in the main window's dock area, or in the explorer's floating window). From there it can be dragged anywhere
+///     AvalonDock allows, including back next to the explorer as a tab or a split. Closing that pane puts the contents back in their tab. The panes are
+///     part of the main window's saved dock layout (ContentId <c>tool:unicodeexplorer/&lt;key&gt;</c>, see <see cref="ToolBase.ExtraPaneKeys" />).
 /// </summary>
 /// <remarks>
-///     The collection's controls are one element (<see cref="_trayRoot" />) that moves between two <see cref="Decorator" />s: the one in the tab and
-///     one made for each pane. A Decorator lets go of its child at once, so the element is never still held by the place it is leaving (a
-///     ContentPresenter only lets go on its next layout pass, which a pane that left the layout never gets).
+///     A part's controls are one element (<see cref="DockPart.Root" />) that moves between <see cref="Decorator" />s: the one in its tab and one made
+///     for each pane. A Decorator lets go of its child at once, so the element is never still held by the place it is leaving (a ContentPresenter
+///     only lets go on its next layout pass, which a pane that left the layout never gets).
 /// </remarks>
 public sealed partial class UnicodeExplorerView
 {
     internal const string CollectionPaneKey = "collection";
+    internal const string GeneratePaneKey   = "generate";
+    internal const string LibraryPaneKey    = "library";
 
-    private          FrameworkElement  _trayRoot = null!;     // the collection's controls (BuildTray)
-    private readonly Decorator         _trayHome = new();     // their place in the Collection tab
-    private          LayoutAnchorable? _collectionPane;       // the pane they are in while undocked
-    private          bool              _closingCollectionPane; // the pane is being taken down on purpose: its Hiding/Closing is not a request to dock back
+    /// <summary>The keys of the parts that can be undocked, in tab order.</summary>
+    internal static readonly string[] PartKeys = [CollectionPaneKey, GeneratePaneKey, LibraryPaneKey];
 
-    /// <summary>Whether the collection is in a pane of its own.</summary>
-    internal bool IsCollectionUndocked => _collectionPane is not null;
+    /// <summary>One tab under the list whose contents can live in a pane of their own.</summary>
+    private sealed class DockPart
+    {
+        public required string                   Key       { get; init; }
+        public required string                   Name      { get; init; }   // "Collection"
+        public required TabItem                  Tab       { get; init; }
+        public required FrameworkElement         Root      { get; init; }   // the controls that move
+        public required Func<string>             Title     { get; init; }   // the tab's and pane's title, with a count when it has one
+        public required Func<ExplorerSettings, bool>   IsShown  { get; init; }
+        public required Action<ExplorerSettings, bool> SetShown { get; init; }
+        public          Decorator                Home      { get; } = new();
+        public          LayoutAnchorable?        Pane      { get; set; }
+        public          bool                     TakingDown { get; set; } // the pane is being taken down on purpose: its Hiding/Closing is not a request to dock back
+    }
+
+    private readonly List<DockPart> _parts = [];
+
+    private DockPart Part(string key) => _parts.First(p => p.Key == key);
+
+    /// <summary>Puts a part's controls in its tab (through its holder), with the tab's undock menu; called once per part while the layout is built.</summary>
+    private void AddPart(DockPart part)
+    {
+        _parts.Add(part);
+        part.Home.Child  = part.Root;
+        part.Tab.Content = part.Home;
+        part.Tab.Header  = part.Title();
+        part.Tab.ContextMenu = new ContextMenu();
+        part.Tab.ContextMenuOpening += (_, _) =>
+                                       {
+                                           part.Tab.ContextMenu!.Items.Clear();
+                                           part.Tab.ContextMenu.Items.Add(UiKit.Item($"Undock {part.Name}", () => Undock(part.Key), CanUndock(part.Key),
+                                                                                     $"Move the {part.Name.ToLowerInvariant()} into a pane of its own beside the explorer; drag it anywhere, close it to put it back here"));
+                                       };
+
+        // a part showing in a pane of its own keeps the Silo hooked even while the explorer is not showing
+        part.Root.Loaded   += OnLoaded;
+        part.Root.Unloaded += (_, _) => UnhookSiloWhenHidden();
+    }
+
+    /// <summary>Whether any part is showing right now (in its tab or in a pane).</summary>
+    private bool AnyPartLoaded => _parts.Any(p => p.Root.IsLoaded);
+
+    internal bool IsUndocked(string key) => Part(key).Pane is not null;
 
     /// <summary>Undocking needs the main window's dock area (the explorer must be a pane there, docked or floating).</summary>
-    private bool CanUndockCollection => _collectionPane is null && Pane is { Root: not null };
+    private bool CanUndock(string key) => Part(key).Pane is null && Pane is { Root: not null };
+
+    // the collection's own names, used across the explorer
+    internal bool IsCollectionUndocked => IsUndocked(CollectionPaneKey);
+    private bool  CanUndockCollection  => CanUndock(CollectionPaneKey);
+    private void  UndockCollection()   => Undock(CollectionPaneKey);
+    private void  DockCollection()     => DockBack(CollectionPaneKey);
+    private void  BringCollectionForward() => BringForward(CollectionPaneKey);
 
     // ---- undock and dock ---------------------------------------------------------------------------------------
 
-    /// <summary>Edit/View/tab menu: moves the collection into a pane of its own beside the explorer, or shows that pane when it already is.</summary>
-    private void UndockCollection()
+    /// <summary>Moves a part into a pane of its own beside the explorer, or shows that pane when it already is.</summary>
+    private void Undock(string key)
     {
-        if (_collectionPane is { } open)
+        var part = Part(key);
+        if (part.Pane is { } open)
         {
             if (!open.IsVisible) open.Show();
             open.IsActive = true;
@@ -44,25 +94,26 @@ public sealed partial class UnicodeExplorerView
 
         if (Pane is not { Root: not null } explorer)
         {
-            Say("The collection can be undocked when the explorer is a pane in the main window.");
+            Say($"The {part.Name.ToLowerInvariant()} can be undocked when the explorer is a pane in the main window.");
             return;
         }
 
-        var pane = MakeCollectionPane(TakeCollectionForPane());
+        var pane = MakePane(part, TakePartForPane(key));
         PlaceBeside(explorer, pane);
-        AdoptCollectionPane(pane);
+        AdoptPartPane(key, pane);
         pane.IsSelected = true;
         pane.IsActive   = true;
-        Say("The collection is in a pane of its own: drag its title to move it, close it to put it back in its tab.");
+        Say($"The {part.Name.ToLowerInvariant()} is in a pane of its own: drag its title to move it, close it to put it back in its tab.");
     }
 
-    /// <summary>Takes the collection out of its pane and puts it back in its tab.</summary>
-    private void DockCollection()
+    /// <summary>Takes a part out of its pane and puts it back in its tab.</summary>
+    private void DockBack(string key)
     {
-        if (_collectionPane is not { } pane) return;
+        var part = Part(key);
+        if (part.Pane is not { } pane) return;
 
-        _collectionPane = null;
-        _closingCollectionPane = true;
+        part.Pane       = null;
+        part.TakingDown = true;
         try
         {
             if (pane.Content is Decorator carrier) carrier.Child = null;
@@ -75,105 +126,122 @@ public sealed partial class UnicodeExplorerView
         }
         finally
         {
-            _closingCollectionPane = false;
+            part.TakingDown = false;
         }
 
-        GoHome();
-        _settings.ShowCollection = true;
+        GoHome(part);
+        part.SetShown(_settings, true);
         SaveSettings();
         ApplyPanes();
-        _bottomTabs.SelectedItem = _collectionTab;
-        Say("The collection is back in its tab.");
+        _bottomTabs.SelectedItem = part.Tab;
+        Say($"The {part.Name.ToLowerInvariant()} is back in its tab.");
     }
 
-    /// <summary>Puts the collection's controls back in the tab (wherever they are now).</summary>
-    private void GoHome()
+    /// <summary>Puts a part's controls back in its tab (wherever they are now).</summary>
+    private static void GoHome(DockPart part)
     {
-        Detach();
-        _trayHome.Child = _trayRoot;
+        Detach(part);
+        part.Home.Child = part.Root;
     }
 
-    /// <summary>Takes the collection's controls out of the tab or the pane they are in.</summary>
-    private void Detach()
+    /// <summary>Takes a part's controls out of the tab or the pane they are in.</summary>
+    private static void Detach(DockPart part)
     {
-        if (_trayRoot.Parent is Decorator holder) holder.Child = null;
+        if (part.Root.Parent is Decorator holder) holder.Child = null;
     }
 
-    /// <summary>Shows the collection wherever it is: its pane (brought forward) or its tab (selected).</summary>
-    private void BringCollectionForward()
+    /// <summary>Shows a part wherever it is: its pane (brought forward) or its tab (selected).</summary>
+    private void BringForward(string key)
     {
-        if (_collectionPane is { } pane)
+        var part = Part(key);
+        if (part.Pane is { } pane)
         {
             if (!pane.IsVisible) pane.Show();
             pane.IsSelected = true;
             return;
         }
 
-        _bottomTabs.SelectedItem = _collectionTab;
+        if (!part.IsShown(_settings))
+        {
+            part.SetShown(_settings, true);
+            SaveSettings();
+            ApplyPanes();
+        }
+
+        _bottomTabs.SelectedItem = part.Tab;
     }
 
     // ---- what the dock layout calls (through UnicodeExplorerTool) ----------------------------------------------
 
-    /// <summary>The collection's controls, taken out of wherever they are, in a holder of their own for a pane to show.</summary>
-    internal UIElement TakeCollectionForPane()
+    /// <summary>A part's controls, taken out of wherever they are, in a holder of their own for a pane to show (null: no such part).</summary>
+    internal UIElement? TakePartForPane(string key)
     {
-        Detach();
-        return new Decorator { Child = _trayRoot };
+        if (_parts.FirstOrDefault(p => p.Key == key) is not { } part) return null;
+
+        Detach(part);
+        return new Decorator { Child = part.Root };
     }
 
     /// <summary>
-    ///     The pane that shows the collection now (one this view made, or one a saved layout put back), or null when there is none: the collection then
-    ///     goes back in its tab. A pane the layout keeps hidden is not used, so the collection never ends up out of sight.
+    ///     The pane that shows a part now (one this view made, or one a saved layout put back), or null when there is none: the part then goes back in
+    ///     its tab. A pane the layout keeps hidden is not used, so the part never ends up out of sight.
     /// </summary>
-    internal void AdoptCollectionPane(LayoutAnchorable? pane)
+    internal void AdoptPartPane(string key, LayoutAnchorable? pane)
     {
+        if (_parts.FirstOrDefault(p => p.Key == key) is not { } part) return;
+
         if (pane is { IsHidden: true })
         {
-            _collectionPane = pane;
-            DockCollection();
+            part.Pane = pane;
+            DockBack(key);
             return;
         }
 
-        _collectionPane = pane;
+        part.Pane = pane;
         if (pane is null)
         {
-            if (!ReferenceEquals(_trayHome.Child, _trayRoot)) GoHome();
+            if (!ReferenceEquals(part.Home.Child, part.Root)) GoHome(part);
             ApplyPanes();
             return;
         }
 
-        pane.Title = CollectionPaneTitle;
-        pane.CanHide = true;
+        pane.Title    = part.Title();
+        pane.CanHide  = true;
         pane.CanClose = false;
-        pane.Hiding -= OnCollectionPaneHiding;
-        pane.Hiding += OnCollectionPaneHiding;
-        pane.Closing -= OnCollectionPaneClosing;
-        pane.Closing += OnCollectionPaneClosing;
+        pane.Hiding  -= OnPartPaneHiding;
+        pane.Hiding  += OnPartPaneHiding;
+        pane.Closing -= OnPartPaneHiding;
+        pane.Closing += OnPartPaneHiding;
         ApplyPanes();
     }
 
-    private LayoutAnchorable MakeCollectionPane(UIElement content)
+    private LayoutAnchorable MakePane(DockPart part, UIElement? content)
     {
         return new LayoutAnchorable
                {
-                   Title          = CollectionPaneTitle,
-                   ContentId      = Pane is { } p ? p.ContentId + "/" + CollectionPaneKey : "tool:unicodeexplorer/" + CollectionPaneKey,
+                   Title          = part.Title(),
+                   ContentId      = (Pane is { } p ? p.ContentId : "tool:unicodeexplorer") + "/" + part.Key,
                    Content        = content,
                    CanFloat       = true,
                    CanHide        = true,
                    CanClose       = false,
                    FloatingWidth  = 560,
-                   FloatingHeight = 280
+                   FloatingHeight = 300
                };
     }
 
-    private string CollectionPaneTitle => _tray.Count == 0 ? "Collection" : $"Collection ({_tray.Count:N0})";
-
-    /// <summary>Keeps the pane's title in step with the count (RefreshTray calls it).</summary>
-    private void UpdateCollectionPaneTitle()
+    /// <summary>Keeps a part's tab header and pane title in step with its count.</summary>
+    private void UpdatePartTitle(string key)
     {
-        if (_collectionPane is { } pane) pane.Title = CollectionPaneTitle;
+        if (_parts.FirstOrDefault(p => p.Key == key) is not { } part) return;
+
+        string title = part.Title();
+        part.Tab.Header = title;
+        if (part.Pane is { } pane) pane.Title = title;
     }
+
+    /// <summary>The collection's title changed (RefreshTray calls it).</summary>
+    private void UpdateCollectionPaneTitle() => UpdatePartTitle(CollectionPaneKey);
 
     /// <summary>
     ///     Places the new pane in a group of its own right after the explorer's group, in the same container: to the right of it when that container
@@ -206,19 +274,14 @@ public sealed partial class UnicodeExplorerView
         }
     }
 
-    // ---- the pane's own X ---------------------------------------------------------------------------------------
+    // ---- a pane's own X -------------------------------------------------------------------------------------------
 
-    private void OnCollectionPaneHiding(object? sender, CancelEventArgs e)
+    private void OnPartPaneHiding(object? sender, CancelEventArgs e)
     {
-        if (_closingCollectionPane || !ReferenceEquals(sender, _collectionPane)) return;
+        if (_parts.FirstOrDefault(p => ReferenceEquals(p.Pane, sender)) is not { TakingDown: false } part) return;
 
         // closing the pane means "put it back": done once AvalonDock has finished with the click
         e.Cancel = true;
-        Dispatcher.BeginInvoke(DockCollection);
-    }
-
-    private void OnCollectionPaneClosing(object? sender, CancelEventArgs e)
-    {
-        OnCollectionPaneHiding(sender, e);
+        Dispatcher.BeginInvoke(() => DockBack(part.Key));
     }
 }

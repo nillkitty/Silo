@@ -13,7 +13,7 @@ public abstract record SiloCommand(
     Enabler.EnablerFunc? ItemEnabler = null,
     Checker.CheckerFunc? Checker     = null,
     string?              ToolTip     = null,
-    object?              Icon        = null,
+    IconRef?             Icon        = null,
     bool                 IsCheckable = false) : AppCommand(Header, null, null, ToolTip, Icon, IsCheckable, Checker)
 {
 }

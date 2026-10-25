@@ -6,7 +6,8 @@
         xmlns:xcadLayout="clr-namespace:AvalonDock.Layout;assembly=AvalonDock"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:l="clr-namespace:Silo"
-        xmlns:ui="clr-namespace:Silo.Ui"
+        xmlns:ui="clr-namespace:Silo.Ui" 
+        xmlns:converters="clr-namespace:Silo.Converters"
         mc:Ignorable="d"
         Background="{DynamicResource Theme.Background}"
         Foreground="{DynamicResource Theme.Text}"
@@ -58,7 +59,7 @@
         -->
         <HierarchicalDataTemplate x:Key="NavNodeTemplate" ItemsSource="{Binding Children}">
             <StackPanel Orientation="Horizontal">
-                <l:AppIcon Icon="{Binding Item.Icon}" Size="{Binding IconSize}" Margin="0,0,6,0" />
+                <converters:AppIcon Icon="{Binding Item.Icon}" Size="{Binding IconSize}" Margin="0,0,6,0" />
                 <TextBlock x:Name="NavNodeText" Text="{Binding Header}" VerticalAlignment="Center" />
             </StackPanel>
             <HierarchicalDataTemplate.Triggers>
@@ -106,7 +107,7 @@
                           Click="NavRailButton_Click"
                           IsChecked="{Binding IsActiveRoot, Mode=OneWay}"
                           ToolTip="{Binding Header}">
-                <l:AppIcon Icon="{Binding Item.Icon}" />
+                <converters:AppIcon Icon="{Binding Item.Icon}" />
             </ToggleButton>
             <DataTemplate.Triggers>
                 <DataTrigger Binding="{Binding IsHidden}" Value="True">

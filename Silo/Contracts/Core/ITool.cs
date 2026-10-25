@@ -22,9 +22,9 @@ public interface ITool
     string? GroupName { get; }
 
     /// <summary>
-    ///     Gets the source of an optional icon.
+    ///     Gets the tool's optional icon: an icon key ("Settings") or a picture's address.
     /// </summary>
-    ImageSource? Icon { get; }
+    IconRef? Icon { get; }
 
     /// <summary>
     ///     Gets whether the tool's window is currently open.  Drives the checkmark

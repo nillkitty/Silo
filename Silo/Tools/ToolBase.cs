@@ -30,7 +30,7 @@ public abstract class ToolBase : ITool, ICommand, INotifyPropertyChanged
     /// </summary>
     public string Header => DisplayName ?? Name;
 
-    public ImageSource Icon { get; set; }
+    public IconRef? Icon { get; set; }
 
     /// <summary>
     ///     Reflects whether this tool's window is currently open.  There is exactly one

@@ -1,12 +1,10 @@
 using System.ComponentModel;
 using System.Globalization;
-using System.Linq;
-using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Markup;
 using System.Windows.Media;
 
-namespace Silo;
+namespace Silo.Converters;
 
 /// <summary>
 ///     Lets <see cref="AppIcon.Icon" />/<see cref="AppIconExtension.Icon" /> be set from a
@@ -23,8 +21,10 @@ namespace Silo;
 /// </summary>
 public sealed class IconKeyConverter : TypeConverter
 {
-    public override bool CanConvertFrom(ITypeDescriptorContext? context, Type sourceType) =>
-        sourceType == typeof(string) || base.CanConvertFrom(context, sourceType);
+    public override bool CanConvertFrom(ITypeDescriptorContext? context, Type sourceType)
+    {
+        return sourceType == typeof(string) || base.CanConvertFrom(context, sourceType);
+    }
 
     public override object ConvertFrom(ITypeDescriptorContext? context, CultureInfo? culture, object value)
     {
@@ -36,8 +36,8 @@ public sealed class IconKeyConverter : TypeConverter
             if (Application.Current?.TryFindResource(candidate) is Geometry g)
                 return g;
 
-        throw new InvalidOperationException(
-            $"AppIcon: no Geometry resource found for icon key '{key}' (tried: {string.Join(", ", tried)}).");
+        throw new
+            InvalidOperationException($"AppIcon: no Geometry resource found for icon key '{key}' (tried: {string.Join(", ", tried)}).");
     }
 
     private static IEnumerable<string> _candidates(string key)
@@ -87,8 +87,16 @@ public sealed class IconKeyConverter : TypeConverter
 /// </example>
 public class AppIcon : Control
 {
-    public static readonly DependencyProperty IconProperty =
-        DependencyProperty.Register(nameof(Icon), typeof(Geometry), typeof(AppIcon));
+    public static readonly DependencyProperty IconProperty = DependencyProperty.Register(nameof(Icon), typeof(Geometry), typeof(AppIcon));
+
+    /// <summary>
+    ///     The icon as data (<see cref="IconRef" />): setting it sets <see cref="Icon" /> to that key's geometry. Lets a template bind
+    ///     a model's <c>IconRef</c> straight to an AppIcon (<c>Source="{Binding Icon}"</c>) without a converter. A picture's address
+    ///     cannot be drawn by an AppIcon (it draws geometry only): use <c>IconResolver.ElementFor</c> where either can come.
+    /// </summary>
+    public static readonly DependencyProperty SourceProperty =
+        DependencyProperty.Register(nameof(Source), typeof(IconRef), typeof(AppIcon),
+                                    new FrameworkPropertyMetadata(null, (d, e) => ((AppIcon)d).Icon = Silo.Design.IconResolver.GeometryOf(e.NewValue as IconRef)));
 
     public static readonly DependencyProperty SizeProperty =
         DependencyProperty.Register(nameof(Size), typeof(double), typeof(AppIcon), new FrameworkPropertyMetadata(16d));
@@ -103,18 +111,17 @@ public class AppIcon : Control
     public static readonly DependencyProperty StrokeThicknessProperty =
         DependencyProperty.Register(nameof(StrokeThickness), typeof(double), typeof(AppIcon), new FrameworkPropertyMetadata(0d));
 
-    static AppIcon()
-    {
-        // Falls back to searching for an implicit Style keyed off this type (see App.xaml)
-        // before ever consulting a Generic.xaml theme dictionary - we don't have/need one.
-        DefaultStyleKeyProperty.OverrideMetadata(typeof(AppIcon), new FrameworkPropertyMetadata(typeof(AppIcon)));
-    }
-
     [TypeConverter(typeof(IconKeyConverter))]
     public Geometry? Icon
     {
         get => (Geometry?)GetValue(IconProperty);
         set => SetValue(IconProperty, value);
+    }
+
+    public IconRef? Source
+    {
+        get => (IconRef?)GetValue(SourceProperty);
+        set => SetValue(SourceProperty, value);
     }
 
     public double Size
@@ -127,6 +134,13 @@ public class AppIcon : Control
     {
         get => (double)GetValue(StrokeThicknessProperty);
         set => SetValue(StrokeThicknessProperty, value);
+    }
+
+    static AppIcon()
+    {
+        // Falls back to searching for an implicit Style keyed off this type (see App.xaml)
+        // before ever consulting a Generic.xaml theme dictionary - we don't have/need one.
+        DefaultStyleKeyProperty.OverrideMetadata(typeof(AppIcon), new FrameworkPropertyMetadata(typeof(AppIcon)));
     }
 }
 
@@ -167,20 +181,6 @@ public class AppIconExtension : MarkupExtension
 
     public double StrokeThickness { get; set; }
 
-    public AppIconExtension()
-    {
-    }
-
-    public AppIconExtension(Geometry? icon)
-    {
-        Icon = icon;
-    }
-
-    public AppIconExtension(string iconKey)
-    {
-        Icon = (Geometry)new IconKeyConverter().ConvertFrom(null!, null, iconKey)!;
-    }
-
     public override object ProvideValue(IServiceProvider serviceProvider)
     {
         var icon = new AppIcon
@@ -194,5 +194,19 @@ public class AppIconExtension : MarkupExtension
             icon.Size = size;
 
         return icon;
+    }
+
+    public AppIconExtension()
+    {
+    }
+
+    public AppIconExtension(Geometry? icon)
+    {
+        Icon = icon;
+    }
+
+    public AppIconExtension(string iconKey)
+    {
+        Icon = (Geometry)new IconKeyConverter().ConvertFrom(null!, null, iconKey)!;
     }
 }

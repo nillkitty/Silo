@@ -1,11 +1,10 @@
 using System.Windows.Controls;
 using System.Windows.Media;
 using Serilog;
-using Silo.Providers.Data;
 using Silo.Providers.Definitions;
 using SyntaxKind = Silo.DbModel.Meta.SyntaxKind;
 
-namespace Silo.Definitions;
+namespace Typing;
 
 /// <summary>
 ///     The New Syntax / Edit Syntax dialog (modal): a name (and optional alias), whether the syntax is built on one of

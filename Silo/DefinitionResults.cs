@@ -1,22 +1,12 @@
 using System.Globalization;
 
-namespace Silo;
+namespace Silo.Parsing;
 
 /// <summary>
 ///     A value captured by a <see cref="Capture" /> (or a group made by a named nested <see cref="DataDefinition" />).
 /// </summary>
 public sealed class CaptureNode
 {
-    internal CaptureNode(string name, object? value, int offset, int length, bool isText, IReadOnlyList<CaptureNode> children)
-    {
-        Name     = name;
-        Value    = value;
-        Offset   = offset;
-        Length   = length;
-        IsText   = isText;
-        Children = children;
-    }
-
     /// <summary>
     ///     The captures made inside this one, in order. Names may repeat.
     /// </summary>
@@ -26,6 +16,11 @@ public sealed class CaptureNode
     ///     Whether <see cref="Offset" /> and <see cref="Length" /> count characters of decoded text (else bytes).
     /// </summary>
     public bool IsText { get; }
+
+    /// <summary>
+    ///     The first child with the given name, or null.
+    /// </summary>
+    public CaptureNode? this[string name] => Children.FirstOrDefault(c => c.Name == name);
 
     /// <summary>
     ///     The length of the match, in the same units as <see cref="Offset" />.
@@ -54,11 +49,6 @@ public sealed class CaptureNode
     ///     <see cref="byte" /> array for other binary data, or null for a group.
     /// </summary>
     public object? Value { get; }
-
-    /// <summary>
-    ///     The first child with the given name, or null.
-    /// </summary>
-    public CaptureNode? this[string name] => Children.FirstOrDefault(c => c.Name == name);
 
     /// <summary>
     ///     Every child with the given name.
@@ -94,12 +84,22 @@ public sealed class CaptureNode
     {
         var v = Value switch
                 {
-                    null        => Children.Count + " children",
-                    byte[] b    => Convert.ToHexString(b),
+                    null           => Children.Count + " children",
+                    byte[] b       => Convert.ToHexString(b),
                     IFormattable f => f.ToString(null, CultureInfo.InvariantCulture),
-                    _           => Value.ToString()
+                    _              => Value.ToString()
                 };
         return $"{Name} = {v}";
+    }
+
+    internal CaptureNode(string name, object? value, int offset, int length, bool isText, IReadOnlyList<CaptureNode> children)
+    {
+        Name     = name;
+        Value    = value;
+        Offset   = offset;
+        Length   = length;
+        IsText   = isText;
+        Children = children;
     }
 }
 
@@ -108,14 +108,6 @@ public sealed class CaptureNode
 /// </summary>
 public sealed class DefinitionMatch
 {
-    internal DefinitionMatch(int offset, int length, Encoding? encoding, CaptureNode root)
-    {
-        Offset   = offset;
-        Length   = length;
-        Encoding = encoding;
-        Root     = root;
-    }
-
     /// <summary>
     ///     The encoding of the first text decoded on the way, if any.
     /// </summary>
@@ -135,4 +127,12 @@ public sealed class DefinitionMatch
     ///     The captures, under one node named after the definition.
     /// </summary>
     public CaptureNode Root { get; }
+
+    internal DefinitionMatch(int offset, int length, Encoding? encoding, CaptureNode root)
+    {
+        Offset   = offset;
+        Length   = length;
+        Encoding = encoding;
+        Root     = root;
+    }
 }

@@ -90,10 +90,9 @@ public class RegistryModel : INodeProvider<RegistryKey>, INodeDetails, INodeView
     public string? ValueName { get; }
 
     /// <summary>
-    ///     The icon as a node's <see cref="SiloNode.Icon" />: the resource key as a relative URI (that is how the
-    ///     Explorer reads one).
+    ///     The icon, as a node's <see cref="SiloNode.Icon" /> (a key in <c>Resources/NavIcons.xaml</c>).
     /// </summary>
-    public Uri? Icon { get; }
+    public IconRef? Icon { get; }
 
     /// <summary>The same, for <see cref="INodeDetails" />.</summary>
     public string Name => NodeLabel;
@@ -234,7 +233,7 @@ public class RegistryModel : INodeProvider<RegistryKey>, INodeDetails, INodeView
         Kind      = KindOf(Path, ValueName);
         TypeName  = TypeNameOf(Kind);
         NodeLabel = LabelOf(Path, ValueName);
-        Icon      = new Uri(IconKeyOf(Kind, Exception is null), UriKind.Relative);
+        Icon      = IconRef.FromKey(IconKeyOf(Kind, Exception is null));
         Uri       = RegistryUris.FromKeyName(Path, ValueName);
     }
 

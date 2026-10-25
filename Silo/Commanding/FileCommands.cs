@@ -19,7 +19,7 @@ public abstract record FileCommand(
     string                 Header,
     Func<FileModel, bool>? When    = null,
     string?                ToolTip = null,
-    object?                Icon    = null) : AppCommand(Header, null, EnableWhen(Model, When), ToolTip, Icon)
+    IconRef?               Icon    = null) : AppCommand(Header, null, EnableWhen(Model, When), ToolTip, Icon)
 {
     /// <summary>The item to act on: the one passed as the parameter, else this command's own.</summary>
     protected FileModel Target(object? parameter) => parameter as FileModel ?? Model;
@@ -165,7 +165,7 @@ public record OpenTerminalFileCommand(FileModel Model)
 /// <param name="Header">Menu-style text.</param>
 /// <param name="Plan">What the command will do, in a sentence.</param>
 /// <param name="Icon">The key of its icon, if it has one.</param>
-public record PlannedFileCommand(FileModel Model, string Header, string Plan, object? Icon = null)
+public record PlannedFileCommand(FileModel Model, string Header, string Plan, IconRef? Icon = null)
     : FileCommand(Model, Header, _ => false, "Not available yet: " + Plan, Icon)
 {
     protected override Task OnExecute(object? parameter)

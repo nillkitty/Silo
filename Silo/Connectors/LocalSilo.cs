@@ -74,17 +74,17 @@ public class LocalSilo : VirtualRoot<OpenSilo>, INodeProvider<OpenSilo>
         return (UriConstants.LocalSiloUri ?? new Uri("silo:///active/")).Append(path);
     }
 
-    private static Uri Icon(string key)
+    private static IconRef Icon(string key)
     {
-        return new Uri(key, UriKind.Relative);
+        return IconRef.FromKey(key);
     }
 
     /// <summary>A folder node; its children (if there are any to read) are read when it is first expanded.</summary>
     private static SiloNode Folder(string text, Uri uri, string icon, Func<IEnumerable<SiloNode>>? children = null, string kind = "Folder",
                                    bool   expanded = false)
     {
-        var iconUri = Icon(icon);
-        return new SiloNode(new FolderModel(text, kind, uri, iconUri), text, uri, iconUri, expanded ? 1 : null)
+        var iconRef = Icon(icon);
+        return new SiloNode(new FolderModel(text, kind, uri, iconRef), text, uri, iconRef, expanded ? 1 : null)
                {
                    ChildLoader =
                        children is null
@@ -326,7 +326,7 @@ public class LocalSilo : VirtualRoot<OpenSilo>, INodeProvider<OpenSilo>
 /// <summary>A secret as the Explorer shows it: who it is for, never what it holds.</summary>
 public sealed class SecretDetails(SecretRecord secret) : INodeDetails, IRealmed
 {
-    public Uri?   Icon     => new("Key", UriKind.Relative);
+    public IconRef? Icon   => IconRef.FromKey("Key");
     public string Name     => secret.Key;
     public string TypeName => "Secret";
     public Uri    Uri      => new($"silo:///active/#security/secrets/{secret.Id}", UriKind.Absolute);
@@ -345,7 +345,7 @@ public sealed class SecretDetails(SecretRecord secret) : INodeDetails, IRealmed
 /// <summary>A saved preference as the Explorer shows it: its key, and how much is stored.</summary>
 public sealed class PreferenceDetails(PreferenceRecord preference) : INodeDetails, IRealmed
 {
-    public Uri?   Icon     => new("Settings", UriKind.Relative);
+    public IconRef? Icon   => IconRef.FromKey("Settings");
     public string Name     => preference.Key;
     public string TypeName => "Preference";
     public Uri    Uri      => new($"silo:///active/#prefs/preferences/{Uri.EscapeDataString(preference.Key)}", UriKind.Absolute);

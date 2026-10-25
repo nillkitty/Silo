@@ -1,17 +1,21 @@
 using System.Globalization;
-using System.IO;
-using Silo.DataDefs;
+using Silo.Parsing;
+using Byte = Silo.Parsing.Byte;
 
-namespace Silo;
+namespace Silo.DataDefs;
 
 /// <summary>
-///     Matches, locates and deserializes data with data definitions (<see cref="DataDefinition" /> and its parts).
+///     Matches, locates and deserializes data with data definitions (<see cref="Parsing.DataDefinition" /> and its parts).
 /// </summary>
 /// <remarks>
-///     A definition's children match in sequence. A part with an <see cref="Arity" /> repeats greedily, giving back
-///     repetitions when what follows fails (each repetition keeps its first way of matching). <see cref="Any" /> tries its
-///     children in order. A scope that is bounded (an element of a <see cref="Split" /> or <see cref="Lines" />, the body of a
-///     <see cref="Span" /> or <see cref="Block" />, or the whole data for <see cref="IsMatch(IDefPart, byte[])" />) must be
+///     A definition's children match in sequence. A part with an <see cref="Parsing.Arity" /> repeats greedily, giving
+///     back
+///     repetitions when what follows fails (each repetition keeps its first way of matching). <see cref="Parsing.Any" />
+///     tries its
+///     children in order. A scope that is bounded (an element of a <see cref="Parsing.Split" /> or
+///     <see cref="Parsing.Lines" />, the body of a
+///     <see cref="Parsing.Span" /> or <see cref="Parsing.Block" />, or the whole data for
+///     <see cref="IsMatch(Parsing.IDefPart, byte[])" />) must be
 ///     consumed entirely by what is matched in it.
 /// </remarks>
 public static class DefinitionMatcher
@@ -144,7 +148,8 @@ public static class DefinitionMatcher
     }
 
     /// <summary>
-    ///     <see cref="Locate(IDefPart, byte[], int, bool)" /> over the rest of <paramref name="stream" />; offsets are relative
+    ///     <see cref="Locate(IDefPart, byte[], int, bool)" /> over the rest of <paramref name="stream" />; offsets are
+    ///     relative
     ///     to the stream's position.
     /// </summary>
     public static IEnumerable<DefinitionMatch> Locate(this IDefPart definition, Stream stream, bool overlapping = false)
@@ -156,7 +161,7 @@ public static class DefinitionMatcher
     {
         return definition switch
                {
-                   DataDefinition { Name: { } n }        => $"'{n}'",
+                   DataDefinition { Name       : { } n } => $"'{n}'",
                    DataDefinition { ContentType: { } c } => c,
                    _                                     => definition.GetType().Name
                };
@@ -183,7 +188,6 @@ public static class DefinitionMatcher
     private static byte[]? LeadingLiteral(IDefPart part)
     {
         for (int guard = 0; guard < 64; guard++)
-        {
             switch (part)
             {
                 case Bytes { Value.Length: > 0 } b: return b.Value;
@@ -197,7 +201,6 @@ public static class DefinitionMatcher
                     break;
                 default: return null;
             }
-        }
 
         return null;
     }

@@ -6,6 +6,7 @@
              xmlns:ui="clr-namespace:Silo.Ui"
              xmlns:c="clr-namespace:Silo.Commanding"
              xmlns:l="clr-namespace:Silo"
+             xmlns:design="clr-namespace:Silo.Design"
              mc:Ignorable="d"
              x:Name="MenuTop"
              DataContext="{Binding ., RelativeSource={RelativeSource AncestorType={x:Type l:MainWindow}, Mode=FindAncestor}}"
@@ -21,7 +22,7 @@
         <Style TargetType="{x:Type MenuItem}" BasedOn="{StaticResource {x:Type MenuItem}}">
             <Setter Property="Header" Value="{Binding Command.Header, RelativeSource={RelativeSource Self}}" />
             <Setter Property="ToolTip" Value="{Binding Command.ToolTip, RelativeSource={RelativeSource Self}}" />
-            <Setter Property="Icon" Value="{Binding Command.Icon, RelativeSource={RelativeSource Self}}" />
+            <Setter Property="Icon" Value="{Binding Command.Icon, RelativeSource={RelativeSource Self}, Converter={x:Static design:IconRefToVisualConverter.Instance}}" />
             <Setter Property="IsCheckable" Value="{Binding Command.IsCheckable, RelativeSource={RelativeSource Self}}" />
             <Setter Property="IsChecked" Value="{Binding Command.IsChecked, Mode=TwoWay, RelativeSource={RelativeSource Self}}" />
         </Style>
@@ -35,7 +36,7 @@
         -->
         <Style x:Key="ToolMenuItemStyle" TargetType="{x:Type MenuItem}" BasedOn="{StaticResource {x:Type MenuItem}}">
             <Setter Property="Header" Value="{Binding Header}" />
-            <Setter Property="Icon" Value="{Binding Icon}" />
+            <Setter Property="Icon" Value="{Binding Icon, Converter={x:Static design:IconRefToVisualConverter.Instance}}" />
             <Setter Property="IsCheckable" Value="True" />
             <!--
                 OneWay: IsChecked here mirrors ITool.IsChecked (whether the tool's
@@ -224,7 +225,7 @@
         <MenuItem Header="Break Debugger"
                        Command="{Binding Break}" />
         <!-- One MenuItem per ITool, appended here and kept in sync with Tools -->
-        <l:MenuGroup ItemsSource="{Binding Tools}" ItemContainerStyle="{StaticResource ToolMenuItemStyle}" />
+        <ui:MenuGroup ItemsSource="{Binding Tools}" ItemContainerStyle="{StaticResource ToolMenuItemStyle}" />
     </MenuItem>
     <MenuItem Header="_Help" Name="HelpMenu">
         <MenuItem Header="_About Silo..."

@@ -2,82 +2,70 @@
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Media;
+using Silo.Converters;
 using Silo.Ui.Windows;
 
 namespace Silo.Toolbar;
 
 /// <summary>
 ///     The Customize Toolbar dialog, in the manner of Visual Studio's: the commands that can be added on the left (by
-///     category), the toolbar's buttons on the right, and what can be done to a button -- add, remove, move, rename, change its
+///     category), the toolbar's buttons on the right, and what can be done to a button -- add, remove, move, rename,
+///     change its
 ///     icon, show its text. OK saves and applies; Cancel leaves the toolbar as it was.
 /// </summary>
 public sealed class CustomizeToolbarWindow : Window
 {
-    private const string AllCategories = "All";
+    private const    string   AllCategories = "All";
+    private readonly Button   _add          = Make("_Add >");
+    private readonly Button   _addSep       = Make("Add _Separator");
+    private readonly ListBox  _available    = new();
+    private readonly ComboBox _category     = new();
+    private readonly ListBox  _current      = new();
+    private readonly Button   _down         = Make("Move _Down");
+    private readonly Button   _icon         = Make("Change _Icon...");
+    private readonly Button   _remove       = Make("_Remove");
+    private readonly Button   _rename       = Make("Re_name...");
+    private readonly Button   _resetOne     = Make("Reset Bu_tton");
+    private readonly CheckBox _showText     = new() { Content = "Show _text on this button", Margin = new Thickness(0, 8, 0, 0) };
+    private readonly Button   _up           = Make("Move _Up");
+    private readonly CheckBox _visible      = new() { Content = "Show the _toolbar", VerticalAlignment = VerticalAlignment.Center };
 
     private readonly ToolbarLayout _work;
-    private readonly ComboBox      _category = new();
-    private readonly ListBox       _available = new();
-    private readonly ListBox       _current   = new();
-    private readonly CheckBox      _showText  = new() { Content = "Show _text on this button", Margin = new Thickness(0, 8, 0, 0) };
-    private readonly CheckBox      _visible   = new() { Content = "Show the _toolbar", VerticalAlignment = VerticalAlignment.Center };
-    private readonly Button        _up        = Make("Move _Up");
-    private readonly Button        _down      = Make("Move _Down");
-    private readonly Button        _remove    = Make("_Remove");
-    private readonly Button        _rename    = Make("Re_name...");
-    private readonly Button        _icon      = Make("Change _Icon...");
-    private readonly Button        _resetOne  = Make("Reset Bu_tton");
-    private readonly Button        _add       = Make("_Add >");
-    private readonly Button        _addSep    = Make("Add _Separator");
 
     private bool _refreshing;
 
-    private CustomizeToolbarWindow(ToolbarLayout work)
-    {
-        _work = work;
+    private int SelectedIndex => SelectedSlot is { } s ? _work.Slots.IndexOf(s) : -1;
 
-        Title                 = "Customize Toolbar";
-        Width                 = 860;
-        Height                = 560;
-        MinWidth              = 700;
-        MinHeight             = 420;
-        ShowInTaskbar         = false;
-        WindowStartupLocation = WindowStartupLocation.CenterOwner;
-        SetResourceReference(BackgroundProperty, "Theme.Background");
-        SetResourceReference(ForegroundProperty, "Theme.Text");
-
-        Content = BuildContent();
-        Wire();
-        FillCategories();
-        FillAvailable();
-        FillCurrent(null);
-    }
+    private ToolbarSlot? SelectedSlot => (_current.SelectedItem as ListBoxItem)?.Tag as ToolbarSlot;
 
     /// <summary>Shows the dialog; if OK is pressed the layout is saved and the toolbar rebuilds itself.</summary>
     public static void ShowFor(Window? owner)
     {
         var dialog = new CustomizeToolbarWindow(ToolbarSettings.Layout.Clone());
         if (owner is { IsVisible: true }) dialog.Owner = owner;
-        else dialog.WindowStartupLocation = WindowStartupLocation.CenterScreen;
+        else dialog.WindowStartupLocation              = WindowStartupLocation.CenterScreen;
 
         if (dialog.ShowDialog() == true) ToolbarSettings.Apply(dialog._work);
     }
 
     // ---- layout ---------------------------------------------------------------------------------
 
-    private static Button Make(string text) => new() { Content = text, Margin = new Thickness(0, 0, 0, 6), MinWidth = 110 };
+    private static Button Make(string text)
+    {
+        return new Button { Content = text, Margin = new Thickness(0, 0, 0, 6), MinWidth = 110 };
+    }
 
     private UIElement BuildContent()
     {
-        var root = new Grid { Margin = new Thickness(14) };
+        var root = new Grid { Margin                       = new Thickness(14) };
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
         root.Children.Add(new TextBlock
                           {
-                              Text         = "Pick a command on the left and Add it; arrange the toolbar's buttons on the right. " +
-                                             "Node commands and tool commands are groups that fill in by themselves.",
+                              Text = "Pick a command on the left and Add it; arrange the toolbar's buttons on the right. " +
+                                     "Node commands and tool commands are groups that fill in by themselves.",
                               TextWrapping = TextWrapping.Wrap,
                               Margin       = new Thickness(0, 0, 0, 10)
                           });
@@ -91,8 +79,8 @@ public sealed class CustomizeToolbarWindow : Window
         root.Children.Add(body);
 
         // available commands
-        var left = new DockPanel();
-        var leftHeader = new StackPanel { Margin = new Thickness(0, 0, 0, 6) };
+        var left       = new DockPanel();
+        var leftHeader = new StackPanel { Margin     = new Thickness(0,                                                         0, 0, 6) };
         leftHeader.Children.Add(new TextBlock { Text = "Commands", FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 4) });
         leftHeader.Children.Add(_category);
         DockPanel.SetDock(leftHeader, Dock.Top);
@@ -109,7 +97,7 @@ public sealed class CustomizeToolbarWindow : Window
         body.Children.Add(middle);
 
         // the toolbar's buttons
-        var right = new DockPanel();
+        var right       = new DockPanel();
         var rightHeader = new TextBlock { Text = "Toolbar buttons", FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 4) };
         DockPanel.SetDock(rightHeader, Dock.Top);
         right.Children.Add(rightHeader);
@@ -134,24 +122,27 @@ public sealed class CustomizeToolbarWindow : Window
         Grid.SetRow(bottom, 2);
 
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
-        var ok      = new Button { Content = "OK", IsDefault = true, MinWidth = 80, Margin = new Thickness(0, 0, 8, 0) };
-        var cancel  = new Button { Content = "Cancel", IsCancel = true, MinWidth = 80 };
+        var ok      = new Button { Content         = "OK", IsDefault = true, MinWidth = 80, Margin = new Thickness(0, 0, 8, 0) };
+        var cancel  = new Button { Content         = "Cancel", IsCancel = true, MinWidth = 80 };
         ok.Click += (_, _) => { DialogResult = true; };
         buttons.Children.Add(ok);
         buttons.Children.Add(cancel);
         DockPanel.SetDock(buttons, Dock.Right);
         bottom.Children.Add(buttons);
 
-        var resetAll = new Button { Content = "Reset _Toolbar", Padding = new Thickness(10, 4, 10, 4), Margin = new Thickness(16, 0, 0, 0) };
+        var resetAll = new Button
+                       {
+                           Content = "Reset _Toolbar", Padding = new Thickness(10, 4, 10, 4), Margin = new Thickness(16, 0, 0, 0)
+                       };
         resetAll.Click += (_, _) =>
                           {
                               var d = ToolbarLayout.Default();
-                              _work.Slots   = d.Slots;
-                              _work.Visible = true;
+                              _work.Slots        = d.Slots;
+                              _work.Visible      = true;
                               _visible.IsChecked = true;
                               FillCurrent(null);
                           };
-        _visible.IsChecked = _work.Visible;
+        _visible.IsChecked =  _work.Visible;
         _visible.Checked   += (_, _) => _work.Visible = true;
         _visible.Unchecked += (_, _) => _work.Visible = false;
 
@@ -166,18 +157,18 @@ public sealed class CustomizeToolbarWindow : Window
 
     private void Wire()
     {
-        _category.SelectionChanged += (_, _) => FillAvailable();
+        _category.SelectionChanged  += (_, _) => FillAvailable();
         _available.MouseDoubleClick += (_, _) => AddSelected();
-        _add.Click    += (_, _) => AddSelected();
-        _addSep.Click += (_, _) => Insert(new ToolbarSlot(ToolbarLayout.SeparatorId));
+        _add.Click                  += (_, _) => AddSelected();
+        _addSep.Click               += (_, _) => Insert(new ToolbarSlot(ToolbarLayout.SeparatorId));
 
         _current.SelectionChanged += (_, _) => UpdateButtons();
-        _up.Click       += (_, _) => Move(-1);
-        _down.Click     += (_, _) => Move(+1);
-        _remove.Click   += (_, _) => RemoveSelected();
-        _rename.Click   += (_, _) => RenameSelected();
-        _icon.Click     += (_, _) => ChangeIconOfSelected();
-        _resetOne.Click += (_, _) => ResetSelected();
+        _up.Click                 += (_, _) => Move(-1);
+        _down.Click               += (_, _) => Move(+1);
+        _remove.Click             += (_, _) => RemoveSelected();
+        _rename.Click             += (_, _) => RenameSelected();
+        _icon.Click               += (_, _) => ChangeIconOfSelected();
+        _resetOne.Click           += (_, _) => ResetSelected();
 
         _showText.Checked   += (_, _) => SetShowText(true);
         _showText.Unchecked += (_, _) => SetShowText(false);
@@ -201,7 +192,13 @@ public sealed class CustomizeToolbarWindow : Window
         foreach (var def in ToolbarCatalog.All())
         {
             if (category is not null && category != AllCategories && def.Category != category) continue;
-            _available.Items.Add(new ListBoxItem { Content = Row(def.IconKey, def.PlainHeader + (category == AllCategories ? "   (" + def.Category + ")" : string.Empty)), Tag = def, ToolTip = def.ToolTip });
+            _available.Items.Add(new ListBoxItem
+                                 {
+                                     Content = Row(def.IconKey,
+                                                   def.PlainHeader +
+                                                   (category == AllCategories ? "   (" + def.Category + ")" : string.Empty)),
+                                     Tag = def, ToolTip = def.ToolTip
+                                 });
         }
     }
 
@@ -241,22 +238,21 @@ public sealed class CustomizeToolbarWindow : Window
         var panel = new StackPanel { Orientation = Orientation.Horizontal };
         var icon  = ToolbarIcons.Find(iconKey);
         panel.Children.Add(icon is null ? new Border { Width = 16, Height = 16 } : new AppIcon { Icon = icon, Size = 16 });
-        panel.Children.Add(new TextBlock { Text = label, Margin = new Thickness(8, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center });
+        panel.Children.Add(new TextBlock
+                           {
+                               Text = label, Margin = new Thickness(8, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center
+                           });
         return panel;
     }
-
-    private ToolbarSlot? SelectedSlot => (_current.SelectedItem as ListBoxItem)?.Tag as ToolbarSlot;
-
-    private int SelectedIndex => SelectedSlot is { } s ? _work.Slots.IndexOf(s) : -1;
 
     private void UpdateButtons()
     {
         if (_refreshing) return;
 
-        var  slot       = SelectedSlot;
-        bool has        = slot is not null;
-        bool isCommand  = has && !slot!.IsSeparator;
-        int  index      = SelectedIndex;
+        var  slot      = SelectedSlot;
+        bool has       = slot is not null;
+        bool isCommand = has && !slot!.IsSeparator;
+        int  index     = SelectedIndex;
 
         _up.IsEnabled       = has && index > 0;
         _down.IsEnabled     = has && index < _work.Slots.Count - 1;
@@ -266,9 +262,9 @@ public sealed class CustomizeToolbarWindow : Window
         _resetOne.IsEnabled = isCommand;
         _showText.IsEnabled = isCommand;
 
-        _refreshing = true;
+        _refreshing         = true;
         _showText.IsChecked = isCommand && slot!.ShowText;
-        _refreshing = false;
+        _refreshing         = false;
     }
 
     // ---- edits ------------------------------------------------------------------------------------
@@ -320,7 +316,8 @@ public sealed class CustomizeToolbarWindow : Window
         if (SelectedSlot is not { IsSeparator: false } slot || ToolbarCatalog.Find(slot.Id) is not { } def) return;
 
         string current = ToolbarText.Plain(slot.Header ?? def.Header);
-        if (PromptDialog.Ask("Rename Button", "The label of this button (its tooltip, and its text when it shows text):", "OK", current) is { } text)
+        if (PromptDialog.Ask("Rename Button", "The label of this button (its tooltip, and its text when it shows text):", "OK", current) is
+            { } text)
         {
             slot.Header = text;
             FillCurrent(slot);
@@ -342,9 +339,9 @@ public sealed class CustomizeToolbarWindow : Window
     {
         if (SelectedSlot is not { IsSeparator: false } slot) return;
 
-        slot.Header = null;
-        slot.IconKey = null;
-        slot.ToolTip = null;
+        slot.Header   = null;
+        slot.IconKey  = null;
+        slot.ToolTip  = null;
         slot.ShowText = false;
         FillCurrent(slot);
     }
@@ -356,57 +353,35 @@ public sealed class CustomizeToolbarWindow : Window
         slot.ShowText = on;
         FillCurrent(slot);
     }
-}
 
-/// <summary>Picks an icon (a geometry resource key) for a toolbar button.</summary>
-internal sealed class IconPickerWindow : Window
-{
-    private readonly TextBox _filter = new() { Margin = new Thickness(0, 0, 0, 8) };
-    private readonly WrapPanel _panel = new();
-    private readonly TextBlock _name = new() { Margin = new Thickness(0, 8, 0, 0) };
-
-    public IconPickerWindow(string? current)
+    private CustomizeToolbarWindow(ToolbarLayout work)
     {
-        Title                 = "Change Icon";
-        Width                 = 520;
-        Height                = 460;
+        _work = work;
+
+        Title                 = "Customize Toolbar";
+        Width                 = 860;
+        Height                = 560;
+        MinWidth              = 700;
+        MinHeight             = 420;
         ShowInTaskbar         = false;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
         SetResourceReference(BackgroundProperty, "Theme.Background");
         SetResourceReference(ForegroundProperty, "Theme.Text");
 
-        SelectedKey = current;
-
-        var root = new DockPanel { Margin = new Thickness(14) };
-
-        var top = new StackPanel();
-        top.Children.Add(new TextBlock { Text = "Choose an icon:", Margin = new Thickness(0, 0, 0, 6) });
-        top.Children.Add(_filter);
-        DockPanel.SetDock(top, Dock.Top);
-        root.Children.Add(top);
-
-        var bottom = new DockPanel { Margin = new Thickness(0, 10, 0, 0) };
-        DockPanel.SetDock(bottom, Dock.Bottom);
-        var buttons = new StackPanel { Orientation = Orientation.Horizontal };
-        var def     = new Button { Content = "Use _Default", Margin = new Thickness(0, 0, 8, 0), Padding = new Thickness(10, 4, 10, 4) };
-        var ok      = new Button { Content = "OK", IsDefault = true, MinWidth = 80, Margin = new Thickness(0, 0, 8, 0) };
-        var cancel  = new Button { Content = "Cancel", IsCancel = true, MinWidth = 80 };
-        def.Click += (_, _) => { UseDefault = true; DialogResult = true; };
-        ok.Click  += (_, _) => { DialogResult = SelectedKey is not null; };
-        buttons.Children.Add(def);
-        buttons.Children.Add(ok);
-        buttons.Children.Add(cancel);
-        DockPanel.SetDock(buttons, Dock.Right);
-        bottom.Children.Add(buttons);
-        bottom.Children.Add(_name);
-        root.Children.Add(bottom);
-
-        root.Children.Add(new ScrollViewer { Content = _panel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto });
-        Content = root;
-
-        _filter.TextChanged += (_, _) => Fill();
-        Fill();
+        Content = BuildContent();
+        Wire();
+        FillCategories();
+        FillAvailable();
+        FillCurrent(null);
     }
+}
+
+/// <summary>Picks an icon (a geometry resource key) for a toolbar button.</summary>
+internal sealed class IconPickerWindow : Window
+{
+    private readonly TextBox   _filter = new() { Margin = new Thickness(0, 0, 0, 8) };
+    private readonly TextBlock _name   = new() { Margin = new Thickness(0, 8, 0, 0) };
+    private readonly WrapPanel _panel  = new();
 
     /// <summary>The key chosen.</summary>
     public string? SelectedKey { get; private set; }
@@ -425,11 +400,9 @@ internal sealed class IconPickerWindow : Window
     private static void Collect(ResourceDictionary dictionary, List<string> keys)
     {
         if (dictionary.Source?.OriginalString.EndsWith("NavIcons.xaml", StringComparison.OrdinalIgnoreCase) == true)
-        {
             foreach (DictionaryEntry entry in dictionary)
                 if (entry.Key is string key && entry.Value is Geometry)
                     keys.Add(key);
-        }
 
         foreach (var merged in dictionary.MergedDictionaries) Collect(merged, keys);
     }
@@ -460,11 +433,59 @@ internal sealed class IconPickerWindow : Window
                             {
                                 SelectedKey = k;
                                 _name.Text  = k;
-                                foreach (var other in _panel.Children.OfType<ToggleButton>()) other.IsChecked = ReferenceEquals(other, button);
+                                foreach (var other in _panel.Children.OfType<ToggleButton>())
+                                    other.IsChecked = ReferenceEquals(other, button);
                             };
             _panel.Children.Add(button);
         }
 
         _name.Text = SelectedKey ?? string.Empty;
+    }
+
+    public IconPickerWindow(string? current)
+    {
+        Title                 = "Change Icon";
+        Width                 = 520;
+        Height                = 460;
+        ShowInTaskbar         = false;
+        WindowStartupLocation = WindowStartupLocation.CenterOwner;
+        SetResourceReference(BackgroundProperty, "Theme.Background");
+        SetResourceReference(ForegroundProperty, "Theme.Text");
+
+        SelectedKey = current;
+
+        var root = new DockPanel { Margin = new Thickness(14) };
+
+        var top = new StackPanel();
+        top.Children.Add(new TextBlock { Text = "Choose an icon:", Margin = new Thickness(0, 0, 0, 6) });
+        top.Children.Add(_filter);
+        DockPanel.SetDock(top, Dock.Top);
+        root.Children.Add(top);
+
+        var bottom = new DockPanel { Margin = new Thickness(0, 10, 0, 0) };
+        DockPanel.SetDock(bottom, Dock.Bottom);
+        var buttons = new StackPanel { Orientation = Orientation.Horizontal };
+        var def     = new Button { Content = "Use _Default", Margin = new Thickness(0, 0, 8, 0), Padding = new Thickness(10, 4, 10, 4) };
+        var ok      = new Button { Content = "OK", IsDefault = true, MinWidth = 80, Margin = new Thickness(0, 0, 8, 0) };
+        var cancel  = new Button { Content = "Cancel", IsCancel = true, MinWidth = 80 };
+        def.Click += (_, _) =>
+                     {
+                         UseDefault   = true;
+                         DialogResult = true;
+                     };
+        ok.Click += (_, _) => { DialogResult = SelectedKey is not null; };
+        buttons.Children.Add(def);
+        buttons.Children.Add(ok);
+        buttons.Children.Add(cancel);
+        DockPanel.SetDock(buttons, Dock.Right);
+        bottom.Children.Add(buttons);
+        bottom.Children.Add(_name);
+        root.Children.Add(bottom);
+
+        root.Children.Add(new ScrollViewer { Content = _panel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto });
+        Content = root;
+
+        _filter.TextChanged += (_, _) => Fill();
+        Fill();
     }
 }

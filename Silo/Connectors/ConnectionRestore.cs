@@ -149,7 +149,7 @@ public sealed class PendingConnection : INodeDetails, ICommandProvider
     /// <summary>The text of the node.</summary>
     public string Label => $"{Name} ({(Failed ? "not connected" : "connecting...")})";
 
-    public Uri? Icon => new(Failed ? "FsFileMissing" : "Plug", UriKind.Relative);
+    public IconRef? Icon => IconRef.FromKey(Failed ? "FsFileMissing" : "Plug");
 
     public string Name => string.IsNullOrWhiteSpace(Record.DisplayName) ? Record.SourceUri?.ToString() ?? "Connection" : Record.DisplayName;
 

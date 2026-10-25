@@ -1,5 +1,6 @@
 using Microsoft.Win32;
 using Silo.Connectors.File;
+using Silo.Contracts.ConnectorServices;
 using Silo.Providers;
 using Silo.Ui.Windows.Connecting;
 using Telefrag.DI;
@@ -7,7 +8,7 @@ using Telefrag.DI;
 namespace Silo.Connectors.System;
 
 [Singleton(typeof(IConnector))]
-public class RegistryConnector : IConnector, IUriConnector, IDestinationSource, IConnectorUi
+public class RegistryConnector : IConnector, IUriConnector, IDestinationSource, IConnectorUi, IAutoConnectable
 {
     private static readonly RegistryUriProvider Uris = new();
 
@@ -17,6 +18,11 @@ public class RegistryConnector : IConnector, IUriConnector, IDestinationSource, 
     public List<object> Metadata { get; } = [];
 
     public string? Description => "Keys and values of the Windows registry on this computer";
+
+    public IConnection? CreateAutoConnection()
+    {
+        return new RegistryConnection(this, null, null, RegistryPath.LocalRoot);
+    }
 
     public IConnection CreateConnection(ConnectionRequest crq)
     {

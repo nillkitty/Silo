@@ -1,4 +1,4 @@
-namespace Silo;
+namespace Silo.Parsing;
 
 [Flags]
 public enum NewLine
@@ -77,13 +77,13 @@ public class Lines : DefinitionBase<IDefPart>
 /// </summary>
 public class Capture : DefinitionBase<IDefPart>, IHasArity
 {
-    /// <inheritdoc />
-    public Arity Arity { get; set; }
-
     /// <summary>
     ///     The capture's name. <c>{n}</c> is replaced with the current element number of the n-th enclosing
     ///     <see cref="Split" /> or <see cref="Lines" /> (0 = innermost; the outermost is the match number); see
     ///     <see cref="InstanceNum" />. <c>{{</c> and <c>}}</c> are literal braces. When unset, no node is made.
     /// </summary>
     public string? To { get; set; }
-}
+
+    /// <inheritdoc />
+    public Arity Arity { get; set; }
+}

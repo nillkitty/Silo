@@ -106,6 +106,8 @@ public sealed partial class UnicodeExplorerView
         _view.IsSelected    = index => _sel.Contains(index);
         _view.ColorOf       = index => ColorOfCodePoint(_results[index]);
         _view.ItemClicked  += OnItemClicked;
+        _view.ItemReleased += OnItemReleased;
+        _view.ItemDragStarted += OnItemDragStarted;
         _view.MenuRequested += OnCellMenu;
         _view.ViewChanged  += () => UpdateWhere();
         _view.Map.Hover    += index => UpdateWhere(index);
@@ -397,6 +399,15 @@ public sealed partial class UnicodeExplorerView
     private void OnItemClicked(int index, ModifierKeys mods, int clicks)
     {
         if (index < 0 || index >= _results.Length) return;
+
+        // a plain press on one of several selected cells may start dragging them all: it selects just that one on release (see .Drag)
+        if (mods == ModifierKeys.None && clicks == 1 && _sel.Count > 1 && _sel.Contains(index) && _deferredClick != index)
+        {
+            _deferredClick = index;
+            return;
+        }
+
+        _deferredClick = -1;
 
         bool shift = mods.HasFlag(ModifierKeys.Shift), ctrl = mods.HasFlag(ModifierKeys.Control);
         if (shift && _anchor >= 0)

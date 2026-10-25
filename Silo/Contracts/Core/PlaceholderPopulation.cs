@@ -41,7 +41,7 @@ public sealed class ComponentInfoAttribute(string name) : Attribute
 }
 
 /// <summary>A component that can be picked: the type to build and how to present it.</summary>
-public sealed record ComponentInfo(Type Type, string Name, string? Description, Uri? Icon, string? Glyph)
+public sealed record ComponentInfo(Type Type, string Name, string? Description, IconRef? Icon, string? Glyph)
 {
     public override string ToString()
     {
@@ -307,8 +307,8 @@ public static class PlaceholderComponents
         var info = type.GetCustomAttribute<ComponentInfoAttribute>(false);
         if (info?.Hidden == true) return null;
 
-        Uri? icon                                                                                                   = null;
-        if (!string.IsNullOrWhiteSpace(info?.Icon) && Uri.TryCreate(info.Icon, UriKind.Absolute, out var uri)) icon = uri;
+        // an icon key ("Plug") or a picture's address
+        IconRef? icon = IconRef.Parse(info?.Icon);
 
         return new ComponentInfo(type, !string.IsNullOrWhiteSpace(info?.Name) ? info.Name.Trim() : Humanize(type.Name),
                                  info?.Description?.Trim(), icon, string.IsNullOrEmpty(info?.Glyph) ? null : info.Glyph);

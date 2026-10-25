@@ -64,7 +64,7 @@ public interface ISiloLoader
 public class SiloTemplate
 {
     public string       Description { get; set; }
-    public Uri          Icon        { get; set; }
+    public IconRef?     Icon        { get; set; }
     public List<object> Items       { get; set; } = [];
     public string       Name        { get; set; }
 }

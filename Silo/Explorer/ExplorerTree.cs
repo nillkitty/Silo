@@ -1,13 +1,12 @@
 ﻿using Serilog;
 using Silo.Bindings;
 using Silo.DbModel.Worlds;
-using Silo.Definitions;
 using Silo.Design;
 using Silo.Drawio;
 using Silo.Model;
-using Silo.Providers.Data;
 using Silo.Providers.Definitions;
 using Silo.Tabular;
+using Silo.Typing;
 using Silo.Views;
 using AuthoredTable = Silo.DbModel.Global.AuthoredTable;
 using DataBinding = Silo.DbModel.Global.DataBinding;
@@ -672,11 +671,10 @@ public static class ExplorerTree
                                        [
                                            ("Connector", name),
                                            ("Destination", string.IsNullOrWhiteSpace(shown) ? "(none)" : shown),
-                                           ("State",
-                                            c.ConnectionState switch
-                                            {
-                                                true => "Connected", false => "Disconnected", _ => "Connectionless"
-                                            }),
+                                           ("State", c.ConnectionState switch
+                                                     {
+                                                         true => "Connected", false => "Disconnected", _ => "Connectionless"
+                                                     }),
                                            ("Types and objects", "Will be listed here as the connector reports them")
                                        ]
                          };

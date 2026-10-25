@@ -1,9 +1,11 @@
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
-using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Markup;
-using System.Windows.Media;
+using Serilog;
+using Silo.Commanding;
+using Silo.Converters;
+using Silo.Design;
 using Silo.Toolbar;
 
 namespace Silo.Ui;
@@ -13,59 +15,52 @@ namespace Silo.Ui;
 // an unqualified reference here would be ambiguous with itself.
 
 /// <summary>
-///     The main window's toolbar (below the menu bar): buttons for the File / Edit / Help and Silo commands, the commands of
-///     the node selected in the Explorer, the commands tools offer, a Tools drop-down for every other tool, and a Customize
-///     button. What is shown, and in which order, is the person's <see cref="ToolbarLayout" /> (<see cref="ToolbarSettings" />);
+///     The main window's toolbar (below the menu bar): buttons for the File / Edit / Help and Silo commands, the commands
+///     of
+///     the node selected in the Explorer, the commands tools offer, a Tools drop-down for every other tool, and a
+///     Customize
+///     button. What is shown, and in which order, is the person's <see cref="ToolbarLayout" /> (
+///     <see cref="ToolbarSettings" />);
 ///     it is rebuilt whenever that changes, and when the selected Explorer node (so its commands) changes.
 /// </summary>
 public class ToolBar : System.Windows.Controls.ToolBar
 {
-    private static Style? _buttonStyle;
-
-    public ToolBar()
-    {
-        // an implicit style only applies to its exact target type; this class derives from ToolBar, so ask for the themed one
-        SetResourceReference(StyleProperty, typeof(System.Windows.Controls.ToolBar));
-
-        ContextMenu = BuildContextMenu();
-        Loaded     += OnLoaded;
-        Unloaded   += OnUnloaded;
-    }
-
-    private static Style ButtonStyle => _buttonStyle ??= (Style)XamlReader.Parse(ButtonStyleXaml);
-
     /// <summary>A flat button that takes its colours from the theme (the stock toolbar button would not follow Light/Dark).</summary>
     private const string ButtonStyleXaml = """
-        <Style xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-               xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-               TargetType="{x:Type Button}">
-            <Setter Property="Background" Value="Transparent" />
-            <Setter Property="Foreground" Value="{DynamicResource Theme.Text}" />
-            <Setter Property="Padding" Value="5,4" />
-            <Setter Property="Margin" Value="1,0" />
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="{x:Type Button}">
-                        <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="3"
-                                Padding="{TemplateBinding Padding}" SnapsToDevicePixels="True">
-                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Theme.SurfaceHover}" />
-                            </Trigger>
-                            <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Theme.SurfacePressed}" />
-                            </Trigger>
-                            <Trigger Property="IsEnabled" Value="False">
-                                <Setter Property="Foreground" Value="{DynamicResource Theme.Disabled}" />
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-        """;
+                                           <Style xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                                                  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                                                  TargetType="{x:Type Button}">
+                                               <Setter Property="Background" Value="Transparent" />
+                                               <Setter Property="Foreground" Value="{DynamicResource Theme.Text}" />
+                                               <Setter Property="Padding" Value="5,4" />
+                                               <Setter Property="Margin" Value="1,0" />
+                                               <Setter Property="Template">
+                                                   <Setter.Value>
+                                                       <ControlTemplate TargetType="{x:Type Button}">
+                                                           <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="3"
+                                                                   Padding="{TemplateBinding Padding}" SnapsToDevicePixels="True">
+                                                               <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                           </Border>
+                                                           <ControlTemplate.Triggers>
+                                                               <Trigger Property="IsMouseOver" Value="True">
+                                                                   <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Theme.SurfaceHover}" />
+                                                               </Trigger>
+                                                               <Trigger Property="IsPressed" Value="True">
+                                                                   <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Theme.SurfacePressed}" />
+                                                               </Trigger>
+                                                               <Trigger Property="IsEnabled" Value="False">
+                                                                   <Setter Property="Foreground" Value="{DynamicResource Theme.Disabled}" />
+                                                               </Trigger>
+                                                           </ControlTemplate.Triggers>
+                                                       </ControlTemplate>
+                                                   </Setter.Value>
+                                               </Setter>
+                                           </Style>
+                                           """;
+
+    private static Style? _buttonStyle;
+
+    private static Style ButtonStyle => _buttonStyle ??= (Style)XamlReader.Parse(ButtonStyleXaml);
 
     // ---- life cycle ----------------------------------------------------------------------------
 
@@ -85,7 +80,10 @@ public class ToolBar : System.Windows.Controls.ToolBar
         if (App.Instance is { } app) app.ActiveSiloChanged -= OnActiveSiloChanged;
     }
 
-    private void OnLayoutChanged(object? sender, EventArgs e) => Dispatcher.InvokeAsync(Rebuild);
+    private void OnLayoutChanged(object? sender, EventArgs e)
+    {
+        Dispatcher.InvokeAsync(Rebuild);
+    }
 
     private void OnNodeChanged(object? sender, EventArgs e)
     {
@@ -95,7 +93,10 @@ public class ToolBar : System.Windows.Controls.ToolBar
     }
 
     // Silo commands are looked up when used, so the buttons only need to re-ask whether they are enabled
-    private void OnActiveSiloChanged(object? sender, EventArgs e) => Dispatcher.InvokeAsync(CommandManager.InvalidateRequerySuggested);
+    private void OnActiveSiloChanged(object? sender, EventArgs e)
+    {
+        Dispatcher.InvokeAsync(CommandManager.InvalidateRequerySuggested);
+    }
 
     // ---- building ------------------------------------------------------------------------------
 
@@ -106,7 +107,9 @@ public class ToolBar : System.Windows.Controls.ToolBar
         Visibility = layout.Visible ? Visibility.Visible : Visibility.Collapsed;
 
         Items.Clear();
-        var placedTools = layout.Slots.Select(s => s.Id).Where(id => id.StartsWith(ToolbarCatalog.ToolCommandPrefix, StringComparison.Ordinal)).ToHashSet();
+        var placedTools = layout.Slots.Select(s => s.Id)
+                                .Where(id => id.StartsWith(ToolbarCatalog.ToolCommandPrefix, StringComparison.Ordinal))
+                                .ToHashSet();
 
         foreach (var slot in layout.Slots)
         {
@@ -125,11 +128,11 @@ public class ToolBar : System.Windows.Controls.ToolBar
                 {
                     case ToolbarItemKind.Command:
                         Items.Add(CommandButton(def.CreateCommand(), def.Parameter, slot.IconKey ?? def.IconKey, slot.Header ?? def.Header,
-                                                TipOf(slot, def), slot.ShowText));
+                                                TipOf(slot, def),    slot.ShowText));
                         break;
 
                     case ToolbarItemKind.Customize:
-                        Items.Add(CommandButton(new Silo.Commanding.DelegateCommand(_ => CustomizeToolbarWindow.ShowFor(Window.GetWindow(this))), null,
+                        Items.Add(CommandButton(new DelegateCommand(_ => CustomizeToolbarWindow.ShowFor(Window.GetWindow(this))), null,
                                                 slot.IconKey ?? def.IconKey, slot.Header ?? def.Header, TipOf(slot, def), slot.ShowText));
                         break;
 
@@ -149,7 +152,7 @@ public class ToolBar : System.Windows.Controls.ToolBar
             }
             catch (Exception ex)
             {
-                Serilog.Log.Warning(ex, "Building the toolbar item {id} failed", slot.Id);
+                Log.Warning(ex, "Building the toolbar item {id} failed", slot.Id);
             }
         }
 
@@ -171,7 +174,8 @@ public class ToolBar : System.Windows.Controls.ToolBar
             if (group is not null && group != c.Group) Items.Add(new Separator());
             group = c.Group;
 
-            Items.Add(CommandButton(c.Command, c.Parameter, c.IconKey, c.Header, c.ToolTip ?? ToolbarText.Plain(c.Header), c.IconKey is null));
+            Items.Add(CommandButton(c.Command, c.Parameter, c.IconKey, c.Header, c.ToolTip ?? ToolbarText.Plain(c.Header),
+                                    c.IconKey is null));
         }
     }
 
@@ -201,15 +205,23 @@ public class ToolBar : System.Windows.Controls.ToolBar
 
     private static object ButtonContent(string? iconKey, string label, bool showText, bool dropdown)
     {
-        var icon = ToolbarIcons.Find(iconKey);
+        var icon                   = ToolbarIcons.Find(iconKey);
         if (icon is null) showText = true; // nothing else to tell the button apart
 
         var panel = new StackPanel { Orientation = Orientation.Horizontal };
         if (icon is not null) panel.Children.Add(new AppIcon { Icon = icon, Size = 16 });
         if (showText)
-            panel.Children.Add(new TextBlock { Text = label, VerticalAlignment = VerticalAlignment.Center, Margin = icon is null ? new Thickness() : new Thickness(5, 0, 0, 0) });
+            panel.Children.Add(new TextBlock
+                               {
+                                   Text   = label, VerticalAlignment = VerticalAlignment.Center,
+                                   Margin = icon is null ? new Thickness() : new Thickness(5, 0, 0, 0)
+                               });
         if (dropdown)
-            panel.Children.Add(new TextBlock { Text = "▾", FontSize = 9, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(3, 1, 0, 0) });
+            panel.Children.Add(new TextBlock
+                               {
+                                   Text   = "▾", FontSize = 9, VerticalAlignment = VerticalAlignment.Center,
+                                   Margin = new Thickness(3, 1, 0, 0)
+                               });
 
         return panel;
     }
@@ -220,15 +232,19 @@ public class ToolBar : System.Windows.Controls.ToolBar
     {
         var button = new Button
                      {
-                         Style   = ButtonStyle,
-                         Content = ButtonContent(slot.IconKey ?? def.IconKey, ToolbarText.Plain(slot.Header ?? def.Header), slot.ShowText, true),
+                         Style = ButtonStyle,
+                         Content = ButtonContent(slot.IconKey ?? def.IconKey, ToolbarText.Plain(slot.Header ?? def.Header),
+                                                 slot.ShowText,               true),
                          ToolTip = TipOf(slot, def)
                      };
         button.Click += (_, _) => ShowToolsMenu(button);
         return button;
     }
 
-    /// <summary>Opens a menu of the tools that have no buttons of their own; choosing one does what its Tools-menu entry does (open or close it).</summary>
+    /// <summary>
+    ///     Opens a menu of the tools that have no buttons of their own; choosing one does what its Tools-menu entry does
+    ///     (open or close it).
+    /// </summary>
     private static void ShowToolsMenu(Button anchor)
     {
         var menu = new ContextMenu { PlacementTarget = anchor, Placement = PlacementMode.Bottom };
@@ -239,14 +255,14 @@ public class ToolBar : System.Windows.Controls.ToolBar
             if (group is not null && !string.Equals(group, tool.GroupName, StringComparison.Ordinal)) menu.Items.Add(new Separator());
             group = tool.GroupName;
 
-            var t    = tool;
+            var t = tool;
             var item = new MenuItem
                        {
                            Header      = t.Header,
                            IsCheckable = true,
                            IsChecked   = t.IsChecked,
                            IsEnabled   = t.IsEnabled,
-                           Icon        = t.Icon is { } image ? new Image { Source = image, Width = 16, Height = 16 } : null
+                           Icon        = IconResolver.ElementFor(t.Icon)
                        };
             item.Click += (_, _) => t.Toggle();
             menu.Items.Add(item);
@@ -278,5 +294,15 @@ public class ToolBar : System.Windows.Controls.ToolBar
         menu.Items.Add(hide);
 
         return menu;
+    }
+
+    public ToolBar()
+    {
+        // an implicit style only applies to its exact target type; this class derives from ToolBar, so ask for the themed one
+        SetResourceReference(StyleProperty, typeof(System.Windows.Controls.ToolBar));
+
+        ContextMenu =  BuildContextMenu();
+        Loaded      += OnLoaded;
+        Unloaded    += OnUnloaded;
     }
 }

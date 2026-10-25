@@ -24,14 +24,14 @@ public sealed class UnicodeExplorerTool : ToolBase
     private UnicodeExplorerView View => (UnicodeExplorerView)BuildPaneContent();
 
     /// <inheritdoc />
-    internal override IReadOnlyList<string> ExtraPaneKeys => [UnicodeExplorerView.CollectionPaneKey];
+    internal override IReadOnlyList<string> ExtraPaneKeys => UnicodeExplorerView.PartKeys;
 
     /// <inheritdoc />
-    internal override UIElement? TakeExtraPaneContent(string key) => key == UnicodeExplorerView.CollectionPaneKey ? View.TakeCollectionForPane() : null;
+    internal override UIElement? TakeExtraPaneContent(string key) => View.TakePartForPane(key);
 
     /// <inheritdoc />
     internal override void AdoptExtraPane(string key, AvalonDock.Layout.LayoutAnchorable? pane)
     {
-        if (key == UnicodeExplorerView.CollectionPaneKey) View.AdoptCollectionPane(pane);
+        View.AdoptPartPane(key, pane);
     }
 }

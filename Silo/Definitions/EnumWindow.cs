@@ -3,12 +3,11 @@ using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Media;
 using Serilog;
-using Silo.Providers.Data;
 using Silo.Providers.Definitions;
 using EnumFlags = Silo.DbModel.Meta.EnumFlags;
 using EnumType = Silo.DbModel.Meta.EnumType;
 
-namespace Silo.Definitions;
+namespace Typing;
 
 /// <summary>
 ///     One line of the values grid in the enum dialog: a label, its value and a note. A public class with a default

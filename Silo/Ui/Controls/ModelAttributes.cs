@@ -1,10 +1,7 @@
-﻿using System.Windows;
-using Silo.UI;
-
-namespace Silo;
+﻿namespace Silo.Ui;
 
 /// <summary>
-/// Marks a ViewModel as being a model dialog
+///     Marks a ViewModel as being a model dialog
 /// </summary>
 public class ModalDialogAttribute : Attribute, IWindowChrome
 {

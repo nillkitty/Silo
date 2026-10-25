@@ -2,7 +2,8 @@ using System.Buffers;
 using System.Buffers.Binary;
 using System.Globalization;
 using System.Text.Unicode;
-using Silo.Providers.Data;
+using Silo.Parsing;
+using Byte = Silo.Parsing.Byte;
 
 namespace Silo.DataDefs;
 

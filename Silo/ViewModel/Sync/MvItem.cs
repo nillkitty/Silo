@@ -1,6 +1,6 @@
 ﻿using Silo.DbModel.Meta;
 
-namespace Silo.Model.Sync;
+namespace Silo.Model.Metaverse;
 
 public class MvItem : ModelBase<MvObj>
 {

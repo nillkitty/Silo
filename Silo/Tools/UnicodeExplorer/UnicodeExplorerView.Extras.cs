@@ -55,7 +55,7 @@ public sealed partial class UnicodeExplorerView
         foreach (var p in service.All)
         {
             var palette = p;
-            open.Add(Check($"{palette.Name} ({palette.CodePoints.Count:N0})", service.IsOpen(palette), () =>
+            open.Add(Check($"{palette.Name} ({palette.AllCodePoints().Count():N0})", service.IsOpen(palette), () =>
                                                                                                     {
                                                                                                         service.Select(palette);
                                                                                                         if (service.IsOpen(palette)) service.Close(palette);

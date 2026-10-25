@@ -70,7 +70,7 @@ public sealed partial class UnicodeExplorerView
         yield return UiKit.Item("Bind to global hotkey…", BindHotkey, any,
                                 "Choose a key that types the characters into whatever you are working in");
         yield return UiKit.Rule();
-        yield return UiKit.Item("Show what I saved", ShowSaved, tip: "Switch to the Saved tab: your characters, strings and hotkeys");
+        yield return UiKit.Item("Show what I saved", ShowSaved, tip: "Show the Library: your characters, strings and hotkeys");
         yield return UiKit.Item("Manage constants and hotkeys…", ManageSilo, tip: "The same list in a window of its own");
     }
 
@@ -306,18 +306,18 @@ public sealed partial class UnicodeExplorerView
         ShortcutManagerWindow.ShowFor(DialogOwner, CollectSaved);
     }
 
-    // ---- the Saved tab ---------------------------------------------------------------------------------------------
+    // ---- the Library tab (it was called Saved) ---------------------------------------------------------------------------------------------
 
     private SavedItemsPanel BuildSaved()
     {
         var panel = new SavedItemsPanel(() => DialogOwner, CollectSaved, text => LookUp(text), Say);
-        panel.CountChanged += (_, _) => _savedTab.Header = panel.Count == 0 ? "Saved" : $"Saved ({panel.Count:N0})";
+        panel.CountChanged += (_, _) => UpdatePartTitle(LibraryPaneKey);
         return panel;
     }
 
     private void ShowSaved()
     {
-        _bottomTabs.SelectedItem = _savedTab;
+        BringForward(LibraryPaneKey);
     }
 
     /// <summary>Puts what was saved in the collection, and shows the collection.</summary>

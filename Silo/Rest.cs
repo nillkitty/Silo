@@ -1,4 +1,4 @@
-namespace Silo;
+namespace Silo.Parsing;
 
 /// <summary>
 ///     In a data definition, matches the remainder of the current scope
@@ -101,4 +101,4 @@ public class Span : DefinitionBase<IDefPart>
     /// </summary>
 
     public string? WhileNot { get; set; }
-}
+}

@@ -149,7 +149,7 @@ public record WmiNode : SiloNode
             Text     = q.Query;
             Uri      = Location.ToUri(q);
             TypeName = "Query";
-            Icon     = null; //claude: query icon
+            Icon     = IconRef.FromKey("DataSearching"); // a query: the magnifier over data
             return;
         }
 

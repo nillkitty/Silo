@@ -7,6 +7,9 @@ using Microsoft.Win32;
 using Serilog;
 using Diagram = Silo.DbModel.Global.Diagram;
 using Silo.Drawio;
+using Silo.Drawio.Host;
+using Silo.Drawio.Mx;
+using Silo.Drawio.Options;
 using Silo.Model;
 using Telefrag.DI;
 

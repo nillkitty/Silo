@@ -31,7 +31,7 @@ public sealed class SavedItem : INodeDetails, IRealmed
     /// <summary>The type's readable name: what the type folder is called.</summary>
     public string TypeLabel { get; }
 
-    public Uri? Icon => new(Shape == DataShape.Scalar ? "Record" : "Data1", UriKind.Relative);
+    public IconRef? Icon => IconRef.FromKey(Shape == DataShape.Scalar ? "Record" : "Data1");
 
     public string Name => Record.Key;
 

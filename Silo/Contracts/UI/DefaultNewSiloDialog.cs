@@ -190,15 +190,13 @@ public class DefaultNewSiloDialog : INewSiloDialog
 
         private static UIElement IconFor(SiloTemplate t)
         {
-            if (t.Icon is { } uri)
-                try
-                {
-                    return new Image { Source = new BitmapImage(uri), Width = 24, Height = 24, Margin = new Thickness(0, 0, 8, 0) };
-                }
-                catch
-                {
-                    // a bad icon uri falls back to the glyph
-                }
+            // an icon key or a picture; one that cannot be found or read falls back to the glyph
+            if (Silo.Design.IconResolver.ElementFor(t.Icon, 24) is { } icon)
+            {
+                icon.Margin            = new Thickness(0, 0, 8, 0);
+                icon.VerticalAlignment = VerticalAlignment.Center;
+                return icon;
+            }
 
             return new TextBlock
                    {

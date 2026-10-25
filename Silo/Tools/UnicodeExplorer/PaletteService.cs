@@ -1,4 +1,5 @@
-﻿using Silo.Hotkeys;
+﻿using System.Windows.Media;
+using Silo.Hotkeys;
 using Silo.Storage;
 using Silo.Ui.Windows;
 using Silo.Unicode;
@@ -13,6 +14,7 @@ internal sealed class PaletteService
 {
     private const string PalettesKey = "unicodeexplorer:palettes";
     private const string SettingsKey = "unicodeexplorer:settings";
+    private const string ColorsKey   = "unicodeexplorer:colors";
 
     public static PaletteService Current { get; } = new();
 
@@ -67,12 +69,7 @@ internal sealed class PaletteService
                 // unreadable: no palettes rather than a failure at start
             }
 
-            foreach (var p in _palettes)
-            {
-                p.CodePoints ??= [];
-                p.Name       =  string.IsNullOrWhiteSpace(p.Name) ? "Palette" : p.Name;
-            }
-
+            foreach (var p in _palettes) PaletteRules.Normalize(p);
             Selected = _palettes.FirstOrDefault();
         }
         finally
@@ -113,7 +110,11 @@ internal sealed class PaletteService
     /// <summary>Makes a palette, opens its window and returns it.</summary>
     public PaletteDefinition Create(string? name, IEnumerable<int> codePoints)
     {
-        var palette = new PaletteDefinition { Name = PaletteRules.UniqueName(_palettes.Select(p => p.Name), name), CodePoints = codePoints.Distinct().ToList() };
+        var palette = new PaletteDefinition
+                      {
+                          Name  = PaletteRules.UniqueName(_palettes.Select(p => p.Name), name),
+                          Pages = [new PalettePage { Name = "Glyphs", CodePoints = codePoints.Distinct().ToList() }]
+                      };
         _palettes.Add(palette);
         Selected = palette;
         Save();
@@ -125,7 +126,7 @@ internal sealed class PaletteService
     {
         if (_open.TryGetValue(palette, out var existing))
         {
-            existing.Topmost = palette.AlwaysOnTop;
+            existing.Apply();
             return;
         }
 
@@ -145,23 +146,125 @@ internal sealed class PaletteService
         if (_open.TryGetValue(palette, out var w)) w.Close();
     }
 
-    public void Add(PaletteDefinition palette, IEnumerable<int> codePoints)
+    /// <summary>Saves and redraws a palette's window (after its characters or pages changed).</summary>
+    public void Touched(PaletteDefinition palette)
     {
-        var have = palette.CodePoints.ToHashSet();
-        foreach (int cp in codePoints)
-            if (have.Add(cp))
-                palette.CodePoints.Add(cp);
-
         Save();
         if (_open.TryGetValue(palette, out var w)) w.Rebuild();
+    }
+
+    /// <summary>Saves and applies a palette's window choices (on top, taskbar, locks, tile size).</summary>
+    public void Restyled(PaletteDefinition palette)
+    {
+        Save();
+        if (_open.TryGetValue(palette, out var w))
+        {
+            w.Apply();
+            w.Rebuild();
+        }
+    }
+
+    /// <summary>Redraws every open palette (the colors or the color mode changed).</summary>
+    public void RefreshAll()
+    {
+        foreach (var w in _open.Values) w.Rebuild();
+    }
+
+    // ---- characters (on the page shown) --------------------------------------------------------------------------
+
+    /// <summary>Adds characters at the end of the page shown (ones already on it are left out).</summary>
+    public void Add(PaletteDefinition palette, IEnumerable<int> codePoints)
+    {
+        var page = palette.Page();
+        PaletteRules.InsertNew(page.CodePoints, codePoints, page.CodePoints.Count);
+        Touched(palette);
+    }
+
+    /// <summary>Inserts characters on the page shown at <paramref name="at" /> (ones already on it are left out); returns how many were added.</summary>
+    public int Insert(PaletteDefinition palette, IEnumerable<int> codePoints, int at)
+    {
+        int added = PaletteRules.InsertNew(palette.Page().CodePoints, codePoints, at);
+        Touched(palette);
+        return added;
+    }
+
+    /// <summary>Moves tiles of the page shown to <paramref name="at" /> (an index into the page as it was).</summary>
+    public void MoveTiles(PaletteDefinition palette, IEnumerable<int> indexes, int at)
+    {
+        PaletteRules.Move(palette.Page().CodePoints, indexes, at);
+        Touched(palette);
     }
 
     public void Remove(PaletteDefinition palette, int codePoint)
     {
-        palette.CodePoints.Remove(codePoint);
-        Save();
-        if (_open.TryGetValue(palette, out var w)) w.Rebuild();
+        palette.Page().CodePoints.Remove(codePoint);
+        Touched(palette);
     }
+
+    // ---- pages -------------------------------------------------------------------------------------------------
+
+    public void ShowPage(PaletteDefinition palette, int index)
+    {
+        if (index < 0 || index >= palette.Pages.Count || index == palette.CurrentPage) return;
+
+        palette.CurrentPage = index;
+        Touched(palette);
+    }
+
+    public void AddPage(PaletteDefinition palette, Window? owner = null)
+    {
+        string? name = PromptDialog.Ask("Add tab page", $"What is the new page of \"{palette.Name}\" called?", "Add", "Page " + (palette.Pages.Count + 1));
+        if (name is null) return;
+
+        palette.Pages.Add(new PalettePage { Name = PaletteRules.UniqueName(palette.Pages.Select(p => p.Name), name, "Page") });
+        palette.CurrentPage = palette.Pages.Count - 1;
+        Touched(palette);
+    }
+
+    public void RenamePage(PaletteDefinition palette, Window? owner = null)
+    {
+        var page = palette.Page();
+        string? name = PromptDialog.Ask("Rename page", $"A new name for the page \"{page.Name}\":", "Rename", page.Name);
+        if (string.IsNullOrWhiteSpace(name) || name.Trim() == page.Name) return;
+
+        page.Name = PaletteRules.UniqueName(palette.Pages.Where(p => !ReferenceEquals(p, page)).Select(p => p.Name), name, "Page");
+        Touched(palette);
+    }
+
+    public void DeletePage(PaletteDefinition palette, Window? owner = null)
+    {
+        if (palette.Pages.Count <= 1)
+        {
+            PromptDialog.Show("Delete page", "A palette keeps at least one page. Delete the palette instead, or add another page first.", ["OK"]);
+            return;
+        }
+
+        var page = palette.Page();
+        if (page.CodePoints.Count > 0)
+        {
+            var (button, _) = PromptDialog.Show("Delete page", $"Delete the page \"{page.Name}\" and its {page.CodePoints.Count:N0} character{(page.CodePoints.Count == 1 ? "" : "s")}?", ["Delete", "Cancel"]);
+            if (button != 0) return;
+        }
+
+        palette.Pages.RemoveAt(palette.CurrentPage);
+        palette.CurrentPage = Math.Clamp(palette.CurrentPage, 0, palette.Pages.Count - 1);
+        Touched(palette);
+    }
+
+    /// <summary>Moves a page to another place in the tab order; the page shown stays shown.</summary>
+    public void MovePage(PaletteDefinition palette, int from, int to)
+    {
+        if (from < 0 || from >= palette.Pages.Count || to < 0 || to >= palette.Pages.Count || from == to) return;
+
+        var shown = palette.Page();
+        var page  = palette.Pages[from];
+        palette.Pages.RemoveAt(from);
+        palette.Pages.Insert(to, page);
+        palette.CurrentPage = palette.Pages.IndexOf(shown);
+        Touched(palette);
+    }
+
+    // ---- the palette ----------------------------------------------------------------------------------------------
 
     /// <summary>Asks for a new name (the owner window keeps the dialog in front of a palette that is always on top).</summary>
     public void Rename(PaletteDefinition palette, Window? owner = null)
@@ -211,5 +314,34 @@ internal sealed class PaletteService
         {
             return true;
         }
+    }
+
+    // ---- colors (the explorer's marks, shown on the tiles) -------------------------------------------------------
+
+    /// <summary>The explorer's color marks and color mode, read fresh (they are small): a function giving a character's color, or null for none.</summary>
+    public (Func<int, Color?> ColorOf, ColorMode Mode) Colors()
+    {
+        var mode = ColorMode.Glyph;
+        try
+        {
+            mode = Stored.At<ExplorerSettings>(SettingsKey).Get()?.ColorMode ?? ColorMode.Glyph;
+        }
+        catch (Exception)
+        {
+            // the default mode
+        }
+
+        CharacterColorMap map;
+        try
+        {
+            var stored = Stored.At<Dictionary<int, int>>(ColorsKey);
+            map = stored.IsAvailable && stored.Get() is { } kept ? CharacterColorMap.From(kept) : new CharacterColorMap();
+        }
+        catch (Exception)
+        {
+            map = new CharacterColorMap();
+        }
+
+        return (cp => map.ColorOf(cp) is { } c ? UiKit.ToColor(c) : null, mode);
     }
 }

@@ -106,6 +106,15 @@ internal sealed class ResultsView : Grid
     /// <summary>The context menu of a cell is about to open: its position and the (empty) menu to fill.</summary>
     public event Action<int, ContextMenu>? MenuRequested;
 
+    /// <summary>The left button went down on an item and the mouse moved far enough to drag it: the index and the element to drag from.</summary>
+    public event Action<int, UIElement>? ItemDragStarted;
+
+    /// <summary>The left button came up on the item it went down on, without a drag.</summary>
+    public event Action<int>? ItemReleased;
+
+    private Point? _pressAt;      // where the left button went down on an item, for a drag
+    private int    _pressIndex = -1;
+
     /// <summary>What is in view changed (scrolled, resized, new results).</summary>
     public event Action? ViewChanged;
 
@@ -410,9 +419,24 @@ internal sealed class ResultsView : Grid
         root.MouseLeftButtonDown += (_, e) =>
                                     {
                                         Focus();
+                                        _pressAt    = cell.Index >= 0 ? e.GetPosition(this) : null;
+                                        _pressIndex = cell.Index;
                                         if (cell.Index >= 0) ItemClicked?.Invoke(cell.Index, Keyboard.Modifiers, e.ClickCount);
                                         e.Handled = true;
                                     };
+        root.MouseMove += (_, e) =>
+                          {
+                              if (_pressAt is not { } start || e.LeftButton != MouseButtonState.Pressed || _pressIndex != cell.Index) return;
+                              if (!GlyphDrag.FarEnough(start, e.GetPosition(this))) return;
+
+                              _pressAt = null;
+                              ItemDragStarted?.Invoke(_pressIndex, root);
+                          };
+        root.MouseLeftButtonUp += (_, _) =>
+                                  {
+                                      if (_pressAt is not null && _pressIndex == cell.Index && cell.Index >= 0) ItemReleased?.Invoke(cell.Index);
+                                      _pressAt = null;
+                                  };
         root.ContextMenu = new ContextMenu();
         root.ContextMenuOpening += (_, e) =>
                                    {

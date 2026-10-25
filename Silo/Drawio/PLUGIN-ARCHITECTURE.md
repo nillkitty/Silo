@@ -46,6 +46,25 @@ answer `unknownMessage`). Plugin events are ordinary `parent.postMessage` JSON w
 * **Custom shapes**: `PluginAddStencilAsync(name, stencilXml)`; use as `shape=<name>` in a style.
 * **Custom properties** (typed Format-panel fields on built-in shapes): `PluginSetCustomPropertiesAsync`.
 * **Cell operations**: select, scroll to, set attribute, read selection.
+* **Silo Properties** section in the Format panel's Style tab, above draw.io's own Property grid (`StyleFormatPanel.prototype.init`
+  wrapped).
+  * **Rows:** the selection's typed properties, each with its own icon (draw.io's `Editor.*Image` / `Format.*Image`, see
+    `TOKEN_ICONS`).
+  * **Grouping:** by category, or by definition scope (where each value comes from). Group headings are icon bands; clicking
+    one folds the group.
+  * **Toolbar:** show every token, group by category or by scope, layering buttons, what each token applies to (shape or
+    label), token names, and Silo Copy Style / Paste Style.
+  * **Advanced Property Menu:** each row's layering button opens it.
+    * Copy Style mode per token: Not included / Present values only / Include effective defaults.
+    * Paste Style mode per token: Not affected / Copied styles only / Replace non-copied with default.
+    * Sources: Data Binding (edit or remove the `silo-style.<key>` attribute), then Current Default Style, Diagram Default
+      (named style), Theme Default, Configuration Default and Factory Default. Each source shows its value for the cell;
+      clicking one sets the cell to that value. Dragging the handles reorders the sources, and that order decides the default
+      used by "Replace non-copied with default" and Use Default.
+    * Use Default and Remove from Cell.
+  * Edits go through `graph.setCellStyles` / `setAttributeForCell`, so they can be undone.
+  * Settings are kept in the editor's `localStorage`: `silo.propertiesPanel.view` and `silo.propertiesPanel.tokens`. Plugin
+    option `propertiesPanel: false` turns the section off.
 
 ## Verified vs. not verified
 

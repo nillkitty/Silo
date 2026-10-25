@@ -1,4 +1,4 @@
-namespace Silo;
+namespace Silo.Parsing;
 
 /// <summary>
 ///     In a data definition, succeeds without consuming anything when its children do NOT match here (negative

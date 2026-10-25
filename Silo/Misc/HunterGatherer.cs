@@ -1,8 +1,7 @@
-﻿using System.Windows;
-using System.Windows.Controls;
+﻿using System.Windows.Controls;
 using Serilog;
 
-namespace Silo.UI;
+namespace Silo.Ui;
 
 public interface IWindowChrome : IAppliesTo<Window>;
 
@@ -14,30 +13,16 @@ public interface IAppliesTo<in TTarget>
 }
 
 /// <summary>
-/// A utility which gathers configured Mods (modifications) and
-/// then applies them to one or more target objects.
+///     A utility which gathers configured Mods (modifications) and
+///     then applies them to one or more target objects.
 /// </summary>
 /// <typeparam name="TAttribute"></typeparam>
 public class HunterGatherer<TAttribute>
 {
-    /// <summary>
-    /// A utility which gathers configured Mods (modifications) and
-    /// then applies them to one or more target objects.
-    /// </summary>
-    /// <typeparam name="TAttribute"></typeparam>
-    /// <param name="target"></param>
-    public HunterGatherer(object target)
-    {
-        Target = target.Required();
-    }
-
-    public HunterGatherer()
-    {
-    }
-
-
-    public object?          Target       { get; set; }
     public IEnumerable<Mod> GatheredMods { get; set; } = [];
+
+
+    public object? Target { get; set; }
 
     public void GatherAndApplyTo<TTarget>(TTarget target, bool throwErrors = false)
     {
@@ -51,13 +36,12 @@ public class HunterGatherer<TAttribute>
         if (GatheredMods?.ToList() is null or [])
         {
             if (throwErrors)
-                throw new InvalidOperationException($"No hunted ites were gathered");
+                throw new InvalidOperationException("No hunted ites were gathered");
             return false;
         }
 
         bool b = false;
         foreach (var h in GatheredMods)
-        {
             try
             {
                 b |= h.ApplyTo(target!);
@@ -66,15 +50,13 @@ public class HunterGatherer<TAttribute>
             catch (Exception ex) when (!throwErrors)
             {
                 Log.Error(ex, "Exception thrown while applying " + "mod '{mod}'' to object '{target}:  {ex}'.", h, target, ex);
-                continue;
             }
-        }
 
         return b;
     }
 
     /// <summary>
-    /// Gathers all of the <see cref="Mod"/>s contributed by attributes into the <see cref="GatheredMods"/> collection.
+    ///     Gathers all of the <see cref="Mod" />s contributed by attributes into the <see cref="GatheredMods" /> collection.
     /// </summary>
     /// <returns>Returns true if at least one Mod was gathered; otherwise false.</returns>
     private bool Gather()
@@ -82,26 +64,45 @@ public class HunterGatherer<TAttribute>
         List<Mod> l  = [];
         var       tt = typeof(TAttribute);
         var       ca = tt.GetCustomAttributes(tt, true);
-        foreach (var a in ca)
-        {
-            Log.Debug("Attribute:  {attr}", a);
-        }
+        foreach (var a in ca) Log.Debug("Attribute:  {attr}", a);
 
         Log.Debug("Gathered {num} mods of type '{type}'", l.Count, tt);
         GatheredMods = l;
         return l.Any();
     }
+
+    /// <summary>
+    ///     A utility which gathers configured Mods (modifications) and
+    ///     then applies them to one or more target objects.
+    /// </summary>
+    /// <typeparam name="TAttribute"></typeparam>
+    /// <param name="target"></param>
+    public HunterGatherer(object target)
+    {
+        Target = target.Required();
+    }
+
+    public HunterGatherer()
+    {
+    }
 }
 
 public class Mod
 {
-    public Func<object, bool> Applicator { get; set; } = (_) => false;
+    public Func<object, bool> Applicator { get; set; } = _ => false;
 
-    public bool ApplyTo(object target) => Applicator.Invoke(target);
+    public bool ApplyTo(object target)
+    {
+        return Applicator.Invoke(target);
+    }
 }
 
 public class Mod<TTarget> : Mod
 {
-    public new Func<TTarget, bool> Applicator              { get; set; } = (_) => false;
-    public     bool                ApplyTo(TTarget target) => Applicator.Invoke(target);
+    public new Func<TTarget, bool> Applicator { get; set; } = _ => false;
+
+    public bool ApplyTo(TTarget target)
+    {
+        return Applicator.Invoke(target);
+    }
 }

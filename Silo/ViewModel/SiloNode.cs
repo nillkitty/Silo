@@ -47,7 +47,8 @@ public record SiloNode
     public object DataContext { get; protected init; }
 
     public int? Expand { get; protected set; }
-    public Uri? Icon   { get; protected init; }
+    /// <summary>The node's icon: an icon key ("Plug") or a picture's address. A relative <see cref="System.Uri" /> converts to a key.</summary>
+    public IconRef? Icon { get; protected init; }
 
     public bool IsExpanded
     {
@@ -185,7 +186,7 @@ public record SiloNode
     {
     }
 
-    public SiloNode(object dataContext, string? text, Uri? uri, Uri? icon, int? expand)
+    public SiloNode(object dataContext, string? text, Uri? uri, IconRef? icon, int? expand)
     {
         DataContext = dataContext;
         Text        = text;

@@ -1,21 +1,20 @@
 using System.Collections;
 using System.Collections.Specialized;
 using System.ComponentModel;
-using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Markup;
 
-namespace Silo;
+namespace Silo.Ui;
 
 /// <summary>
-///     Injects a dynamic run of menu items (from <see cref="ItemsSource"/>) plus any
-///     statically-declared children into the parent <see cref="ItemsControl"/> (a
-///     <see cref="Menu"/> or <see cref="MenuItem"/>) this placeholder is declared inside,
+///     Injects a dynamic run of menu items (from <see cref="ItemsSource" />) plus any
+///     statically-declared children into the parent <see cref="ItemsControl" /> (a
+///     <see cref="Menu" /> or <see cref="MenuItem" />) this placeholder is declared inside,
 ///     immediately following its own position - see <c>MenuBar.xaml</c>'s Tools menu.
 /// </summary>
 /// <remarks>
 ///     Renamed from <c>RadMenuGroup</c> (it generated <c>Telerik.Windows.Controls.RadMenuItem</c>
-///     instances; now generates plain <see cref="MenuItem"/>) as part of removing the
+///     instances; now generates plain <see cref="MenuItem" />) as part of removing the
 ///     Telerik dependency. The file itself keeps its old name (<c>RadMenuGroup.cs</c>) since
 ///     renaming it requires a local rename this session's remote-device bridge can't do
 ///     without a shell - feel free to rename the file to <c>MenuGroup.cs</c> to match.

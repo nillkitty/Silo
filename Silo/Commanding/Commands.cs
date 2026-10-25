@@ -1,10 +1,9 @@
 ﻿using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Windows.Input;
-using Silo.Commanding;
 using Silo.Model;
 
-namespace Silo;
+namespace Silo.Commanding;
 
 /// <summary>
 ///     Silo commands (Silo Menu)
@@ -61,7 +60,7 @@ public record AppCommand : ICommand, INotifyPropertyChanged
     private readonly Enabler.EnablerFunc? _itemEnabler;
     private readonly IToggle?             _toggle;
     private          string               _header;
-    private          object?              _icon;
+    private          IconRef?             _icon;
     private          bool                 _isCheckable;
     private          string?              _toolTip;
 
@@ -80,9 +79,10 @@ public record AppCommand : ICommand, INotifyPropertyChanged
     }
 
     /// <summary>
-    ///     Gets or sets the icon source
+    ///     Gets or sets the icon: an icon key ("TbCopy") or a picture's address. Menus show it through
+    ///     <c>IconRefToVisualConverter</c>.
     /// </summary>
-    public object? Icon
+    public IconRef? Icon
     {
         get => _toggle?.Icon ?? _icon;
         set => SetField(ref _icon, value);
@@ -134,7 +134,7 @@ public record AppCommand : ICommand, INotifyPropertyChanged
     }
 
     public AppCommand(string  header,      Func<object?, Task>? execute, Enabler.EnablerFunc? enabler = null, string? toolTip = null,
-                      object? icon = null, bool                 isCheckable = false, Checker.CheckerFunc? checker = null)
+                      IconRef? icon = null, bool                isCheckable = false, Checker.CheckerFunc? checker = null)
     {
         _header         = header;
         _executeHandler = execute;
