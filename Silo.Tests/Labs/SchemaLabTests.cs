@@ -385,6 +385,30 @@ public class SchemaLabTests
     }
 
     [Test]
+    public void A_class_may_have_a_key_a_relative_key_and_an_absolute_key()
+    {
+        var d = new SchemaDraft();
+        Attr(d, "Id",                "Guid",   "Key");
+        Attr(d, "cn",                "String", "RelativeKey");
+        Attr(d, "distinguishedName", "String", "AbsoluteKey");
+        var c = d.Add(ConstructKind.Class, "entry");
+        c.Members.AddRange(["Id", "cn", "distinguishedName"]);
+        Assert.That(Errors(d), Is.Empty, Texts(Errors(d)));
+        Assert.That(SchemaCheck.Validate(d).Any(p => p.Text.Contains("no absolute key") || p.Text.Contains("no relative key")), Is.False);
+
+        Attr(d, "Name", "String", "RelativeKey");
+        c.Members.Add("Name");
+        Assert.That(Texts(Errors(d)), Does.Contain("one relative key"));
+        c.Members.Remove("Name");
+
+        d.Find(ConstructKind.Attribute, "cn")!.Set("flags", "RelativeKey, AbsoluteKey");
+        Assert.That(Texts(Errors(d)), Does.Contain("both the relative key"));
+
+        d.Find(ConstructKind.Attribute, "cn")!.Set("flags", "RelativeKey, Nullable");
+        Assert.That(Texts(Errors(d)), Does.Contain("relative or absolute key cannot"));
+    }
+
+    [Test]
     public void An_attribute_listed_twice_or_repeated_from_a_base_is_a_warning()
     {
         var d = new SchemaDraft();

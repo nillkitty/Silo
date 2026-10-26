@@ -3,6 +3,7 @@ using System.IO;
 using System.Text;
 using Microsoft.Win32;
 using Newtonsoft.Json;
+using Silo.Providers.Format;
 
 namespace Silo.Labs.Images;
 
@@ -363,8 +364,8 @@ public sealed partial class ImageLabSession : LabSession<ImageData>, ILabLive
     /// <summary>Writes the image to a file; the format is the extension's. Used by the terminal.</summary>
     internal string ExportTo(string path)
     {
-        var format = ImageFormat.All.FirstOrDefault(f => f.Extension.Equals(Path.GetExtension(path), StringComparison.OrdinalIgnoreCase) || (f == ImageFormat.Jpeg && Path.GetExtension(path).Equals(".jpeg", StringComparison.OrdinalIgnoreCase)))
-                     ?? throw new InvalidOperationException("The file name must end in .png, .jpg, .bmp, .gif or .ico.");
+        var format = ImageFormat.ForFile(path)
+                     ?? throw new InvalidOperationException("The file name must end in " + string.Join(", ", ImageFormat.All.SelectMany(f => f.File.DottedExtensions())) + ".");
         File.WriteAllBytes(path, ImageCodec.Encode(_doc.Composite(), format, Lab_.FlattenColor, Lab_.JpegQuality));
         return $"Wrote {path} ({new FileInfo(path).Length:N0} bytes)";
     }

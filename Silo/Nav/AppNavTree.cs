@@ -1,5 +1,7 @@
+using System.Runtime.CompilerServices;
 using System.Windows.Media;
 using Silo.Views;
+using Silo.Views.SettingsPanes;
 
 namespace Silo.Nav;
 
@@ -32,7 +34,7 @@ public record AppNavItem(string Text, Geometry? Icon, string Description, AppVie
 /// <remarks>
 ///     Every leaf below either has a real <see cref="AppView" /> -- built from a
 ///     <c>Views/PlaceholderView</c> or <c>Views/EntityListView</c> stand-in where the app
-///     doesn't have the real feature yet (every Settings section has a placeholder page) -- or, where the
+///     doesn't have the real feature yet (Settings sections open their panes, see <see cref="BuildSettings" />) -- or, where the
 ///     nav structure diagram draws no view for it (a handful of Schema/Connections entries), a
 ///     <see langword="null" /> one; selecting it just leaves whatever content was already
 ///     showing rather than clearing it to something misleading. The nine or so "ListView of X"
@@ -232,11 +234,15 @@ public static class AppNavTree
     /// <summary>The text of the Settings root, which <c>MainWindow</c> treats specially (selecting it unfolds the whole branch).</summary>
     public const string SettingsText = "Settings";
 
+    // the Settings section of each Settings nav item, so a section can find its group's while the tree is built
+    private static readonly ConditionalWeakTable<AppNavItem, SettingsSection> SettingsSections = new();
+
     /// <summary>
-    ///     Settings' own second-level flyout (the structure diagram's separate "Settings Nav" panel). The diagram defines
-    ///     only the grouping, not the content, so every section (and every group) opens a placeholder page for now --
-    ///     one document tab per section, keyed by its path so Settings ▸ Silo Settings ▸ Providers does not share a tab
-    ///     with Connections ▸ Providers.
+    ///     Settings' own second-level flyout (the structure diagram's separate "Settings Nav" panel). Every section opens its
+    ///     pane (<c>Views/SettingsPanes</c>) and every group a page tiling the panes beneath it; one document tab per node,
+    ///     keyed by its path so Settings ▸ Silo Settings ▸ Providers does not share a tab with Connections ▸ Providers.
+    ///     A section for authors or developers is shown only from that User Level up. Sections without a design yet show
+    ///     what they will hold.
     /// </summary>
     public static AppNavNode BuildSettings()
     {
@@ -249,43 +255,57 @@ public static class AppNavTree
                                                              silo => new[]
                                                                      {
                                                                          _setting("Assemblies", "Modules", silo,
-                                                                                  "The assemblies (extensions) this Silo loads and carries with it."),
+                                                                                  "The assemblies (extensions) this Silo loads and carries with it.",
+                                                                                  SettingsAudience.Any, () => new AssembliesPane()),
                                                                          _setting("Branding", "Design", silo,
-                                                                                  "This Silo's name, icon and look as other people see it."),
+                                                                                  "This Silo's name, icon and look as other people see it.",
+                                                                                  SettingsAudience.Author, () => new BrandingPane()),
                                                                          _setting("Security/Scripting", "Shield", silo,
-                                                                                  "Which scripts and extensions in this Silo may run, and with what rights."),
+                                                                                  "Which scripts and extensions in this Silo may run, and with what rights.",
+                                                                                  SettingsAudience.Developer, () => new SecurityPane()),
                                                                          _setting("Snapshots", "Record", silo,
-                                                                                  "Point-in-time snapshots of this Silo's data."),
+                                                                                  "Point-in-time snapshots of this Silo's data.",
+                                                                                  SettingsAudience.Any, () => new SnapshotsPane()),
                                                                          _setting("Backup/Restore", "Backup", silo,
-                                                                                  "Backing this Silo up and restoring it from a backup."),
+                                                                                  "Backing this Silo up and restoring it from a backup.",
+                                                                                  SettingsAudience.Any, () => new BackupPane()),
                                                                          _setting("Providers", "Server", silo,
                                                                                   "Which providers (data, type, format...) this Silo uses."),
                                                                          _setting("Network & Energy", "Network", silo,
-                                                                                  "When this Silo may use the network and run background work (metered connections, battery)."),
+                                                                                  "When this Silo may use the network and run background work (metered connections, battery).",
+                                                                                  SettingsAudience.Any, () => new NetworkPane()),
                                                                          _setting("Auditing & Undo", "Undo", silo,
-                                                                                  "What goes into the audit log, and how much undo history is kept."),
+                                                                                  "What goes into the audit log, and how much undo history is kept.",
+                                                                                  SettingsAudience.Any, () => new AuditUndoPane()),
                                                                          _setting("Data Transfer", "TransferData", silo,
                                                                                   "Defaults for importing, exporting and moving data."),
                                                                          _setting("Startup Layout", "Layers", silo,
                                                                                   "What this Silo opens, and how its windows are arranged, when it starts."),
                                                                          _setting("Keyboard", "Command", silo,
-                                                                                  "Keyboard shortcuts.")
+                                                                                  "Keyboard shortcuts.",
+                                                                                  SettingsAudience.Any, () => new KeyboardPane())
                                                                      }),
                                               _settingsGroup("Owner Settings", "Key2", settings,
                                                              "Settings only the Silo's owner can change.",
                                                              owner => new[]
                                                                       {
                                                                           _setting("Access Control", "Lock", owner,
-                                                                                   "Who may open this Silo, and what each person may do in it."),
+                                                                                   "Who may open this Silo, and what each person may do in it.",
+                                                                                   SettingsAudience.Any, () => new AccessControlPane()),
                                                                           _setting("Encryption", "Padlock", owner,
-                                                                                   "How this Silo's secrets are protected, and which key protector it uses.")
+                                                                                   "How this Silo's secrets are protected, and which key protector it uses.",
+                                                                                   SettingsAudience.Any, () => new EncryptionPane())
                                                                       }),
                                               _settingsGroup("User Settings", "FaceRecognition", settings,
                                                              "Your own settings: they follow you, not the Silo.",
                                                              user => new[]
                                                                      {
+                                                                         _setting("Authoring Settings", "Design", user,
+                                                                                  "Authoring tooltips and the authoring (design) context menu.",
+                                                                                  SettingsAudience.Author, () => new AuthoringPane()),
                                                                          _setting("Developer Settings", "Coding", user,
-                                                                                  "Options for developing and debugging extensions."),
+                                                                                  "Options for developing and debugging extensions.",
+                                                                                  SettingsAudience.Developer, () => new DeveloperPane()),
                                                                          _setting("Display Preferences", "Opacity", user,
                                                                                   "Theme, icon size and how things are shown."),
                                                                          _setting("Personalization", "Design", user,
@@ -296,42 +316,54 @@ public static class AppNavTree
                                                              app => new[]
                                                                     {
                                                                         _setting("Auto-Update", "Refresh", app,
-                                                                                 "How and when the app updates itself."),
+                                                                                 "How and when the app updates itself.",
+                                                                                 SettingsAudience.Any, () => new AutoUpdatePane()),
                                                                         _setting("Registered Handlers", "Link1", app,
-                                                                                 "The file types and URI schemes the app is registered to open.")
+                                                                                 "The file types and URI schemes the app is registered to open.",
+                                                                                 SettingsAudience.Any, () => new RegisteredHandlersPane())
                                                                     })
                                           });
     }
 
-    /// <summary>A Settings section: a leaf whose placeholder page names where it sits and what it will hold.</summary>
-    private static AppNavNode _setting(string text, string iconKey, AppNavItem parent, string about)
+    /// <summary>
+    ///     A Settings section: a leaf that opens its pane (<paramref name="pane" />; null for a section not designed yet), shown
+    ///     only from the User Level its <paramref name="audience" /> needs.
+    /// </summary>
+    private static AppNavNode _setting(string text, string iconKey, AppNavItem parent, string about,
+                                       SettingsAudience audience = SettingsAudience.Any, Func<SettingsPane>? pane = null)
     {
-        return _leaf(text, iconKey, parent, about, _settingsView(text, parent, () => about));
+        var section = new SettingsSection(text, _pathOf(parent) + " / " + text, about, audience, pane);
+        if (SettingsSections.TryGetValue(parent, out var group)) group.Children.Add(section);
+
+        var node = _leaf(text, iconKey, parent, about, _settingsView(section));
+        node.MinLevel = audience.MinLevel();
+        return node;
     }
 
     /// <summary>
-    ///     A Settings group: has a page of its own (rather than showing its first section's), listing its sections, so
-    ///     selecting the group does not look like selecting the section beneath it.
+    ///     A Settings group: has a page of its own (rather than showing its first section's) tiling the panes of its
+    ///     sections, so selecting the group does not look like selecting the section beneath it.
     /// </summary>
     private static AppNavNode _settingsGroup(string text, string iconKey, AppNavItem? parent, string about,
                                              Func<AppNavItem, IReadOnlyList<AppNavNode>> children)
     {
-        AppNavNode? node = null;
+        var section = new SettingsSection(text, _pathOf(parent) is { Length: > 0 } above ? above + " / " + text : text, about,
+                                          SettingsAudience.Any, null);
+        if (parent is not null && SettingsSections.TryGetValue(parent, out var group)) group.Children.Add(section);
 
-        // the page is built when it is first shown, by which time the node and its children exist
-        var view = _settingsView(text, parent, () => node is null || node.Children.Count == 0
-                                                         ? about
-                                                         : about + "\n\nSections: " + string.Join(", ", node.Children.Select(c => c.Header)) + ".");
-        node = _group(text, iconKey, parent, children, about, view);
-        return node;
+        // the item is made by _group before its children; it is registered first so they find their group
+        return _group(text, iconKey, parent, item =>
+                                             {
+                                                 SettingsSections.AddOrUpdate(item, section);
+                                                 return children(item);
+                                             }, about, _settingsView(section));
     }
 
-    private static AppView _settingsView(string text, AppNavItem? parent, Func<string> about)
+    private static AppView _settingsView(SettingsSection section)
     {
-        var path = _pathOf(parent) is { Length: > 0 } above ? above + " / " + text : text;
-        return new SimpleAppView(text, () => new PlaceholderView(text, path + "\n\n" + about() + "\n\nThis settings page is not built yet."))
+        return new SimpleAppView(section.Title, () => new SettingsPage(section))
                {
-                   Key = "view:settings/" + path.Replace(" / ", "/")
+                   Key = "view:settings/" + section.Path.Replace(" / ", "/")
                };
     }
 

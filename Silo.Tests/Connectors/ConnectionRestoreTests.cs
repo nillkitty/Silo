@@ -1,5 +1,6 @@
 using Silo.Connectors;
 using Silo.Connectors.File;
+using Silo.Providers.Data;
 
 namespace Silo.Tests.Connectors;
 

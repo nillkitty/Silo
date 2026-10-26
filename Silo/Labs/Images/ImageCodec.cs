@@ -2,35 +2,47 @@
 using System.IO;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using Silo.Providers.Document;
+using Silo.Providers.Format;
 
 namespace Silo.Labs.Images;
 
-/// <summary>A kind of picture file the Lab reads and writes.</summary>
+/// <summary>A kind of picture file the Lab writes.</summary>
 /// <param name="Name">What it is called in menus.</param>
-/// <param name="Extension">The extension, with the dot.</param>
+/// <param name="File">The file format it writes (its extensions and dialog filter).</param>
 /// <param name="HasAlpha">Whether the format keeps transparency.</param>
-internal sealed record ImageFormat(string Name, string Extension, bool HasAlpha)
+internal sealed record ImageFormat(string Name, IImageFormat File, bool HasAlpha)
 {
-    public static readonly ImageFormat Png = new("PNG", ".png", true);
-    public static readonly ImageFormat Jpeg = new("JPEG", ".jpg", false);
-    public static readonly ImageFormat Bmp = new("BMP", ".bmp", false);
-    public static readonly ImageFormat Gif = new("GIF", ".gif", true);
-    public static readonly ImageFormat Ico = new("ICO", ".ico", true);
+    public static readonly ImageFormat Png = new("PNG", Formats.Of<PngFormat>(), true);
+    public static readonly ImageFormat Jpeg = new("JPEG", Formats.Of<JpegFormat>(), false);
+    public static readonly ImageFormat Bmp = new("BMP", Formats.Of<BmpFormat>(), false);
+    public static readonly ImageFormat Gif = new("GIF", Formats.Of<GifFormat>(), true);
+    public static readonly ImageFormat Ico = new("ICO", Formats.Of<IconFormat>(), true);
 
     public static readonly IReadOnlyList<ImageFormat> All = [Png, Jpeg, Bmp, Gif, Ico];
 
-    public string Filter => $"{Name} picture (*{Extension})|*{Extension}" + (this == Jpeg ? ";*.jpeg" : string.Empty);
+    /// <summary>The extension a written file gets, with the dot.</summary>
+    public string Extension => File.DefaultExtension();
 
-    /// <summary>Whether a file name is one the Lab can open.</summary>
+    /// <summary>The dialog filter line of the format.</summary>
+    public string Filter => File.Filter();
+
+    /// <summary>The format the Lab writes for a file name (by its extension); null when it writes none for it.</summary>
+    public static ImageFormat? ForFile(string? path)
+    {
+        return All.FirstOrDefault(f => f.File.Claims(Path.GetExtension(path)));
+    }
+
+    /// <summary>Whether a file name is one the Lab can open (any picture format Windows decodes).</summary>
     public static bool IsPicture(string? path)
     {
         if (string.IsNullOrWhiteSpace(path) || path.Length > 400) return false;
 
-        string ext = Path.GetExtension(path).ToLowerInvariant();
-        return ext is ".png" or ".jpg" or ".jpeg" or ".bmp" or ".gif" or ".ico" or ".tif" or ".tiff" or ".webp";
+        return Formats.Is<IImageFormat>(path);
     }
 
-    public const string OpenFilter = "Pictures|*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.ico;*.tif;*.tiff|All files|*.*";
+    /// <summary>The filter of an Open dialog: every picture format, together and each, then all files.</summary>
+    public static string OpenFilter => Formats.OpenFilter<ImageSource>("Pictures");
 }
 
 /// <summary>Turns rasters into the bitmaps WPF shows and files hold, and back.</summary>
@@ -55,7 +67,7 @@ internal static class ImageCodec
     public static Raster Load(string path)
     {
         using var stream = File.OpenRead(path);
-        if (Path.GetExtension(path).Equals(".ico", StringComparison.OrdinalIgnoreCase))
+        if (Formats.Is<IconFormat>(path))
         {
             // an icon holds several sizes: take the biggest
             var icon = BitmapDecoder.Create(stream, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);

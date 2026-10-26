@@ -166,3 +166,12 @@ public class WmpFormat : ImageFormat
         return new WmpBitmapEncoder();
     }
 }
+
+/// <summary>WebP: read through the Windows WebP codec (installed with Windows 10 and later); Windows has no encoder for it.</summary>
+[Singleton(typeof(IImageFormat))]
+public class WebpFormat : ImageFormat
+{
+    public override string ContentType   { get; } = "image/webp";
+    public override string DisplayName   { get; } = "WebP Image";
+    public override string FileExtension { get; } = "webp";
+}

@@ -30,6 +30,9 @@ namespace Silo.Providers.Format;
 /// </remarks>
 public static class Formats
 {
+    /// <summary>The All files line of a dialog filter.</summary>
+    public const string AllFiles = "All files (*.*)|*.*";
+
     private static readonly object             Gate = new();
     private static          List<IFileFormat>? _all;
 
@@ -127,6 +130,47 @@ public static class Formats
         yield return new IconFormat();
         yield return new TiffFormat();
         yield return new WmpFormat();
+        yield return new WebpFormat();
+        yield return new JsonFormat();
+        yield return new XmlFormat();
+        yield return new YamlFormat();
+        yield return new MarkdownFormat();
+        yield return new ZipFormat();
+        yield return new CsvFormat();
+        yield return new TsvFormat();
+        yield return new SiloFileFormat();
+        yield return new DrawioFormat();
+        yield return new PlainTextFormat();
+        yield return new LogFormat();
+        yield return new IniFormat();
+        yield return new CSharpFormat();
+        yield return new JsonWithCommentsFormat();
+        yield return new GeoJsonFormat();
+        yield return new HarFormat();
+        yield return new NotebookFormat();
+        yield return new WebManifestFormat();
+        yield return new XamlFormat();
+        yield return new XsdFormat();
+        yield return new XsltFormat();
+        yield return new ConfigFormat();
+        yield return new MsBuildFormat();
+        yield return new NuspecFormat();
+        yield return new ResxFormat();
+        yield return new PlistFormat();
+        yield return new XshdFormat();
+        yield return new RssFormat();
+        yield return new AtomFormat();
+        yield return new HtmlFormat();
+        yield return new SvgFormat();
+        yield return new PdfFormat();
+        yield return new MhtmlFormat();
+        yield return new JavaScriptFormat();
+        yield return new CssFormat();
+        yield return new WoffFormat();
+        yield return new Woff2Format();
+        yield return new XpsFormat();
+        yield return new AssemblyFormat();
+        yield return new ExecutableFormat();
     }
 
     // ---- asking --------------------------------------------------------------------------------------------------
@@ -141,9 +185,43 @@ public static class Formats
     }
 
     /// <summary>The formats that claim the file's extension.</summary>
-    public static IEnumerable<IFileFormat> ForFile(string path)
+    public static IEnumerable<IFileFormat> ForFile(string? path)
     {
         return ForExtension(Path.GetExtension(path));
+    }
+
+    /// <summary>
+    ///     The known format of type <typeparamref name="T" /> (the registered instance when there is one, else a new one), for
+    ///     code that names a format rather than an extension.
+    /// </summary>
+    public static T Of<T>() where T : class, IFileFormat, new()
+    {
+        return All.OfType<T>().FirstOrDefault() ?? new T();
+    }
+
+    /// <summary>Whether a format of type <typeparamref name="T" /> claims the file's extension.</summary>
+    public static bool Is<T>(string? path) where T : IFileFormat
+    {
+        return ForFile(path).OfType<T>().Any();
+    }
+
+    /// <summary>
+    ///     The <c>Content-Type</c> of the first format that claims the file's extension (a query or fragment on a URL is
+    ///     ignored); null when none does.
+    /// </summary>
+    public static string? ContentTypeOf(string? pathOrUrl)
+    {
+        string path = pathOrUrl ?? string.Empty;
+        int    cut  = path.IndexOfAny(['?', '#']);
+        if (cut >= 0) path = path[..cut];
+
+        return ForFile(path).Select(f => f.ContentType).FirstOrDefault(c => !string.IsNullOrEmpty(c));
+    }
+
+    /// <summary>The format whose syntax files of <paramref name="format" /> are written in: its base for a dialect, else itself.</summary>
+    public static IFileFormat SyntaxOf(IFileFormat format)
+    {
+        return format is IDialectFormat dialect && All.FirstOrDefault(f => dialect.BaseFormat.IsInstanceOfType(f)) is { } known ? known : format;
     }
 
     /// <summary>The formats that can open documents of this kind.</summary>
@@ -187,33 +265,40 @@ public static class Formats
     public static string OpenFilter<T>(string allLabel)
     {
         var readers = Readers<T>().OfType<IFileFormat>().ToList();
-        return FilterOf(readers, allLabel);
+        return FilterOf(readers, allLabel, true);
     }
 
     /// <summary>The filter of a Save dialog for the formats that can write documents of this kind.</summary>
     public static string SaveFilter<T>()
     {
-        return FilterOf(Writers<T>().OfType<IFileFormat>().ToList(), null);
+        return FilterOf(Writers<T>().OfType<IFileFormat>().ToList(), null, false);
     }
 
-    private static string FilterOf(IReadOnlyList<IFileFormat> formats, string? allLabel)
+    /// <summary>
+    ///     The filter of an Open or Save dialog for <paramref name="formats" />, one line each, in order: with
+    ///     <paramref name="allLabel" />, a line for all of them together comes first; with <paramref name="allFiles" />, All
+    ///     files comes last.
+    /// </summary>
+    public static string Filter(IEnumerable<IFileFormat> formats, string? allLabel = null, bool allFiles = false)
+    {
+        return FilterOf(formats.ToList(), allLabel, allFiles);
+    }
+
+    private static string FilterOf(IReadOnlyList<IFileFormat> formats, string? allLabel, bool allFiles)
     {
         var parts = new List<string>();
         if (allLabel is not null && formats.Count > 0)
         {
-            string all = string.Join(';', formats.SelectMany(f => f.FileExtensions)
-                                                 .Select(e => "*." + e.Trim())
+            string all = string.Join(';', formats.SelectMany(f => f.Extensions())
+                                                 .Select(e => "*." + e)
                                                  .Distinct(StringComparer.OrdinalIgnoreCase));
             parts.Add($"{allLabel}|{all}");
         }
 
         foreach (var f in formats)
-        {
-            string pattern = string.Join(';', f.FileExtensions.Select(e => "*." + e.Trim()));
-            parts.Add($"{f.DisplayName} ({pattern})|{pattern}");
-        }
+            parts.Add(f.Filter());
 
-        if (allLabel is not null) parts.Add("All files (*.*)|*.*");
+        if (allFiles) parts.Add(AllFiles);
         return string.Join('|', parts);
     }
 
@@ -262,5 +347,65 @@ public static class Formats
     {
         using var stream = new FileStream(path, FileMode.Create, FileAccess.Write);
         format.Write(stream, [collection]);
+    }
+}
+
+/// <summary>What a dialog, a file name or a check needs from an <see cref="IFileFormat" />.</summary>
+public static class FileFormatExtensions
+{
+    /// <summary>The format's extensions, trimmed and without dots, in order.</summary>
+    public static IEnumerable<string> Extensions(this IFileFormat format)
+    {
+        return format.FileExtensions.Select(e => e.Trim().TrimStart('.')).Where(e => e.Length > 0);
+    }
+
+    /// <summary>The format's extensions with their dots (<c>.jpg</c>, <c>.jpeg</c>).</summary>
+    public static string[] DottedExtensions(this IFileFormat format)
+    {
+        return format.Extensions().Select(e => "." + e).ToArray();
+    }
+
+    /// <summary>The extension a new file of the format gets (the first one), with its dot.</summary>
+    public static string DefaultExtension(this IFileFormat format)
+    {
+        return format.Extensions().Select(e => "." + e).FirstOrDefault() ?? string.Empty;
+    }
+
+    /// <summary>The wildcard pattern of the format's files, <c>*.jpg;*.jpeg</c>.</summary>
+    public static string Pattern(this IFileFormat format)
+    {
+        return string.Join(';', format.Extensions().Select(e => "*." + e));
+    }
+
+    /// <summary>The format's line of a dialog filter, <c>JPEG Image (*.jpg;*.jpeg)|*.jpg;*.jpeg</c>; then All files when asked.</summary>
+    public static string Filter(this IFileFormat format, bool allFiles = false)
+    {
+        string pattern = format.Pattern();
+        return $"{format.DisplayName} ({pattern})|{pattern}" + (allFiles ? "|" + Formats.AllFiles : string.Empty);
+    }
+
+    /// <summary>
+    ///     Whether the format claims a file: <paramref name="pathOrExtension" /> is a path or name (<c>a.png</c>) or an
+    ///     extension with or without its dot (<c>.png</c>, <c>png</c>).
+    /// </summary>
+    public static bool Claims(this IFileFormat format, string? pathOrExtension)
+    {
+        if (string.IsNullOrEmpty(pathOrExtension)) return false;
+
+        string ext = pathOrExtension.Contains('.') ? Path.GetExtension(pathOrExtension) : pathOrExtension;
+        ext = ext.TrimStart('.');
+        return ext.Length > 0 && format.Extensions().Any(e => e.Equals(ext, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>A file name of the format: <paramref name="stem" /> and the default extension.</summary>
+    public static string FileName(this IFileFormat format, string stem)
+    {
+        return stem + format.DefaultExtension();
+    }
+
+    /// <summary><paramref name="path" />, with the default extension added when the format does not already claim it.</summary>
+    public static string WithExtension(this IFileFormat format, string path)
+    {
+        return format.Claims(Path.GetExtension(path)) ? path : path + format.DefaultExtension();
     }
 }

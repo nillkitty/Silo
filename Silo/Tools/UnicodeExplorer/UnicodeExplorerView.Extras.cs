@@ -3,6 +3,7 @@ using System.IO;
 using System.Text;
 using System.Windows.Controls;
 using Microsoft.Win32;
+using Silo.Providers.Format;
 using Silo.Ui.Windows;
 using Silo.Unicode;
 
@@ -176,7 +177,8 @@ public sealed partial class UnicodeExplorerView
     {
         if (_tray.Count == 0) return;
 
-        var dialog = new SaveFileDialog { Title = "Dump the collection's glyphs", Filter = "Text file (*.txt)|*.txt", FileName = "glyphs", DefaultExt = "txt", AddExtension = true, OverwritePrompt = true };
+        var textFormat = Formats.Of<PlainTextFormat>();
+        var dialog     = new SaveFileDialog { Title = "Dump the collection's glyphs", Filter = textFormat.Filter(), FileName = "glyphs", DefaultExt = textFormat.DefaultExtension(), AddExtension = true, OverwritePrompt = true };
         if (dialog.ShowDialog() != true) return;
 
         var text = new StringBuilder();

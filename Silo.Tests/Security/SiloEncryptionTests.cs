@@ -1,6 +1,7 @@
 ﻿using System.Text;
 using Silo.Crypto;
 using Silo.Providers.Crypto;
+using Silo.Providers.Data;
 
 namespace Silo.Tests.Security;
 

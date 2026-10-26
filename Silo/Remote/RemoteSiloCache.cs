@@ -2,6 +2,7 @@
 using System.Security.Cryptography;
 using System.Text.Json;
 using Serilog;
+using Silo.Providers.Format;
 
 namespace Silo.Remote;
 
@@ -60,8 +61,7 @@ public sealed class RemoteSiloCache
         var name = Path.GetFileName(uri.AbsolutePath.TrimEnd('/'));
         foreach (var bad in Path.GetInvalidFileNameChars()) name = name.Replace(bad, '_');
         if (string.IsNullOrWhiteSpace(name)) name = "remote";
-        if (!name.EndsWith(".silo", StringComparison.OrdinalIgnoreCase)) name += ".silo";
-        return name;
+        return Formats.Of<SiloFileFormat>().WithExtension(name);
     }
 
     private RemoteState Load()

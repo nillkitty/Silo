@@ -1,4 +1,5 @@
-﻿using Silo.Unicode;
+﻿using System.IO;
+using Silo.Unicode;
 
 namespace Silo.Tests.Unicode;
 

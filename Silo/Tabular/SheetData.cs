@@ -187,6 +187,50 @@ public sealed class SheetData
     /// <summary>True when the row has no content in any cell.</summary>
     public static bool IsBlank(string[] row) => row.All(string.IsNullOrWhiteSpace);
 
+    /// <summary>
+    ///     Whether <paramref name="other" /> holds the same columns (name, type, alignment) and cells. Blank rows at the end
+    ///     are ignored: they are room for typing, not content.
+    /// </summary>
+    public bool ContentEquals(SheetData? other)
+    {
+        if (other is null || other.Columns.Count != Columns.Count) return false;
+
+        for (int c = 0; c < Columns.Count; c++)
+        {
+            var a = Columns[c];
+            var b = other.Columns[c];
+            if (a.Type != b.Type || a.Align != b.Align || !string.Equals(a.Name, b.Name, StringComparison.Ordinal)) return false;
+        }
+
+        int rows = ContentRowCount();
+        if (rows != other.ContentRowCount()) return false;
+
+        for (int r = 0; r < rows; r++)
+        {
+            var x = Rows[r];
+            var y = other.Rows[r];
+            for (int c = 0; c < Columns.Count; c++)
+            {
+                string p = c < x.Length ? x[c] ?? string.Empty : string.Empty;
+                string q = c < y.Length ? y[c] ?? string.Empty : string.Empty;
+                if (!string.Equals(p, q, StringComparison.Ordinal)) return false;
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>The number of rows up to and including the last one that is not blank.</summary>
+    public int ContentRowCount()
+    {
+        int n = Rows.Count;
+        while (n > 0 && IsBlank(Rows[n - 1])) n--;
+        return n;
+    }
+
+    /// <summary>The number of cells (rows x columns): a rough measure of how much memory a copy takes.</summary>
+    public long CellCount => (long)Rows.Count * Math.Max(1, Columns.Count);
+
     /// <summary>The header names, with blanks and duplicates made unique (a blank becomes the column letter).</summary>
     public IReadOnlyList<string> UniqueHeaders()
     {

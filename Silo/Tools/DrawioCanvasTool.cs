@@ -11,6 +11,7 @@ using Silo.Drawio.Host;
 using Silo.Drawio.Mx;
 using Silo.Drawio.Options;
 using Silo.Model;
+using Silo.Providers.Format;
 using Telefrag.DI;
 
 namespace Silo.Tools;
@@ -395,7 +396,7 @@ public class DrawioCanvasTool : ToolBase
     {
         if (_view is null) return;
 
-        var dlg = new OpenFileDialog { Filter = "draw.io diagrams (*.drawio;*.xml)|*.drawio;*.xml|All files (*.*)|*.*" };
+        var dlg = new OpenFileDialog { Filter = Formats.Filter([Formats.Of<DrawioFormat>(), Formats.Of<XmlFormat>()], "draw.io diagrams", true) };
         if (dlg.ShowDialog() != true) return;
 
         string xml;
@@ -435,10 +436,11 @@ public class DrawioCanvasTool : ToolBase
     {
         if (_view is null) return;
 
+        var drawio = Formats.Of<DrawioFormat>();
         var dlg = new SaveFileDialog
                   {
-                      Filter   = "draw.io diagram (*.drawio)|*.drawio",
-                      FileName = (_current?.Name ?? "diagram") + ".drawio"
+                      Filter   = drawio.Filter(),
+                      FileName = drawio.FileName(_current?.Name ?? "diagram")
                   };
         if (dlg.ShowDialog() != true) return;
 

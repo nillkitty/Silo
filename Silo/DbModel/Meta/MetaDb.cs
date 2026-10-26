@@ -117,9 +117,21 @@ public enum MvAttributeFlags
     Anr = 8,
 
     /// <summary>
-    /// The field is the type's primary key
+    /// The field is the type's primary key (its identity)
     /// </summary>
-    Key = 0x10
+    Key = 0x10,
+
+    /// <summary>
+    /// The field is the type's relative key: the object's name within its container
+    /// (cn, Name), the partial native key. Mirrors <see cref="Silo.DbModel.Worlds.WorldFieldFlags.RelativePath" />.
+    /// </summary>
+    RelativeKey = 0x20,
+
+    /// <summary>
+    /// The field is the type's absolute key: the object's full path or name
+    /// (distinguishedName, FullName, a URI), the full native key. Mirrors <see cref="Silo.DbModel.Worlds.WorldFieldFlags.AbsolutePath" />.
+    /// </summary>
+    AbsoluteKey = 0x40
 }
 
 public class MvObj

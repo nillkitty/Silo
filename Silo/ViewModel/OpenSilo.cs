@@ -10,6 +10,7 @@ using Silo.DbModel.Sqlite;
 using Silo.Hosting;
 using Silo.Providers.Crypto;
 using Silo.Providers.Data.Validation;
+using Silo.Providers.Format;
 using Silo.Remote;
 using Silo.Settings;
 using Silo.Ui.Windows;
@@ -600,7 +601,7 @@ public partial class OpenSilo : ModelBase
 
     public void ExportLogs()
     {
-        ExportAs(App.Instance!.GetLogs(), "Log Files (*.log)|*.log", null);
+        ExportAs(App.Instance!.GetLogs(), Formats.Of<LogFormat>().Filter(), null);
     }
 
     public async Task<bool> Shutdown()

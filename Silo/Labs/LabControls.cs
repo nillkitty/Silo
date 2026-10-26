@@ -110,6 +110,11 @@ internal static class LabIcons
         (["select all", "all"], "TbSelectAll"),
         (["help", "explain", "about", "what"], "TbHelp"),
         (["link", "join", "connect"], "Link"),
+        (["promote"], "TbExport"),
+        (["revert"], "Undo"),
+        (["inherits", "inherit"], "HierarchyStructure"),
+        (["includes", "include"], "Puzzle"),
+        (["show"], "Layers"),
         (["lock", "protect"], "Lock"),
         (["hide", "close"], "Hide"),
         (["rename", "edit", "change", "set"], "Property")

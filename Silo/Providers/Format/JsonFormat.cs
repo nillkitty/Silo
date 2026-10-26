@@ -2,6 +2,7 @@ using System.IO;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Silo.Providers.Data.Source;
+using Silo.Providers.Diagramming;
 using Silo.Providers.Document;
 using Silo.Providers.Reflection;
 using Telefrag.DI;
@@ -9,7 +10,7 @@ using Telefrag.DI;
 namespace Silo.Providers.Format;
 
 [Singleton(typeof(IFileFormat))]
-public class JsonFormat : IFileFormat, IDocumentProvider<JToken>
+public class JsonFormat : IFileFormat, IDocumentProvider<JToken>, IBindableFormat
 {
     public JsonLoadSettings? Settings { get; set; } = new()
                                                       {
@@ -23,6 +24,12 @@ public class JsonFormat : IFileFormat, IDocumentProvider<JToken>
     public string FileExtension { get; } = "json";
 
     public string ContentType { get; } = "application/json";
+
+    /// <summary>The file read once, as one JSON value (a file of several values is an array of them).</summary>
+    public object? Bind(Uri uri)
+    {
+        return new JsonDocument(this, uri).GetData();
+    }
 
     public IEnumerable<DataVerb> GetSupportedVerbs()
     {

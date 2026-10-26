@@ -259,9 +259,9 @@ internal sealed class SchemaEditor : ContentControl
             var    attr  = _session.Draft.Find(ConstructKind.Attribute, name);
             var    row   = new DockPanel { Margin = new Thickness(6, 1, 6, 1) };
             var    tools = new StackPanel { Orientation = Orientation.Horizontal };
-            tools.Children.Add(Small("▲", () => Move(() => _session.MoveMember(at, -1)), "Move up"));
-            tools.Children.Add(Small("▼", () => Move(() => _session.MoveMember(at, 1)), "Move down"));
-            tools.Children.Add(Small("✕", () => Move(() => _session.RemoveMember(at)), "Take the attribute out of the class (it stays in the draft)"));
+            tools.Children.Add(Small("ArrowUp", () => Move(() => _session.MoveMember(at, -1)), "Move up"));
+            tools.Children.Add(Small("ArrowDown", () => Move(() => _session.MoveMember(at, 1)), "Move down"));
+            tools.Children.Add(Small("Remove", () => Move(() => _session.RemoveMember(at)), "Take the attribute out of the class (it stays in the draft)"));
             DockPanel.SetDock(tools, Dock.Right);
             row.Children.Add(tools);
             var label = LabUi.Label(attr is null ? $"{name}  (in the Silo)" : $"{name} : {attr.Get("type", "String")}", mono: true);
@@ -282,8 +282,8 @@ internal sealed class SchemaEditor : ContentControl
                                                      {
                                                          _session.AddMember(add.Text);
                                                          Again();
-                                                     }, "Give the class the attribute named in the box"),
-                            LabUi.Button("New attribute", () => _session.NewMember(), "Make a new attribute and give it to the class"));
+                                                     }, "Give the class the attribute named in the box", icon: "Plus"),
+                            LabUi.Button("New attribute", () => _session.NewMember(), "Make a new attribute and give it to the class", icon: ConstructKind.Attribute.IconKey()));
         panel.Children.Add(bar);
 
         var all = SchemaCheck.AllMembers(_session.Draft, c.Name);
@@ -306,7 +306,7 @@ internal sealed class SchemaEditor : ContentControl
         foreach (var r in relations)
         {
             var row  = new DockPanel { Margin = new Thickness(6, 1, 6, 1) };
-            var drop = Small("✕", () =>
+            var drop = Small("Remove", () =>
                                   {
                                       _session.RemoveRelation(r.Name);
                                       Again();
@@ -328,13 +328,14 @@ internal sealed class SchemaEditor : ContentControl
             Again();
         }
 
-        panel.Children.Add(LabUi.Bar(LabUi.Label(c.Name + " "), other, LabUi.Button("inherits", () => Join(false), "This class inherits the chosen class"), LabUi.Button("includes", () => Join(true), "This class includes the chosen auxiliary class")));
+        panel.Children.Add(LabUi.Bar(LabUi.Label(c.Name + " "), other, LabUi.Button("inherits", () => Join(false), "This class inherits the chosen class", icon: "HierarchyStructure"), LabUi.Button("includes", () => Join(true), "This class includes the chosen auxiliary class", icon: "Puzzle")));
     }
 
-    private static Button Small(string text, Action click, string tip)
+    /// <summary>A compact icon-only button for a row's own tools (move up, move down, take out); the tip says what it does.</summary>
+    private static Button Small(string icon, Action click, string tip)
     {
-        var b = LabUi.Button(text, click, tip);
-        b.Padding = new Thickness(4, 0, 4, 0);
+        var b = LabUi.IconButton(icon, click, tip);
+        b.Padding  = new Thickness(4, 1, 4, 1);
         b.MinWidth = 22;
         return b;
     }
@@ -396,7 +397,7 @@ internal sealed class SchemaEditor : ContentControl
         }
 
         panel.Children.Add(grid);
-        panel.Children.Add(LabUi.Bar(LabUi.Button("Add value", () => Move(_session.AddValue), "Add a value, numbered as the Enums window would")));
+        panel.Children.Add(LabUi.Bar(LabUi.Button("Add value", () => Move(_session.AddValue), "Add a value, numbered as the Enums window would", icon: "Token")));
     }
 
     // ---- attribute: who has it -------------------------------------------------------------------------
@@ -416,7 +417,7 @@ internal sealed class SchemaEditor : ContentControl
         var wrap = new WrapPanel { Margin = new Thickness(6, 0, 6, 0) };
         foreach (var c in users)
         {
-            var link = LabUi.Button(c.Name, () => _session.Select(c), "Select the class");
+            var link = LabUi.Button(c.Name, () => _session.Select(c), "Select the class", icon: ConstructKind.Class.IconKey());
             wrap.Children.Add(link);
         }
 

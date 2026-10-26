@@ -1,11 +1,14 @@
 ﻿using System.IO;
 using System.IO.Compression;
 using Serilog;
+using Silo.Providers.Format;
+using Silo.Providers.Reflection;
 
 namespace Silo.DbModel.Sqlite;
 
 /// <summary>
-///     Looks inside a <c>.silo</c> file for program files (<c>.dll</c> / <c>.exe</c>) without extracting or opening it.
+///     Looks inside a <c>.silo</c> file for program files (any <see cref="IProgramFormat" />: <c>.dll</c>, <c>.exe</c>)
+///     without extracting or opening it.
 /// </summary>
 /// <remarks>
 ///     This version of Silo never loads or runs code from a Silo file: Silos are data. A Silo can still carry such files
@@ -18,9 +21,6 @@ namespace Silo.DbModel.Sqlite;
 /// </remarks>
 public static class SiloContentScan
 {
-    /// <summary>Extensions treated as program files.</summary>
-    private static readonly string[] ProgramExtensions = [".dll", ".exe"];
-
     /// <summary>The names (as stored in the zip) of every program file in the Silo at <paramref name="siloPath" />; empty for anything else, or on any read error.</summary>
     public static IReadOnlyList<string> FindProgramFiles(string siloPath)
     {
@@ -35,7 +35,7 @@ public static class SiloContentScan
             fs.Position = 0;
             using var zip = new ZipArchive(fs, ZipArchiveMode.Read, true);
             return zip.Entries
-                      .Where(e => e.Name.Length > 0 && ProgramExtensions.Any(x => e.Name.EndsWith(x, StringComparison.OrdinalIgnoreCase)))
+                      .Where(e => e.Name.Length > 0 && Formats.Is<IProgramFormat>(e.Name))
                       .Select(e => e.FullName)
                       .ToList();
         }

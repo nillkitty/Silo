@@ -10,6 +10,8 @@ using Serilog;
 using Silo.Assets;
 using Silo.Contracts.Core;
 using Silo.Contracts.Resources;
+using Silo.Providers.Document;
+using Silo.Providers.Format;
 
 using Telefrag.DI;
 
@@ -147,11 +149,13 @@ public class IconViewer : ToolBase
                              CopyValue     = entry.Reference
                          });
 
-        foreach (var entry in index.WithExtension(".png", ".svg"))
+        var png = Formats.Of<PngFormat>();
+        var svg = Formats.Of<SvgFormat>();
+        foreach (var entry in index.WithExtension([..png.DottedExtensions(), ..svg.DottedExtensions()]))
         {
             bool compiled = entry.Kind == ResourceKind.CompiledResource;
 
-            if (entry.Extension == ".png")
+            if (png.Claims(entry.Extension))
             {
                 var bitmap = LoadBitmap(entry);
                 if (bitmap is null) continue;

@@ -213,8 +213,11 @@ public static class SchemaLayout
                 {
                     var    attr = draft.Find(ConstructKind.Attribute, m);
                     string type = attr is null ? "?" : attr.Get("type", "String");
-                    bool   key  = attr is not null && attr.List("flags").Contains("Key", StringComparer.OrdinalIgnoreCase);
-                    lines.Add($"{(key ? "# " : "  ")}{m} : {type}");
+                    var    f    = attr is null ? MvAttributeFlags.None : SchemaRecords.AttributeFlags(attr);
+                    // # the primary key, ~ the relative key, / the absolute key
+                    char   k1   = (f & MvAttributeFlags.Key) != 0 ? '#' : ' ';
+                    char   k2   = (f & MvAttributeFlags.RelativeKey) != 0 ? '~' : (f & MvAttributeFlags.AbsoluteKey) != 0 ? '/' : ' ';
+                    lines.Add($"{k1}{k2} {m} : {type}");
                 }
 
                 break;

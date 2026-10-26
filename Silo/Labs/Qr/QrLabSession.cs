@@ -3,6 +3,9 @@ using System.Text;
 using System.Windows.Media.Imaging;
 using Microsoft.Win32;
 using Newtonsoft.Json;
+using Silo.Providers.Document;
+using Silo.Providers.Format;
+using Silo.Providers.Reflection;
 
 namespace Silo.Labs.Qr;
 
@@ -306,7 +309,8 @@ public sealed partial class QrLabSession : LabSession<QrDoc>, ILabLive
     {
         if (Svg() is not { } svg) return;
 
-        var dialog = new SaveFileDialog { Title = "Save the code as a picture", FileName = FileName("svg"), Filter = "SVG picture (*.svg)|*.svg" };
+        var svgFormat = Formats.Of<SvgFormat>();
+        var dialog    = new SaveFileDialog { Title = "Save the code as a picture", FileName = FileName(svgFormat), Filter = svgFormat.Filter() };
         if (dialog.ShowDialog() != true) return;
 
         File.WriteAllText(dialog.FileName, svg, new UTF8Encoding(false));
@@ -317,18 +321,19 @@ public sealed partial class QrLabSession : LabSession<QrDoc>, ILabLive
     {
         if (Png() is not { } png) return;
 
-        var dialog = new SaveFileDialog { Title = "Save the code as a picture", FileName = FileName("png"), Filter = "PNG picture (*.png)|*.png" };
+        var pngFormat = Formats.Of<PngFormat>();
+        var dialog    = new SaveFileDialog { Title = "Save the code as a picture", FileName = FileName(pngFormat), Filter = pngFormat.Filter() };
         if (dialog.ShowDialog() != true) return;
 
         File.WriteAllBytes(dialog.FileName, png);
         Status = $"Saved {Path.GetFileName(dialog.FileName)}";
     }
 
-    private string FileName(string extension)
+    private string FileName(IFileFormat format)
     {
         string name = string.IsNullOrWhiteSpace(_doc.Name) ? "qrcode" : _doc.Name;
         foreach (char c in Path.GetInvalidFileNameChars()) name = name.Replace(c, '_');
-        return name + "." + extension;
+        return format.FileName(name);
     }
 
     private void CopyImage()
@@ -348,7 +353,7 @@ public sealed partial class QrLabSession : LabSession<QrDoc>, ILabLive
 
     public void ChooseImage()
     {
-        var dialog = new OpenFileDialog { Title = "Read a picture of a code", Filter = "Pictures|*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.tif;*.tiff|All files|*.*" };
+        var dialog = new OpenFileDialog { Title = "Read a picture of a code", Filter = Formats.OpenFilter<System.Windows.Media.ImageSource>("Pictures") };
         if (dialog.ShowDialog() == true) ReadImageFile(dialog.FileName);
     }
 

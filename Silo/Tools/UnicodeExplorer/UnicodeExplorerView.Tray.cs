@@ -562,15 +562,9 @@ public sealed partial class UnicodeExplorerView
         var dialog = new SaveFileDialog { Title = "Save the collection", Filter = CollectionFormats.SaveFilter, FileName = "characters", AddExtension = true, OverwritePrompt = true };
         if (dialog.ShowDialog() != true) return;
 
-        // Text, JSON, TSV, CSV, code point list — the filter order; a typed extension that disagrees with the chosen filter wins when it is a known one
-        var format = dialog.FilterIndex switch
-                     {
-                         2 => CollectionFormat.Json,
-                         3 => CollectionFormat.Tsv,
-                         4 => CollectionFormat.Csv,
-                         5 => CollectionFormat.CodePointList,
-                         _ => CollectionFormat.Text
-                     };
+        // the filter lists CollectionFormats.SaveFormats in order; a typed extension that disagrees with the chosen filter wins when it is a known one
+        var saveFormats = CollectionFormats.SaveFormats;
+        var format      = dialog.FilterIndex is var index && index >= 1 && index <= saveFormats.Count ? saveFormats[index - 1].Format : CollectionFormat.Text;
         if (CollectionFormats.FromExtension(dialog.FileName) is { } typed && typed != CollectionFormat.Text && typed != format) format = typed;
 
         try

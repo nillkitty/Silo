@@ -4,6 +4,8 @@ using Microsoft.Win32;
 using Silo.DbModel.Meta;
 using Silo.Providers.Data;
 using Silo.Providers.Definitions;
+using Silo.Providers.Format;
+using Silo.Providers.Reflection;
 
 namespace Silo.Labs.Schemas;
 
@@ -600,15 +602,11 @@ public sealed partial class SchemaLabSession : LabSession<SchemaDraft>, ILabLive
         Status = ApplyJson(text) is { } error ? "That is not a schema draft: " + error : "The draft is now the JSON from the clipboard.";
     }
 
-    private void SaveFile(string extension, string text)
+    private void SaveFile(IFileFormat format, string text)
     {
         string name = string.IsNullOrWhiteSpace(_draft.Name) ? "Schema" : _draft.Name;
         foreach (char c in Path.GetInvalidFileNameChars()) name = name.Replace(c, '_');
-        var dialog = new SaveFileDialog
-                     {
-                         Title = "Save the draft", FileName = name + "." + extension,
-                         Filter = extension == "cs" ? "C# (*.cs)|*.cs" : extension == "txt" ? "Text (*.txt)|*.txt" : "JSON (*.json)|*.json"
-                     };
+        var dialog = new SaveFileDialog { Title = "Save the draft", FileName = format.FileName(name), Filter = format.Filter() };
         if (dialog.ShowDialog() != true) return;
 
         File.WriteAllText(dialog.FileName, text, new UTF8Encoding(true));
@@ -629,7 +627,7 @@ public sealed partial class SchemaLabSession : LabSession<SchemaDraft>, ILabLive
                                                                                   {
                                                                                       RefreshSnapshot();
                                                                                       Rebuilt();
-                                                                                  }, null, null, "Look at what the Silo holds again");
+                                                                                  }, "Refresh", null, "Look at what the Silo holds again");
             yield return ProvidedCommand.From("settings", "Open Se_ttings", () => Host?.ShowInspector(LabParametersInspector.InspectorId), "Settings", null, "Show the Lab's parameters");
         }
     }
@@ -639,10 +637,10 @@ public sealed partial class SchemaLabSession : LabSession<SchemaDraft>, ILabLive
         get
         {
             yield return ProvidedCommand.Submenu("add", "_Add", ConstructKinds.All.Where(k => k != ConstructKind.Relation)
-                                                                .Select(k => ProvidedCommand.From("add-" + k.Word(), k.Title(), () => AddConstruct(k), null, null, $"Add a {k.Title().ToLowerInvariant()} to the draft")), null, "TbNew", "Add to the draft");
-            yield return ProvidedCommand.From("add-class", "Add _Class", () => AddConstruct(ConstructKind.Class), null, null, "Add a class") with { Gesture = "Ctrl+Shift+N" };
-            yield return ProvidedCommand.From("add-member", "Add Attribute to Cl_ass", NewMember, null, () => Selected is { Kind: ConstructKind.Class }, "Make an attribute and give it to the selected class");
-            yield return ProvidedCommand.From("add-value", "Add Enum _Value", AddValue, null, () => Selected is { Kind: ConstructKind.Enum }, "Add a value to the selected enum");
+                                                                .Select(k => ProvidedCommand.From("add-" + k.Word(), k.Title(), () => AddConstruct(k), k.IconKey(), null, $"Add a {k.Title().ToLowerInvariant()} to the draft")), null, "TbNew", "Add to the draft");
+            yield return ProvidedCommand.From("add-class", "Add _Class", () => AddConstruct(ConstructKind.Class), ConstructKind.Class.IconKey(), null, "Add a class") with { Gesture = "Ctrl+Shift+N" };
+            yield return ProvidedCommand.From("add-member", "Add Attribute to Cl_ass", NewMember, ConstructKind.Attribute.IconKey(), () => Selected is { Kind: ConstructKind.Class }, "Make an attribute and give it to the selected class");
+            yield return ProvidedCommand.From("add-value", "Add Enum _Value", AddValue, "Token", () => Selected is { Kind: ConstructKind.Enum }, "Add a value to the selected enum");
             yield return ProvidedCommand.From("delete-construct", "_Delete", RemoveSelected, "TbDelete", () => Selected is not null, "Take the selected construct out of the draft") with { Gesture = "Delete" };
         }
     }
@@ -656,8 +654,8 @@ public sealed partial class SchemaLabSession : LabSession<SchemaDraft>, ILabLive
             yield return ProvidedCommand.From("copy-json", "Copy _JSON", () => Copy(Json, "JSON"), "TbCopy", null, "Put the draft on the clipboard as JSON");
             yield return ProvidedCommand.From("copy-outline", "Copy _Outline", () => Copy(Outline, "outline"), "TbCopy", null, "Put the draft on the clipboard as an outline");
             yield return ProvidedCommand.From("copy-cs", "Copy _C# Sketch", () => Copy(CSharp, "C# sketch"), "TbCopy", null, "Put the draft's enums and classes on the clipboard as C#");
-            yield return ProvidedCommand.From("save-json", "Save as JS_ON File...", () => SaveFile("json", Json), "TbExport", null, "Write the draft to a JSON file");
-            yield return ProvidedCommand.From("save-cs", "Save as C# _File...", () => SaveFile("cs", CSharp), "TbExport", null, "Write the C# sketch to a file");
+            yield return ProvidedCommand.From("save-json", "Save as JS_ON File...", () => SaveFile(Formats.Of<JsonFormat>(), Json), "TbExport", null, "Write the draft to a JSON file");
+            yield return ProvidedCommand.From("save-cs", "Save as C# _File...", () => SaveFile(Formats.Of<CSharpFormat>(), CSharp), "TbExport", null, "Write the C# sketch to a file");
             yield return ProvidedCommand.From("delete", "Delete Kept Dra_ft", DeleteSaved, "TbDelete", () => Saved.IsAvailable && !string.IsNullOrWhiteSpace(_draft.Name) && Saved.Exists(_draft.Name), "Remove the draft from the Silo");
         }
     }

@@ -4,6 +4,7 @@ using Microsoft.Win32;
 using Serilog;
 using Silo.Hosting;
 using Silo.Model;
+using Silo.Providers.Format;
 using Silo.Ui;
 using Silo.Ui.Windows;
 using System.Windows.Threading;
@@ -23,7 +24,7 @@ public record OpenSiloCommand() : SiloCommand("_Open Silo...", Enabler.Always)
             var dlg = new OpenFileDialog
                       {
                           Title       = "Open Silo",
-                          Filter      = "Silo files (*.silo)|*.silo|All files (*.*)|*.*",
+                          Filter      = Formats.Of<SiloFileFormat>().Filter(true),
                           Multiselect = false
                       };
             if (dlg.ShowDialog() != true)

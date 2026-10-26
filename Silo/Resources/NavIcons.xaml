@@ -133,6 +133,7 @@
     <StreamGeometry x:Key="Flask">F1 M9,3 L15,3 L15,5 L14,5 L14,10.5 L19.6,19 A1.6,1.6 0 0 1 18.3,21.5 L5.7,21.5 A1.6,1.6 0 0 1 4.4,19 L10,10.5 L10,5 L9,5 Z</StreamGeometry>
     <StreamGeometry x:Key="Droplet">F1 M12,3 C12,3 5,11 5,15 A7,7 0 0 0 19,15 C19,11 12,3 12,3 Z</StreamGeometry>
     <StreamGeometry x:Key="Sliders">F1 M3,5.1 L21,5.1 L21,6.9 L3,6.9 Z M5.3,6 A2.7,2.7 0 1 1 10.7,6 A2.7,2.7 0 1 1 5.3,6 Z M3,11.1 L21,11.1 L21,12.9 L3,12.9 Z M13.3,12 A2.7,2.7 0 1 1 18.7,12 A2.7,2.7 0 1 1 13.3,12 Z M3,17.1 L21,17.1 L21,18.9 L3,18.9 Z M7.3,18 A2.7,2.7 0 1 1 12.7,18 A2.7,2.7 0 1 1 7.3,18 Z</StreamGeometry>
+    <StreamGeometry x:Key="Ruler">F0 M2,6.5 L22,6.5 L22,17.5 L2,17.5 Z M3.9,8.4 L3.9,15.6 L20.1,15.6 L20.1,8.4 Z M6.3,8.4 L7.7,8.4 L7.7,13.2 L6.3,13.2 Z M9.8,8.4 L11.2,8.4 L11.2,11.4 L9.8,11.4 Z M13.3,8.4 L14.7,8.4 L14.7,13.2 L13.3,13.2 Z M16.8,8.4 L18.2,8.4 L18.2,11.4 L16.8,11.4 Z</StreamGeometry>
     <StreamGeometry x:Key="Plus">F1 M10.8,4 L13.2,4 L13.2,20 L10.8,20 Z M4,10.8 L20,10.8 L20,13.2 L4,13.2 Z</StreamGeometry>
     <StreamGeometry x:Key="Separator">F1 M3,11 L21,11 L21,13 L3,13 Z M3,8 L5,8 L5,16 L3,16 Z M19,8 L21,8 L21,16 L19,16 Z</StreamGeometry>
     <StreamGeometry x:Key="Submenu">F1 M3,5 L15,5 L15,7.4 L3,7.4 Z M3,10.8 L12,10.8 L12,13.2 L3,13.2 Z M3,16.6 L15,16.6 L15,19 L3,19 Z M15.5,8 L21,12 L15.5,16 Z</StreamGeometry>

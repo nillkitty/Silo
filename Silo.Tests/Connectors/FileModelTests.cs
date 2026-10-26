@@ -248,7 +248,7 @@ public class FileModelTests
         var node = Model(_dir).GetNode()!;
 
         Assert.That(node.DataContext, Is.InstanceOf<FileModel>());
-        Assert.That(node.Icon!.OriginalString, Is.EqualTo("Folder17"));
+        Assert.That(node.Icon!.ToString(), Is.EqualTo("Folder17"));
         Assert.That(node.IsExpanded, Is.True);
         Assert.That(node.ChildLoader, Is.Not.Null);
     }
@@ -272,7 +272,7 @@ public class FileModelTests
         Assert.That(file.DataContext, Is.InstanceOf<FileModel>());
         Assert.That(file.Text, Is.EqualTo("a.txt"));
         Assert.That(file.Uri, Is.Not.Null);
-        Assert.That(file.Icon!.OriginalString, Is.EqualTo("Document"));
+        Assert.That(file.Icon!.ToString(), Is.EqualTo("Document"));
     }
 
     [Test]
@@ -281,7 +281,7 @@ public class FileModelTests
         var node = Model(Path.Combine(_dir, "gone.txt")).GetNode()!;
 
         Assert.That(node, Is.InstanceOf<BlockedNode>());
-        Assert.That(node.Icon!.OriginalString, Is.EqualTo("FsFileMissing"));
+        Assert.That(node.Icon!.ToString(), Is.EqualTo("FsFileMissing"));
         Assert.That(node.Text, Is.EqualTo("gone.txt (inaccessible)"));
         Assert.That(node.ChildLoader, Is.Null);
     }

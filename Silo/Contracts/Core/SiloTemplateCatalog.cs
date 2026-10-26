@@ -4,6 +4,7 @@ using System.Reflection;
 using System.Resources;
 using System.Windows.Markup;
 using Serilog;
+using Silo.Providers.Format;
 using IoDirectory = System.IO.Directory;
 using IoFile = System.IO.File;
 using IoPath = System.IO.Path;
@@ -85,7 +86,7 @@ public static class SiloTemplateCatalog
             var folder = UserFolder;
             if (!IoDirectory.Exists(folder)) return;
 
-            foreach (var file in IoDirectory.EnumerateFiles(folder, "*.xaml"))
+            foreach (var file in Formats.Of<XamlFormat>().Extensions().SelectMany(e => IoDirectory.EnumerateFiles(folder, "*." + e)))
                 try
                 {
                     using var stream = IoFile.OpenRead(file);

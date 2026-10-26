@@ -1,4 +1,7 @@
-﻿namespace Silo.TextEditing;
+﻿using Silo.Providers.Format;
+using Silo.Providers.Reflection;
+
+namespace Silo.TextEditing;
 
 /// <summary>What the text in a text editor is written in: decides the highlighting, the checks, the folding and the formatting.</summary>
 public enum TextLanguage
@@ -22,37 +25,6 @@ public static class TextLanguages
     /// <summary>The languages that have a structure (they can be checked, formatted and converted).</summary>
     public static IReadOnlyList<TextLanguage> Structured { get; } = [TextLanguage.Json, TextLanguage.Xml, TextLanguage.Yaml];
 
-    private static readonly Dictionary<string, TextLanguage> Extensions = new(StringComparer.OrdinalIgnoreCase)
-                                                                          {
-                                                                              [".json"]   = TextLanguage.Json,
-                                                                              [".jsonc"]  = TextLanguage.Json,
-                                                                              [".json5"]  = TextLanguage.Json,
-                                                                              [".geojson"] = TextLanguage.Json,
-                                                                              [".har"]    = TextLanguage.Json,
-                                                                              [".ipynb"]  = TextLanguage.Json,
-                                                                              [".webmanifest"] = TextLanguage.Json,
-                                                                              [".xml"]    = TextLanguage.Xml,
-                                                                              [".xaml"]   = TextLanguage.Xml,
-                                                                              [".xsd"]    = TextLanguage.Xml,
-                                                                              [".xsl"]    = TextLanguage.Xml,
-                                                                              [".xslt"]   = TextLanguage.Xml,
-                                                                              [".config"] = TextLanguage.Xml,
-                                                                              [".csproj"] = TextLanguage.Xml,
-                                                                              [".vbproj"] = TextLanguage.Xml,
-                                                                              [".props"]  = TextLanguage.Xml,
-                                                                              [".targets"] = TextLanguage.Xml,
-                                                                              [".nuspec"] = TextLanguage.Xml,
-                                                                              [".resx"]   = TextLanguage.Xml,
-                                                                              [".svg"]    = TextLanguage.Xml,
-                                                                              [".plist"]  = TextLanguage.Xml,
-                                                                              [".drawio"] = TextLanguage.Xml,
-                                                                              [".xshd"]   = TextLanguage.Xml,
-                                                                              [".rss"]    = TextLanguage.Xml,
-                                                                              [".atom"]   = TextLanguage.Xml,
-                                                                              [".yaml"]   = TextLanguage.Yaml,
-                                                                              [".yml"]    = TextLanguage.Yaml
-                                                                          };
-
     /// <summary>What to call the language in menus and the status line.</summary>
     public static string DisplayName(this TextLanguage language) => language switch
                                                                     {
@@ -62,40 +34,58 @@ public static class TextLanguages
                                                                         _                 => "Plain Text"
                                                                     };
 
+    /// <summary>The file format the language's files are saved as (plain text for <see cref="TextLanguage.PlainText" />).</summary>
+    public static IFileFormat Format(this TextLanguage language) => language switch
+                                                                    {
+                                                                        TextLanguage.Json => Formats.Of<JsonFormat>(),
+                                                                        TextLanguage.Xml  => Formats.Of<XmlFormat>(),
+                                                                        TextLanguage.Yaml => Formats.Of<YamlFormat>(),
+                                                                        _                 => Formats.Of<PlainTextFormat>()
+                                                                    };
+
     /// <summary>The usual file extension, with its dot.</summary>
-    public static string DefaultExtension(this TextLanguage language) => language switch
-                                                                         {
-                                                                             TextLanguage.Json => ".json",
-                                                                             TextLanguage.Xml  => ".xml",
-                                                                             TextLanguage.Yaml => ".yaml",
-                                                                             _                 => ".txt"
-                                                                         };
+    public static string DefaultExtension(this TextLanguage language) => language.Format().DefaultExtension();
 
     /// <summary>A Save/Open dialog filter that lists this language's files first, then all files.</summary>
-    public static string FileFilter(this TextLanguage language) => language switch
-                                                                   {
-                                                                       TextLanguage.Json => "JSON files (*.json)|*.json|All files (*.*)|*.*",
-                                                                       TextLanguage.Xml  => "XML files (*.xml)|*.xml|All files (*.*)|*.*",
-                                                                       TextLanguage.Yaml => "YAML files (*.yaml;*.yml)|*.yaml;*.yml|All files (*.*)|*.*",
-                                                                       _                 => "Text files (*.txt)|*.txt|All files (*.*)|*.*"
-                                                                   };
+    public static string FileFilter(this TextLanguage language) => language.Format().Filter(true);
 
-    /// <summary>The filter of the Open Text File dialog: every language the editor knows, then all files.</summary>
-    public const string OpenFilter = "Text files (*.txt;*.json;*.xml;*.yaml;*.yml;*.log;*.md;*.csv;*.ini;*.config)|*.txt;*.json;*.xml;*.yaml;*.yml;*.log;*.md;*.csv;*.ini;*.config|" +
-                                     "JSON files (*.json)|*.json|XML files (*.xml)|*.xml|YAML files (*.yaml;*.yml)|*.yaml;*.yml|All files (*.*)|*.*";
+    /// <summary>The filter of the Open Text File dialog: every kind of text file the editor is used for, each structured language, then all files.</summary>
+    public static string OpenFilter
+    {
+        get
+        {
+            IFileFormat[] text =
+            [
+                Formats.Of<PlainTextFormat>(), Formats.Of<JsonFormat>(), Formats.Of<XmlFormat>(), Formats.Of<YamlFormat>(), Formats.Of<LogFormat>(),
+                Formats.Of<MarkdownFormat>(), Formats.Of<CsvFormat>(), Formats.Of<IniFormat>(), Formats.Of<ConfigFormat>()
+            ];
+            string all = string.Join(';', text.Select(f => f.Pattern()));
+            return $"Text files ({all})|{all}|" + string.Join('|', Structured.Select(l => l.Format().Filter())) + "|" + Formats.AllFiles;
+        }
+    }
 
-    /// <summary>The language a file name suggests; null when its extension says nothing.</summary>
+    /// <summary>The language a file name suggests (from the formats that claim its extension); null when its extension says nothing.</summary>
     public static TextLanguage? FromFileName(string? fileName)
     {
         if (string.IsNullOrEmpty(fileName)) return null;
 
-        string extension = Path.GetExtension(fileName);
-        if (Extensions.TryGetValue(extension, out var language)) return language;
+        foreach (var format in Formats.ForFile(fileName))
+            if (FromFormat(format) is { } language)
+                return language;
 
         string name = Path.GetFileName(fileName);
         if (name.Equals(".clang-format", StringComparison.OrdinalIgnoreCase)) return TextLanguage.Yaml;
-        return extension.Length > 0 ? TextLanguage.PlainText : null;
+        return Path.GetExtension(fileName).Length > 0 ? TextLanguage.PlainText : null;
     }
+
+    /// <summary>The language files of <paramref name="format" /> are written in (a dialect's base syntax); null when it is none of them.</summary>
+    public static TextLanguage? FromFormat(IFileFormat format) => Formats.SyntaxOf(format) switch
+                                                                  {
+                                                                      JsonFormat => TextLanguage.Json,
+                                                                      XmlFormat  => TextLanguage.Xml,
+                                                                      YamlFormat => TextLanguage.Yaml,
+                                                                      _          => null
+                                                                  };
 
     /// <summary>The language an HTTP <c>Content-Type</c> names; null when it names none of them.</summary>
     public static TextLanguage? FromContentType(string? contentType)

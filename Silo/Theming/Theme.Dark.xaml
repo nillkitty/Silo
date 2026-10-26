@@ -22,4 +22,14 @@
     <SolidColorBrush x:Key="Theme.Disabled" Color="#FF6A6A6A" />
     <SolidColorBrush x:Key="Theme.DisabledBackground" Color="#FF2A2A2A" />
 
+    <!-- Settings panes (Views/SettingsPanes): header fill and border by audience - everyone, authors, developers - and the warning banner -->
+    <SolidColorBrush x:Key="Settings.Any.Fill" Color="#FF243B57" />
+    <SolidColorBrush x:Key="Settings.Any.Stroke" Color="#FF6C8EBF" />
+    <SolidColorBrush x:Key="Settings.Author.Fill" Color="#FF4A2A3C" />
+    <SolidColorBrush x:Key="Settings.Author.Stroke" Color="#FFC06A95" />
+    <SolidColorBrush x:Key="Settings.Developer.Fill" Color="#FF3A3048" />
+    <SolidColorBrush x:Key="Settings.Developer.Stroke" Color="#FFA486B5" />
+    <SolidColorBrush x:Key="Settings.Warn.Fill" Color="#FF3D3420" />
+    <SolidColorBrush x:Key="Settings.Warn.Stroke" Color="#FFB89A45" />
+
 </ResourceDictionary>

@@ -1,6 +1,8 @@
 ﻿using System.IO;
 using System.Text;
 using Microsoft.Win32;
+using Silo.Providers.Format;
+using Silo.Providers.Reflection;
 
 namespace Silo.Labs.Menus;
 
@@ -362,11 +364,11 @@ public sealed partial class MenuLabSession : LabSession<MenuDoc>, ILabLive
         Status = ApplyJson(text) is { } error ? "That is not a menu: " + error : "The menu is now the JSON from the clipboard.";
     }
 
-    private void SaveFile(string extension, string text)
+    private void SaveFile(IFileFormat format, string text)
     {
         string name = string.IsNullOrWhiteSpace(_doc.Name) ? "Menu" : _doc.Name;
         foreach (char c in Path.GetInvalidFileNameChars()) name = name.Replace(c, '_');
-        var dialog = new SaveFileDialog { Title = "Save the menu", FileName = name + "." + extension, Filter = extension == "xaml" ? "XAML (*.xaml)|*.xaml" : "JSON (*.json)|*.json" };
+        var dialog = new SaveFileDialog { Title = "Save the menu", FileName = format.FileName(name), Filter = format.Filter() };
         if (dialog.ShowDialog() != true) return;
 
         File.WriteAllText(dialog.FileName, text, new UTF8Encoding(true));

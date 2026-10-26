@@ -230,7 +230,8 @@ public sealed partial class DrawioView : UserControl, IDisposable
     /// <summary>Replaces the diagram's content.</summary>
     public Task LoadXmlAsync(string? xml)
     {
-        _currentXml = string.IsNullOrWhiteSpace(xml) ? null : xml;
+        _currentXml       = string.IsNullOrWhiteSpace(xml) ? null : xml;
+        _boundLoadPending = true; // a new diagram: its data-bound nodes are read once it has loaded
         if (_editorReady) PostLoad(Compose(_currentXml), false);
         return Task.CompletedTask;
     }
@@ -336,6 +337,7 @@ public sealed partial class DrawioView : UserControl, IDisposable
         if (_source is not null) _source.Changed -= OnSourceChanged;
         if (_source is IIncrementalDiagramSource incremental) incremental.EditsReady -= OnSourceEdits;
         _editTimer?.Stop();
+        DisposeBound();
         foreach (var tcs in _exports.Values) tcs.TrySetResult(null);
         CompleteAllPending();
 
@@ -439,8 +441,9 @@ public sealed partial class DrawioView : UserControl, IDisposable
 
     private void Navigate()
     {
-        _editorReady = false;
-        _loadedOnce  = false;
+        _editorReady      = false;
+        _loadedOnce       = false;
+        _boundLoadPending = true;
         ShowStatus("Loading the editor…", true);
         _web.CoreWebView2.Navigate(DrawioRuntime.HostUrl(CustomizeQuery(Options.ToQueryString())));
     }
@@ -587,6 +590,7 @@ public sealed partial class DrawioView : UserControl, IDisposable
                 _awaitingLoadSinceUtc = null;
                 HideOverlay();
                 EditorReady?.Invoke(this, EventArgs.Empty);
+                OnBoundDiagramLoaded();
                 OnLoad(m);
                 break;
 
@@ -820,7 +824,7 @@ public sealed partial class DrawioView : UserControl, IDisposable
             RestorePersonEdits(doc, moved);
         }
 
-        if (Options.EnableBindings) DiagramBindings.Apply(doc);
+        if (Options.EnableBindings) DiagramBindings.Apply(doc, BoundScopeOf);
 
         return doc.ToXml();
     }
@@ -846,7 +850,8 @@ public sealed partial class DrawioView : UserControl, IDisposable
             var bindings = attributes.EnumerateObject()
                                      .Where(a => a.Value.ValueKind == JsonValueKind.String)
                                      .Select(a => (a.Name, a.Value.GetString() ?? ""));
-            if (DiagramBindings.Evaluate(id.ToString(), bindings) is { } update) updates.Add(update);
+            string cellId = id.ToString();
+            if (DiagramBindings.Evaluate(cellId, bindings, BoundScopeOf(cellId)) is { } update) updates.Add(update);
         }
 
         if (updates.Count == 0) return true;

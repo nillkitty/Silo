@@ -5,6 +5,7 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using Microsoft.Win32;
+using Silo.Providers.Format;
 using Telefrag.DI;
 using IoDirectory = System.IO.Directory;
 using IoFile = System.IO.File;
@@ -249,9 +250,10 @@ public class DefaultNewSiloDialog : INewSiloDialog
                              : Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
             var name = ReferenceEquals(t, Blank) ? "New Silo" : Sanitize(DisplayName(t));
 
-            var candidate = IoPath.Combine(folder, name + ".silo");
+            var silo      = Formats.Of<SiloFileFormat>();
+            var candidate = IoPath.Combine(folder, silo.FileName(name));
             for (var n = 2; IoFile.Exists(candidate); n++)
-                candidate = IoPath.Combine(folder, $"{name} ({n}).silo");
+                candidate = IoPath.Combine(folder, silo.FileName($"{name} ({n})"));
             return candidate;
         }
 
@@ -293,21 +295,22 @@ public class DefaultNewSiloDialog : INewSiloDialog
                 name = IoPath.GetFileName(current);
             }
 
+            var silo = Formats.Of<SiloFileFormat>();
             var dialog = new SaveFileDialog
                          {
                              Title           = "Save the new Silo as",
-                             Filter          = "Silo files (*.silo)|*.silo|All files (*.*)|*.*",
-                             DefaultExt      = "silo",
+                             Filter          = silo.Filter(true),
+                             DefaultExt      = silo.DefaultExtension(),
                              AddExtension    = true,
                              OverwritePrompt = false, // replacing a file is confirmed after this dialog closes
-                             FileName        = name ?? "New Silo.silo"
+                             FileName        = name ?? silo.FileName("New Silo")
                          };
             if (dir is not null && IoDirectory.Exists(dir)) dialog.InitialDirectory = dir;
 
             if (dialog.ShowDialog(_window) == true) SetPath(dialog.FileName, true);
         }
 
-        /// <summary>Reads the path box: a ".silo" extension is added when none is typed, and the folder must exist.</summary>
+        /// <summary>Reads the path box: the <see cref="SiloFileFormat" /> extension is added when none is typed, and the folder must exist.</summary>
         private bool TryGetPath(out string full, out string? problem)
         {
             full    = "";
@@ -322,11 +325,12 @@ public class DefaultNewSiloDialog : INewSiloDialog
 
             try
             {
-                if (!IoPath.HasExtension(text)) text += ".silo";
+                var silo = Formats.Of<SiloFileFormat>();
+                if (!IoPath.HasExtension(text)) text += silo.DefaultExtension();
                 full = IoPath.GetFullPath(text);
 
                 var name = IoPath.GetFileName(full);
-                if (name.Length == 0 || name == ".silo")
+                if (name.Length == 0 || (IoPath.GetFileNameWithoutExtension(name).Length == 0 && silo.Claims(name)))
                 {
                     problem = "Give the Silo a file name.";
                     return false;

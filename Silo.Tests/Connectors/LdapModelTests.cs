@@ -1,4 +1,5 @@
-﻿using System.Text.RegularExpressions;
+﻿using System.IO;
+using System.Text.RegularExpressions;
 using Silo.Connectors.Ldap;
 
 namespace Silo.Tests.Connectors;

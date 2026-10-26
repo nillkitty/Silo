@@ -242,6 +242,12 @@ public static class SchemaCheck
         var set = SchemaRecords.AttributeFlags(c);
         if ((set & MvAttributeFlags.Key) != 0 && (set & (MvAttributeFlags.Multivalue | MvAttributeFlags.Nullable)) != 0)
             add(SchemaSeverity.Error, c, "A key attribute cannot be multivalued or nullable.");
+        if ((set & (MvAttributeFlags.RelativeKey | MvAttributeFlags.AbsoluteKey)) != 0 && (set & (MvAttributeFlags.Multivalue | MvAttributeFlags.Nullable)) != 0)
+            add(SchemaSeverity.Error, c, "A relative or absolute key cannot be multivalued or nullable.");
+        if ((set & MvAttributeFlags.RelativeKey) != 0 && (set & MvAttributeFlags.AbsoluteKey) != 0)
+            add(SchemaSeverity.Error, c, "An attribute cannot be both the relative key (a name within its container) and the absolute key (the full path).");
+        if ((set & MvAttributeFlags.AbsoluteKey) != 0 && c.Get("type", "String") is not ("String" or "Uri"))
+            add(SchemaSeverity.Warning, c, "An absolute key is a full path or name, usually a String or a Uri.");
         if (c.Has("combinator") && (set & MvAttributeFlags.Multivalue) == 0) add(SchemaSeverity.Warning, c, "A combinator only matters for a multivalued attribute.");
         if (!draft.Of(ConstructKind.Class).Any(k => k.Members.Contains(c.Name, StringComparer.OrdinalIgnoreCase)))
             add(SchemaSeverity.Info, c, "No class of the draft has this attribute.");
@@ -252,6 +258,8 @@ public static class SchemaCheck
     {
         var members = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var keys    = new List<string>();
+        var rels    = new List<string>();
+        var abss    = new List<string>();
         foreach (string m in c.Members)
         {
             if (!members.Add(m))
@@ -265,13 +273,20 @@ public static class SchemaCheck
             {
                 if (!silo.HasAttribute(m)) add(SchemaSeverity.Error, c, $"The attribute \"{m}\" is neither in the draft nor in the Silo.");
             }
-            else if ((SchemaRecords.AttributeFlags(attr) & MvAttributeFlags.Key) != 0)
+            else
             {
-                keys.Add(m);
+                var flags = SchemaRecords.AttributeFlags(attr);
+                if ((flags & MvAttributeFlags.Key) != 0) keys.Add(m);
+                if ((flags & MvAttributeFlags.RelativeKey) != 0) rels.Add(m);
+                if ((flags & MvAttributeFlags.AbsoluteKey) != 0) abss.Add(m);
             }
         }
 
         if (keys.Count > 1) add(SchemaSeverity.Error, c, $"A class has one primary key, but {string.Join(", ", keys)} are all keys.");
+        if (rels.Count > 1) add(SchemaSeverity.Error, c, $"A class has one relative key, but {string.Join(", ", rels)} are all relative keys.");
+        if (abss.Count > 1) add(SchemaSeverity.Error, c, $"A class has one absolute key, but {string.Join(", ", abss)} are all absolute keys.");
+        if (rels.Count == 1 && abss.Count == 0) add(SchemaSeverity.Info, c, $"The class has a relative key ({rels[0]}) but no absolute key.");
+        if (abss.Count == 1 && rels.Count == 0) add(SchemaSeverity.Info, c, $"The class has an absolute key ({abss[0]}) but no relative key.");
         if (c.Members.Count == 0 && !Bases(draft, c.Name).Any()) add(SchemaSeverity.Info, c, "The class has no attributes.");
         else if (keys.Count == 0 && !c.Flag("auxiliary") && !Bases(draft, c.Name).Any() && c.Members.Count > 0) add(SchemaSeverity.Info, c, "The class has no key attribute.");
 

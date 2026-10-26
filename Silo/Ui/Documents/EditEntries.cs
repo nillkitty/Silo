@@ -16,6 +16,9 @@ public sealed class EditEntry
 
     public bool IsEnabled { get; init; } = true;
 
+    /// <summary>Shows a check mark beside the entry (the current choice of a set, such as a column's type).</summary>
+    public bool IsChecked { get; init; }
+
     /// <summary>The submenu, when this entry opens one.</summary>
     public IReadOnlyList<EditEntry>? Children { get; init; }
 
@@ -29,6 +32,10 @@ public sealed class EditEntry
     public static EditEntry Item(string header, Action run, bool enabled = true, string? gesture = null) =>
         new() { Header = header, Run = run, IsEnabled = enabled, Gesture = gesture };
 
+    /// <summary>An entry that shows a check mark when <paramref name="isChecked" /> (one choice of a set).</summary>
+    public static EditEntry Choice(string header, Action run, bool isChecked, bool enabled = true) =>
+        new() { Header = header, Run = run, IsEnabled = enabled, IsChecked = isChecked };
+
     public static EditEntry Submenu(string header, params EditEntry[] children) => new() { Header = header, Children = children };
 
     /// <summary>A menu element for the entry: a <see cref="Separator" /> or a <see cref="MenuItem" /> (with its submenu).</summary>
@@ -36,7 +43,7 @@ public sealed class EditEntry
     {
         if (IsSeparator) return new Separator();
 
-        var item = new MenuItem { Header = Header, IsEnabled = IsEnabled };
+        var item = new MenuItem { Header = Header, IsEnabled = IsEnabled, IsChecked = IsChecked };
         if (Gesture is not null) item.InputGestureText = Gesture;
 
         if (Children is not null)

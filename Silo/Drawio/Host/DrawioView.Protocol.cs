@@ -53,10 +53,16 @@ public sealed partial class DrawioView
         new("silo.reset", "Reset and reload editor")
     ];
 
-    /// <summary>Entries the plugin adds to the right-click menu of cells that carry <c>silo-*</c> data (reported as <c>OnSiloContextAction</c>). Empty by default.</summary>
-    public List<DrawioPluginMenuItem> PluginContextItems { get; } = [];
+    /// <summary>Entries the plugin adds to the right-click menu of cells that carry <c>silo-*</c> data (reported as <c>OnSiloContextAction</c>). By default: Refresh data (for data-bound nodes).</summary>
+    public List<DrawioPluginMenuItem> PluginContextItems { get; } =
+    [
+        new("silo.bound.refresh", "Refresh data")
+    ];
 
-    /// <summary>Sections the plugin adds to the shape sidebar. Sent when the plugin is ready; call <see cref="PluginSetPalettesAsync" /> to change them live.</summary>
+    /// <summary>
+    ///     Sections the plugin adds to the shape sidebar. Sent when the plugin is ready, merged (by id) with every registered
+    ///     <see cref="Silo.Providers.Diagramming.IPaletteProvider" />'s; call <see cref="PluginSetPalettesAsync" /> to change them live.
+    /// </summary>
     public List<DrawioPluginPalette> PluginPalettes { get; } =
     [
         new("silo", "Silo",
@@ -359,7 +365,7 @@ public sealed partial class DrawioView
         {
             var entries = new JsonArray();
             foreach (var e in p.Entries)
-                entries.Add(new JsonObject { ["style"] = e.Style, ["width"] = e.Width, ["height"] = e.Height, ["value"] = e.Value, ["title"] = e.Title });
+                entries.Add(new JsonObject { ["style"] = e.Style, ["width"] = e.Width, ["height"] = e.Height, ["value"] = e.Value, ["title"] = e.Title, ["xml"] = e.Xml });
 
             array.Add(new JsonObject { ["id"] = p.Id, ["title"] = p.Title, ["expanded"] = p.Expanded, ["entries"] = entries });
         }
@@ -513,8 +519,9 @@ public sealed partial class DrawioView
             case SiloPluginEvent.Ready:
                 IsPluginReady = true;
                 _ = PluginSetMenuAsync(PluginMenu);
-                _ = PluginSetPalettesAsync(PluginPalettes);
+                _ = PluginSetPalettesAsync(CollectPalettes());
                 _ = PluginSetContextItemsAsync(PluginContextItems);
+                if (_loadedOnce) OnBoundDiagramLoaded();
                 OnSiloPluginReady(m);
                 break;
 
@@ -544,6 +551,10 @@ public sealed partial class DrawioView
 
             case SiloPluginEvent.GeneratedEdited:
                 OnGeneratedEdited(m);
+                break;
+
+            case SiloPluginEvent.BoundExpand:
+                OnBoundExpand(m);
                 break;
 
             case SiloPluginEvent.Log:

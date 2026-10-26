@@ -409,6 +409,8 @@ public static class SchemaPromote
     {
         var f = WorldFieldFlags.None;
         if ((flags & MvAttributeFlags.Key) != 0) f |= WorldFieldFlags.Key;
+        if ((flags & MvAttributeFlags.RelativeKey) != 0) f |= WorldFieldFlags.RelativePath;
+        if ((flags & MvAttributeFlags.AbsoluteKey) != 0) f |= WorldFieldFlags.AbsolutePath;
         if ((flags & MvAttributeFlags.Indexed) != 0) f |= WorldFieldFlags.Index;
         if ((flags & MvAttributeFlags.Anr) != 0) f |= WorldFieldFlags.Anr;
         if ((flags & MvAttributeFlags.Nullable) != 0) f |= WorldFieldFlags.Nullable;

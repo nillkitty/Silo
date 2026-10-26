@@ -1,4 +1,6 @@
-﻿using System.Text.RegularExpressions;
+﻿using System.IO;
+using System.Text.RegularExpressions;
+using Silo.Connectors;
 using Silo.Connectors.Ldap;
 using Silo.Contracts.ConnectorServices;
 using Silo.Contracts.Core;

@@ -152,7 +152,7 @@ public class WmiLocationTests
         Assert.That(Parse("wmi:///").TypeName,                   Is.EqualTo("WMI Namespace"));
         Assert.That(Parse("wmi:///Win32_Service").TypeName,      Is.EqualTo("WMI Class"));
         Assert.That(Parse("wmi:///Win32_Service/@").TypeName,    Is.EqualTo("WMI Instance"));
-        Assert.That(Parse("wmi:///").Icon.OriginalString,        Is.EqualTo("Folder17"));
+        Assert.That(Parse("wmi:///").Icon!.ToString(),        Is.EqualTo("Folder17"));
     }
 
     [Test]

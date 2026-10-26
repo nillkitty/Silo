@@ -2,6 +2,7 @@ using System.IO;
 using System.Xml.Linq;
 using Newtonsoft.Json.Linq;
 using Silo.Providers.Data.Source;
+using Silo.Providers.Diagramming;
 using Silo.Providers.Document;
 using Silo.Providers.Reflection;
 using Telefrag.DI;
@@ -9,13 +10,19 @@ using Telefrag.DI;
 namespace Silo.Providers.Format;
 
 [Singleton(typeof(IFileFormat))]
-public class XmlFormat : IFileFormat, IDocumentProvider<XDocument>
+public class XmlFormat : IFileFormat, IDocumentProvider<XDocument>, IBindableFormat
 {
     public LoadOptions Options     { get; set; } = LoadOptions.SetBaseUri | LoadOptions.SetLineInfo;
     public string      DisplayName { get; }      = "XML File";
 
     public string FileExtension { get; } = "xml";
     public string ContentType   { get; } = "application/xml";
+
+    /// <summary>The file read once, as JSON (by the conventions of <see cref="XmlJson" />).</summary>
+    public object? Bind(Uri uri)
+    {
+        return new XmlDocument(this, uri).GetData();
+    }
 
     public IEnumerable<DataVerb> GetSupportedVerbs()
     {

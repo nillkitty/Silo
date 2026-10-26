@@ -60,6 +60,22 @@ public static class ConstructKinds
                };
     }
 
+    /// <summary>The icon key (Resources/NavIcons.xaml) that stands for the kind on buttons, menus and parts.</summary>
+    public static string IconKey(this ConstructKind kind)
+    {
+        return kind switch
+               {
+                   ConstructKind.Class        => "DataModel",
+                   ConstructKind.Attribute    => "Property",
+                   ConstructKind.Enum         => "Enum",
+                   ConstructKind.Syntax       => "Code",
+                   ConstructKind.Relation     => "HierarchyStructure",
+                   ConstructKind.Unit         => "Ruler",
+                   ConstructKind.UnitRelation => "Sequence",
+                   _                          => "Cube"
+               };
+    }
+
     /// <summary>The one word the terminal uses for it.</summary>
     public static string Word(this ConstructKind kind)
     {

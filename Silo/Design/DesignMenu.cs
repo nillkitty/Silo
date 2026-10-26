@@ -229,6 +229,7 @@ public static class DesignMenu
     {
         if ((Keyboard.Modifiers & ModifierKeys.Control) == 0) return;
         if (!AppDesignLevel.Instance.IsAtLeast(DesignLevel.Author)) return;
+        if (!Silo.Settings.UserSettings.DesignMenuAllowed) return; // switched off on Settings ▸ User Settings
 
         var groups = CollectGroups(e.OriginalSource as DependencyObject);
         if (groups.Count == 0) return;
@@ -250,6 +251,7 @@ public static class DesignMenu
     public static bool ShowAt(DependencyObject source)
     {
         if (!AppDesignLevel.Instance.IsAtLeast(DesignLevel.Author)) return false;
+        if (!Silo.Settings.UserSettings.DesignMenuAllowed) return false;
 
         var groups = CollectGroups(source);
         if (groups.Count == 0) return false;

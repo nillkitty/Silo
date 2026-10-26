@@ -1,4 +1,6 @@
-﻿using Telefrag.DI;
+﻿using Silo.Providers.Format;
+using Silo.Providers.Reflection;
+using Telefrag.DI;
 
 namespace Silo.Labs.Web;
 
@@ -32,14 +34,12 @@ public static class WebLabParameters
 /// <remarks>
 ///     Studies a <see cref="Uri" />: <c>http</c> and <c>https</c> addresses, <c>about:</c> and <c>data:</c> pages, and
 ///     local web files
-///     (<c>.html</c>, <c>.svg</c>, <c>.pdf</c>). Silo's own <c>silo:</c> addresses are not pages; see
+///     (any <see cref="IWebDocumentFormat" />: HTML, SVG, PDF). Silo's own <c>silo:</c> addresses are not pages; see
 ///     <see cref="WebLabParameters.SiloUriSchemes" />.
 /// </remarks>
 [Singleton(typeof(ILab))]
 public class WebLab : LabBase<Uri>
 {
-    private static readonly string[] LocalFileExtensions = [".html", ".htm", ".xhtml", ".svg", ".pdf"];
-
     public override string Description =>
         "Study how a web page behaves: its requests, DOM, style and console, and what it may reach, send and ask for.";
 
@@ -146,7 +146,7 @@ public class WebLab : LabBase<Uri>
         return uri.Scheme switch
                {
                    "http" or "https" or "about" or "data" => true,
-                   "file" => LocalFileExtensions.Any(e => uri.LocalPath.EndsWith(e, StringComparison.OrdinalIgnoreCase)),
+                   "file" => Formats.Is<IWebDocumentFormat>(uri.LocalPath),
                    _ => false
                };
     }

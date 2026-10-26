@@ -12,6 +12,7 @@ using Microsoft.Win32;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Serilog;
+using Silo.Providers.Format;
 
 namespace Silo.Labs;
 
@@ -860,7 +861,8 @@ internal sealed class NetworkInspector : WebInspector
         string? path = null;
         await Application.Current.Dispatcher.InvokeAsync(() =>
                                                          {
-                                                             var dialog = new SaveFileDialog { Title = "Save the requests", Filter = "HTTP Archive (*.har)|*.har|JSON (*.json)|*.json", FileName = "requests.har" };
+                                                             var har    = Formats.Of<HarFormat>();
+                                                             var dialog = new SaveFileDialog { Title = "Save the requests", Filter = Formats.Filter([har, Formats.Of<JsonFormat>()]), FileName = har.FileName("requests") };
                                                              if (dialog.ShowDialog() == true) path = dialog.FileName;
                                                          });
         if (path is null) return;

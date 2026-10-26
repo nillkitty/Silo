@@ -135,7 +135,9 @@ public sealed class TableDocumentView : UserControl, IDocumentContent, IEditCont
             var table = _table.Clone();
             table.Name     = DocumentTitle ?? _table.Name;
             table.Modified = DateTime.UtcNow;
-            table.WriteSheet(_view.ToSheet());
+            // the content as it stands, without ending the cell edit in progress: saving must never pull the cell out from
+            // under someone who is typing (CommitAndFlush ends the edit first when that is wanted)
+            table.WriteSheet(_view.Snapshot());
 
             bool renamed = !string.Equals(table.Name, _table.Name, StringComparison.Ordinal);
             _table = _store.SaveTable(table);

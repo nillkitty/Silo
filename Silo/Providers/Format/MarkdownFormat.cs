@@ -1,6 +1,7 @@
 using System.IO;
 using Markdig;
 using Silo.Providers.Data.Source;
+using Silo.Providers.Diagramming;
 using Silo.Providers.Document;
 using Silo.Providers.Reflection;
 using Telefrag.DI;
@@ -21,7 +22,7 @@ namespace Silo.Providers.Format;
 ///     would shadow Markdig's own type of the same simple name.
 /// </remarks>
 [Singleton(typeof(IFileFormat))]
-public class MarkdownFormat : IFileFormat, IDocumentProvider<MarkdigDocument>
+public class MarkdownFormat : IFileFormat, IDocumentProvider<MarkdigDocument>, IBindableFormat
 {
     /// <summary>
     ///     Only pipe tables are opted in -- just enough extended syntax to recognize the table
@@ -33,9 +34,16 @@ public class MarkdownFormat : IFileFormat, IDocumentProvider<MarkdigDocument>
 
     public string DisplayName { get; } = "Markdown File";
 
-    public string FileExtension { get; } = "md";
+    public string FileExtension { get; } = "md,markdown";
 
     public string ContentType { get; } = "text/markdown";
+
+    /// <summary>The file's tables and lists, as a <see cref="MarkdownDataProvider" />.</summary>
+    public object? Bind(Uri uri)
+    {
+        using var stream = new FileStream(uri.LocalPath, FileMode.Open, FileAccess.Read);
+        return new MarkdownDataProvider(Read(stream).First(), uri);
+    }
 
     public IEnumerable<DataVerb> GetSupportedVerbs()
     {

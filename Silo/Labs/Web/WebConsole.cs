@@ -13,6 +13,7 @@ using Microsoft.Win32;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Serilog;
+using Silo.Providers.Format;
 
 namespace Silo.Labs;
 
@@ -452,13 +453,15 @@ internal sealed class ConsoleInspector : WebInspector
 
     private void Save()
     {
-        var dialog = new SaveFileDialog { Title = "Save the console", Filter = "Text (*.txt)|*.txt|JSON (*.json)|*.json", FileName = "console.txt" };
+        var textFormat = Formats.Of<PlainTextFormat>();
+        var jsonFormat = Formats.Of<JsonFormat>();
+        var dialog     = new SaveFileDialog { Title = "Save the console", Filter = Formats.Filter([textFormat, jsonFormat]), FileName = textFormat.FileName("console") };
         if (dialog.ShowDialog() != true) return;
 
         try
         {
             var lines = ShownEntries().ToList();
-            if (dialog.FileName.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+            if (jsonFormat.Claims(dialog.FileName))
                 File.WriteAllText(dialog.FileName, JsonConvert.SerializeObject(lines.Select(e => new { time = e.Time, level = e.Level, text = e.Text, source = e.Source, stack = e.Stack, count = e.Count }), Formatting.Indented));
             else
                 File.WriteAllText(dialog.FileName, string.Join(Environment.NewLine, lines.Select(e => e.AsText())));

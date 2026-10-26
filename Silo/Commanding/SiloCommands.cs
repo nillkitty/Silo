@@ -3,6 +3,7 @@ using Serilog;
 using Silo.Extensions;
 using Silo.Model;
 using Silo.Providers.Data;
+using Silo.Providers.Format;
 using Silo.Tabular;
 using Silo.Ui;
 
@@ -167,10 +168,11 @@ public record SaveSiloAsCommand(OpenSilo Silo) : SiloCommand("Save _As...", Enab
     protected override async Task OnExecute(object? parameter)
     {
         var s = Silo.Required()!;
+        var siloFormat = Formats.Of<SiloFileFormat>();
         var sfd = new SaveFileDialog
                   {
-                      DefaultExt  = ".silo",
-                      Filter      = "Silo files (*.silo)|*.silo",
+                      DefaultExt  = siloFormat.DefaultExtension(),
+                      Filter      = siloFormat.Filter(),
                       FilterIndex = 1,
                       Title       = "Save Silo file as...",
                       FileName    = s.FilePath

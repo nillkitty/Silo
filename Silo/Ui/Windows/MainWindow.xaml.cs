@@ -20,6 +20,7 @@ using Silo.Hosting;
 using Silo.Model;
 using Silo.Nav;
 using Silo.Providers.Data;
+using Silo.Providers.Format;
 using Silo.Remote;
 using Silo.Settings;
 using Silo.Tabular;
@@ -172,7 +173,7 @@ public partial class MainWindow : Window, IWindowLayout
     {
         targets = [];
         if (data.GetDataPresent(DataFormats.FileDrop) && data.GetData(DataFormats.FileDrop) is string[] files)
-            targets.AddRange(files.Where(f => f.EndsWith(".silo", StringComparison.OrdinalIgnoreCase)));
+            targets.AddRange(files.Where(f => Formats.Is<SiloFileFormat>(f)));
         else if (data.GetDataPresent(DataFormats.UnicodeText) && data.GetData(DataFormats.UnicodeText) is string text &&
                  SiloLocation.IsRemote(text.Trim()))
             targets.Add(text.Trim());
@@ -724,7 +725,7 @@ public partial class MainWindow : Window, IWindowLayout
     {
         IEnumerable<(AppNavNode, string, string[], AppNavNode[])> Walk(AppNavNode node, string[] above, AppNavNode[] ancestors)
         {
-            if (node.IsHidden) yield break;
+            if (node.IsHidden || node.IsGated) yield break;
 
             string[] segments = [.. above, node.Header];
             yield return (node, string.Join(" / ", segments), segments, ancestors);

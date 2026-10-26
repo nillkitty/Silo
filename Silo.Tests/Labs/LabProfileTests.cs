@@ -1,4 +1,5 @@
-﻿using Silo.Labs;
+﻿using System.IO;
+using Silo.Labs;
 
 namespace Silo.Tests.Labs;
 

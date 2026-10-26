@@ -258,6 +258,7 @@ public sealed partial class DrawioView
         {
             case "silo.refresh":
                 RequestRefresh();
+                RefreshBoundNodes();
                 break;
 
             case "silo.fit":
@@ -280,6 +281,12 @@ public sealed partial class DrawioView
     /// </summary>
     private void OnSiloContextAction(string id, DrawioMessage m)
     {
+        switch (id)
+        {
+            case "silo.bound.refresh":
+                if (OwnerOf(m) is { } owner) RefreshBoundNodes(owner);
+                break;
+        }
     }
 
     /// <summary><c>silo.selection</c> -- the selection changed. Field <c>cells[]</c>: <c>id</c>, <c>label</c>, <c>style</c>, <c>attributes</c>, <c>vertex</c>, <c>edge</c>.</summary>
@@ -295,6 +302,8 @@ public sealed partial class DrawioView
     /// <summary><c>silo.dblclick</c> -- a cell was double-clicked. Fields as <see cref="OnSiloClick" />. draw.io still starts label editing.</summary>
     private void OnSiloDoubleClick(DrawioMessage m)
     {
+        // a tree item's "…": read that item
+        TryExpandPlaceholder(m);
     }
 
     /// <summary><c>silo.error</c> -- a section of the plugin failed (already logged). Fields: <c>section</c>, <c>message</c>.</summary>

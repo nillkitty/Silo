@@ -35,7 +35,7 @@ public class YamlFormat : IFileFormat, IDocumentProvider<YamlDocNode>
 {
     public string DisplayName { get; } = "YAML File";
 
-    public string FileExtension { get; } = "yaml";
+    public string FileExtension { get; } = "yaml,yml";
     public string ContentType   { get; } = "application/yaml";
 
     public IEnumerable<DataVerb> GetSupportedVerbs()

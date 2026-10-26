@@ -87,6 +87,10 @@
                 <DataTrigger Binding="{Binding IsHidden}" Value="True">
                     <Setter Property="Visibility" Value="Collapsed" />
                 </DataTrigger>
+                <!-- a node for a higher User Level (a Settings section for authors or developers, say) -->
+                <DataTrigger Binding="{Binding IsGated}" Value="True">
+                    <Setter Property="Visibility" Value="Collapsed" />
+                </DataTrigger>
             </Style.Triggers>
         </Style>
 
@@ -111,6 +115,9 @@
             </ToggleButton>
             <DataTemplate.Triggers>
                 <DataTrigger Binding="{Binding IsHidden}" Value="True">
+                    <Setter TargetName="RailButton" Property="Visibility" Value="Collapsed" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding IsGated}" Value="True">
                     <Setter TargetName="RailButton" Property="Visibility" Value="Collapsed" />
                 </DataTrigger>
             </DataTemplate.Triggers>

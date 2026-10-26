@@ -54,7 +54,34 @@ public sealed class AppNavNode : INotifyPropertyChanged, IOverridableNode, IComm
 
         // the default icon size follows the Author-mode slider; weak, so nodes of closed Silos can be collected
         PropertyChangedEventManager.AddHandler(AppDesignSettings.Instance, OnDesignSettingsChanged, nameof(AppDesignSettings.IconSize));
+        PropertyChangedEventManager.AddHandler(AppDesignLevel.Instance, OnDesignLevelChanged, nameof(AppDesignLevel.Level));
     }
+
+    private void OnDesignLevelChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (_minLevel != DesignLevel.User) PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsGated)));
+    }
+
+    private DesignLevel _minLevel = DesignLevel.User;
+
+    /// <summary>
+    ///     The lowest User Level (View ▸ User Level) the node is shown at; below it the node takes no room in the tree or the
+    ///     rail (<see cref="IsGated" />). <see cref="DesignLevel.User" />: always shown.
+    /// </summary>
+    public DesignLevel MinLevel
+    {
+        get => _minLevel;
+        set
+        {
+            if (_minLevel == value) return;
+            _minLevel = value;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(MinLevel)));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsGated)));
+        }
+    }
+
+    /// <summary>Whether the current User Level is below <see cref="MinLevel" />, so the node is not shown.</summary>
+    public bool IsGated => !AppDesignLevel.Instance.IsAtLeast(_minLevel);
 
     private void OnDesignSettingsChanged(object? sender, PropertyChangedEventArgs e)
     {

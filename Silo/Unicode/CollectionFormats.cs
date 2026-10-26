@@ -1,6 +1,8 @@
 ﻿using System.IO;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using Silo.Providers.Format;
+using Silo.Providers.Reflection;
 
 namespace Silo.Unicode;
 
@@ -38,27 +40,44 @@ public enum CollectionFormat
 public static class CollectionFormats
 {
     /// <summary>
-    ///     The filter for a Save As dialog, in the order of <see cref="CollectionFormat" /> (Text, JSON, TSV, CSV, code
-    ///     point list).
+    ///     What the tray is saved as, in the order the Save As dialog lists them (Text, JSON, TSV, CSV, code point list), each
+    ///     with the file format that names it.
     /// </summary>
-    public const string SaveFilter =
-        "Characters (*.txt)|*.txt|JSON (*.json)|*.json|Tab-separated (*.tsv)|*.tsv|Comma-separated (*.csv)|*.csv|Code point list (*.txt)|*.txt";
+    public static IReadOnlyList<(CollectionFormat Format, CharacterCollectionFormat File)> SaveFormats =>
+    [
+        (CollectionFormat.Text, Formats.Of<TextCollectionFormat>()),
+        (CollectionFormat.Json, Formats.Of<JsonCollectionFormat>()),
+        (CollectionFormat.Tsv, Formats.Of<TsvCollectionFormat>()),
+        (CollectionFormat.Csv, Formats.Of<CsvCollectionFormat>()),
+        (CollectionFormat.CodePointList, Formats.Of<CodePointListCollectionFormat>())
+    ];
+
+    /// <summary>The filter for a Save As dialog, in the order of <see cref="SaveFormats" />.</summary>
+    public static string SaveFilter => Formats.Filter(SaveFormats.Select(f => (IFileFormat)f.File));
 
     /// <summary>The filter for an Open dialog.</summary>
-    public const string OpenFilter = "Character collections (*.txt;*.json;*.tsv;*.csv)|*.txt;*.json;*.tsv;*.csv|All files (*.*)|*.*";
+    public static string OpenFilter =>
+        Formats.Filter([Formats.Of<TextCollectionFormat>(), Formats.Of<JsonCollectionFormat>(), Formats.Of<TsvCollectionFormat>(), Formats.Of<CsvCollectionFormat>()],
+                       "Character collections", true);
 
     private static readonly string[] Header = ["CodePoint", "Character", "Name", "Label", "Category", "Block"];
 
-    /// <summary>The format a file's extension stands for; null for an extension that stands for none.</summary>
+    /// <summary>
+    ///     The format a file's extension stands for (by the character-collection formats that claim it; text when one of them
+    ///     is plain text); null for an extension that stands for none.
+    /// </summary>
     public static CollectionFormat? FromExtension(string? path)
     {
-        return Path.GetExtension(path ?? string.Empty).ToLowerInvariant() switch
+        var ids = Formats.ForFile(path).OfType<CharacterCollectionFormat>().Select(f => f.Id).ToList();
+        if (ids.Contains("text")) return CollectionFormat.Text;
+
+        return ids.FirstOrDefault() switch
                {
-                   ".txt"  => CollectionFormat.Text,
-                   ".json" => CollectionFormat.Json,
-                   ".tsv"  => CollectionFormat.Tsv,
-                   ".csv"  => CollectionFormat.Csv,
-                   _       => null
+                   "json"       => CollectionFormat.Json,
+                   "tsv"        => CollectionFormat.Tsv,
+                   "csv"        => CollectionFormat.Csv,
+                   "codepoints" => CollectionFormat.CodePointList,
+                   _            => null
                };
     }
 

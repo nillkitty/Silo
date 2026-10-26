@@ -24,6 +24,7 @@ using Silo.Hotkeys;
 using Silo.Model;
 using Silo.Providers;
 using Silo.Providers.Data.Validation;
+using Silo.Providers.Format;
 using Silo.Settings;
 using Silo.Theming;
 using Silo.Tools.UnicodeExplorer;
@@ -199,7 +200,7 @@ public partial class App : Application, IContainerHost
         var s = new SaveFileDialog
                 {
                     Title  = "Create Silo",
-                    Filter = "(*.silo)|*.silo"
+                    Filter = Formats.Of<SiloFileFormat>().Filter()
                 };
         if (s.ShowDialog() is true)
         {
@@ -329,6 +330,10 @@ public partial class App : Application, IContainerHost
     protected override void OnStartup(StartupEventArgs e)
     {
         _configLogging();
+
+        // Exceptions that point at a bug (NotImplementedException, null dereferences...), caught or not: listed in the Problems
+        // pane at View > User Level > Debug (Diagnostics/StrayExceptions.cs).
+        global::Silo.Diagnostics.StrayExceptions.Install(this);
 
         // The reflection that finds the DI registrations, the action providers and the assemblies' resources is the slow part of
         // starting up and nothing on the way to the first window needs it: it runs in the background, and whatever does need a

@@ -1,4 +1,5 @@
-﻿using Silo.Labs;
+﻿using Silo.Contracts.Core;
+using Silo.Labs;
 using Silo.Labs.Regexes;
 
 namespace Silo.Tests.Labs;

@@ -1,5 +1,6 @@
 ﻿using Newtonsoft.Json.Linq;
 using Silo.Labs;
+using Silo.Labs.Web;
 
 namespace Silo.Tests.Labs;
 

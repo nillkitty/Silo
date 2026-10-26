@@ -73,7 +73,7 @@ public class RuntimeNodeTests
         var assembly = new AssemblyNode(SiloAssembly);
         var type     = new TypeNode(typeof(RuntimeConnector));
 
-        Assert.That(new[] { domain.Icon, assembly.Icon, type.Icon }.Select(i => i!.OriginalString),
+        Assert.That(new[] { domain.Icon, assembly.Icon, type.Icon }.Select(i => i!.ToString()),
                     Is.EqualTo(new[] { "Modules", "Puzzle", "Cube" }));
         Assert.That(domain.TypeName,   Is.EqualTo("App Domain"));
         Assert.That(assembly.TypeName, Is.EqualTo("Assembly"));

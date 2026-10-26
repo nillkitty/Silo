@@ -73,12 +73,11 @@ public sealed partial class UnicodeExplorerView
             return;
         }
 
-        string pattern = string.Join(';', ((IFileFormat)format).FileExtensions.Select(e => "*." + e.Trim()));
         var dialog = new SaveFileDialog
                      {
                          Title        = $"Export the collection: {format.DisplayName}",
-                         Filter       = $"{format.DisplayName} ({pattern})|{pattern}|All files (*.*)|*.*",
-                         FileName     = "characters", DefaultExt = ((IFileFormat)format).FileExtensions.First().Trim(),
+                         Filter       = format.Filter(true),
+                         FileName     = "characters", DefaultExt = format.DefaultExtension(),
                          AddExtension = true, OverwritePrompt    = true
                      };
         if (dialog.ShowDialog() != true) return;
@@ -297,10 +296,11 @@ public sealed partial class UnicodeExplorerView
                                                 ["Save as XPS", "Cancel"]);
             if (button != 0) return;
 
+            var xpsFormat = Formats.Of<XpsFormat>();
             var save = new SaveFileDialog
                        {
-                           Title      = "Save the collection as XPS", Filter = "XPS document (*.xps)|*.xps", FileName = "characters",
-                           DefaultExt = "xps", AddExtension                  = true, OverwritePrompt                  = true
+                           Title      = "Save the collection as XPS", Filter = xpsFormat.Filter(), FileName = "characters",
+                           DefaultExt = xpsFormat.DefaultExtension(), AddExtension = true, OverwritePrompt = true
                        };
             if (save.ShowDialog() != true) return;
 

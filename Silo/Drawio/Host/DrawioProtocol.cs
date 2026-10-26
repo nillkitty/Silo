@@ -78,11 +78,16 @@ public static class DrawioEvent
 /// <summary>Events posted by the Silo plugin running inside the editor (see <c>Drawio/Plugin/silo-plugin.js</c>).</summary>
 public static class SiloPluginEvent
 {
+    /// <summary>The person expanded a vertex of a data-bound tree node. Field <c>owner</c> (the node's cell id), <c>id</c> (the vertex).</summary>
+    public const string BoundExpand   = "silo.boundExpand";
     public const string ContextAction = "silo.contextAction";
     public const string Click         = "silo.click";
     public const string DoubleClick   = "silo.dblclick";
     public const string Error         = "silo.error";
-    /// <summary>The person removed, put back or moved generated cells. Fields: <c>removed</c>, <c>restored</c>, <c>moved</c> (cell ids).</summary>
+    /// <summary>
+    ///     The person removed, put back or moved generated cells (or cells a data-bound node made). Fields: <c>removed</c>,
+    ///     <c>restored</c>, <c>moved</c> (cell ids).
+    /// </summary>
     public const string GeneratedEdited = "silo.generatedEdited";
     public const string Log           = "silo.log";
     /// <summary>The host page found no plugin in the editor frame and asks for it (answered with <c>siloBootstrap</c>).</summary>

@@ -5,6 +5,7 @@ using Silo.Credentials;
 using Silo.Crypto;
 using Silo.Model;
 using Silo.Providers.Crypto;
+using Silo.Providers.Data;
 
 namespace Silo.Tests.Security;
 

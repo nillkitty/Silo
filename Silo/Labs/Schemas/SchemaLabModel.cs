@@ -13,7 +13,7 @@ public sealed partial class SchemaLabSession
 {
     private const string SubjectId = "schema";
 
-    private static readonly string[] AttributeFlagNames = ["Key", "Nullable"];
+    private static readonly string[] AttributeFlagNames = ["Key", "RelativeKey", "AbsoluteKey", "Nullable"];
 
     private static readonly LabPartType TClass = new("class", "Class", "DataModel", "A kind of thing, with attributes", null,
                                                      [new LabTemplate("class", "Class", "{{name}}|{{kind}}", [new("name", "Name", "NewClass"), new("kind", "Kind", "Plain", ["Plain", "Auxiliary"])], "A class; an auxiliary one supplies attributes to classes that include it")]);
@@ -24,7 +24,7 @@ public sealed partial class SchemaLabSession
                                                           new("created", "Created", "Created|DateTime", "When it was made"),
                                                           new("modified", "Modified", "Modified|DateTime", "When it last changed"),
                                                           new("active", "Active", "Active|Boolean", "Yes or no")],
-                                                         [new LabTemplate("attribute", "Attribute", "{{name}}|{{type}}|{{flags}}", [new("name", "Name", "NewAttribute"), new("type", "Type", "String", SchemaProps.ClrTypes), new("flags", "Flags", "None", ["None", "Key", "Nullable"])], "An attribute of a type")]);
+                                                         [new LabTemplate("attribute", "Attribute", "{{name}}|{{type}}|{{flags}}", [new("name", "Name", "NewAttribute"), new("type", "Type", "String", SchemaProps.ClrTypes), new("flags", "Flags", "None", ["None", "Key", "RelativeKey", "AbsoluteKey", "Nullable"])], "An attribute of a type")]);
 
     private static readonly LabPartType TEnum = new("enum", "Enum", "Enum", "A set of named values",
                                                     [new("yesno", "Yes / No", "YesNo|No,Yes"), new("status", "Status", "Status|Draft,Active,Retired")],
@@ -40,13 +40,13 @@ public sealed partial class SchemaLabSession
     private static readonly LabPartType TUnit = new("unit", "Unit", "Ruler", "A unit of measure", null,
                                                     [new LabTemplate("unit", "Unit", "{{name}}|{{type}}", [new("name", "Name", "NewUnit"), new("type", "Type", "Unit", ["Unit", "Alias", "Prefix", "Conversion"])], "A unit")]);
 
-    private static readonly LabPartType TUnitRel = new("unitrelation", "Unit relation", "Link", "How one unit leads to the next", null,
+    private static readonly LabPartType TUnitRel = new("unitrelation", "Unit relation", "Sequence", "How one unit leads to the next", null,
                                                        [new LabTemplate("unitrelation", "Unit relation", "{{name}}|{{unit}}", [new("name", "Name", "NewChain"), new("unit", "Unit", "")], "A step in a chain of units")]);
 
     private static readonly LabPartType TMember = new("member", "Member", "Property", "An attribute a class has", null,
                                                       [new LabTemplate("member", "Member", "{{attribute}}", [new("attribute", "Which attribute (made when the draft has none of that name)", "")], "Give the class an attribute")], "class");
 
-    private static readonly LabPartType TValue = new("value", "Value", "Tag", "One value of an enum", null,
+    private static readonly LabPartType TValue = new("value", "Value", "Token", "One value of an enum", null,
                                                      [new LabTemplate("value", "Value", "{{name}}|{{value}}", [new("name", "Name", "NewValue"), new("value", "Its value (blank: the next one)", "")], "A value of the enum")], "enum");
 
     private bool _followingModel;
@@ -361,8 +361,8 @@ public sealed partial class SchemaLabSession
                          Description = "The active class",
                          Commands =
                          [
-                             ProvidedCommand.From("class-attribute", "Add _Attribute", NewMember, "TbNew", () => Has(ConstructKind.Class), "Make an attribute and give it to the class"),
-                             ProvidedCommand.From("class-auxiliary", "_Auxiliary", () => { if (Selected is { Kind: ConstructKind.Class } c && SetProp("auxiliary", c.Flag("auxiliary") ? string.Empty : "true") is { } e) Status = e; }, null, () => Has(ConstructKind.Class),
+                             ProvidedCommand.From("class-attribute", "Add _Attribute", NewMember, "Property", () => Has(ConstructKind.Class), "Make an attribute and give it to the class"),
+                             ProvidedCommand.From("class-auxiliary", "_Auxiliary", () => { if (Selected is { Kind: ConstructKind.Class } c && SetProp("auxiliary", c.Flag("auxiliary") ? string.Empty : "true") is { } e) Status = e; }, "Puzzle", () => Has(ConstructKind.Class),
                                                   "An auxiliary class supplies attributes to the classes that include it") with { IsChecked = () => Selected is { Kind: ConstructKind.Class } c && c.Flag("auxiliary") }
                          ]
                      };
@@ -380,9 +380,9 @@ public sealed partial class SchemaLabSession
                          Description = "An attribute of the active class",
                          Commands =
                          [
-                             ProvidedCommand.From("member-up", "Move _Up", () => { if (ActiveMember() is var (c, i)) MoveMember(i, -1); }, "TbUp", () => ActiveMember() is var (_, i) && i > 0, "Move it before the one above"),
-                             ProvidedCommand.From("member-down", "Move _Down", () => { if (ActiveMember() is var (c, i)) MoveMember(i, 1); }, "TbDown", () => ActiveMember() is var (c, i) && i < c.Members.Count - 1, "Move it after the one below"),
-                             ProvidedCommand.From("member-remove", "_Take Out of Class", () => { if (ActiveMember() is var (c, i)) RemoveMember(i); }, "TbDelete", () => ActiveMember() is not null, "The class stops having it (the attribute stays in the draft)") with { IsDestructive = true }
+                             ProvidedCommand.From("member-up", "Move _Up", () => { if (ActiveMember() is var (c, i)) MoveMember(i, -1); }, "ArrowUp", () => ActiveMember() is var (_, i) && i > 0, "Move it before the one above"),
+                             ProvidedCommand.From("member-down", "Move _Down", () => { if (ActiveMember() is var (c, i)) MoveMember(i, 1); }, "ArrowDown", () => ActiveMember() is var (c, i) && i < c.Members.Count - 1, "Move it after the one below"),
+                             ProvidedCommand.From("member-remove", "_Take Out of Class", () => { if (ActiveMember() is var (c, i)) RemoveMember(i); }, "Remove", () => ActiveMember() is not null, "The class stops having it (the attribute stays in the draft)") with { IsDestructive = true }
                          ]
                      };
 
@@ -390,17 +390,17 @@ public sealed partial class SchemaLabSession
                      {
                          IconKey     = "Enum",
                          Description = "The active enum",
-                         Commands    = [ProvidedCommand.From("enum-value", "Add _Value", AddValue, "TbNew", () => Has(ConstructKind.Enum), "Add a value to the enum")]
+                         Commands    = [ProvidedCommand.From("enum-value", "Add _Value", AddValue, "Token", () => Has(ConstructKind.Enum), "Add a value to the enum")]
                      };
 
         yield return new LabAspect("value", "Value", LabOwner.OfPartType(TValue.Id))
                      {
-                         IconKey     = "Tag",
+                         IconKey     = "Token",
                          Description = "A value of the active enum",
                          Commands =
                          [
-                             ProvidedCommand.From("value-up", "Move _Up", () => { if (ActiveValue() is var (e, i)) MoveValue(i, -1); }, "TbUp", () => ActiveValue() is var (_, i) && i > 0, "Move it before the one above"),
-                             ProvidedCommand.From("value-down", "Move _Down", () => { if (ActiveValue() is var (e, i)) MoveValue(i, 1); }, "TbDown", () => ActiveValue() is var (e, i) && i < e.Values.Count - 1, "Move it after the one below"),
+                             ProvidedCommand.From("value-up", "Move _Up", () => { if (ActiveValue() is var (e, i)) MoveValue(i, -1); }, "ArrowUp", () => ActiveValue() is var (_, i) && i > 0, "Move it before the one above"),
+                             ProvidedCommand.From("value-down", "Move _Down", () => { if (ActiveValue() is var (e, i)) MoveValue(i, 1); }, "ArrowDown", () => ActiveValue() is var (e, i) && i < e.Values.Count - 1, "Move it after the one below"),
                              ProvidedCommand.From("value-remove", "_Remove", () => { if (ActiveValue() is var (e, i)) RemoveValue(i); }, "TbDelete", () => ActiveValue() is not null, "Take the value out of the enum") with { IsDestructive = true }
                          ]
                      };
@@ -413,9 +413,25 @@ public sealed partial class SchemaLabSession
                      };
     }
 
+    /// <summary>The icon of an attribute flag's toggle command.</summary>
+    private static string FlagIcon(string flag)
+    {
+        return flag switch
+               {
+                   "Key"         => "Key",
+                   "RelativeKey" => "Key1",
+                   "AbsoluteKey" => "FileTree",
+                   "Nullable"   => "Not",
+                   "Multivalue" => "Layers",
+                   "Indexed"    => "Search",
+                   "Anr"        => "DataSearching",
+                   _            => "Check"
+               };
+    }
+
     private IReadOnlyList<ProvidedCommand> AttributeCommands()
     {
-        return AttributeFlagNames.Select(flag => ProvidedCommand.From("attribute-" + flag.ToLowerInvariant(), "_" + flag, () => ToggleFlag(flag), null, () => Has(ConstructKind.Attribute), $"Whether the attribute is {flag.ToLowerInvariant()}")
+        return AttributeFlagNames.Select(flag => ProvidedCommand.From("attribute-" + flag.ToLowerInvariant(), "_" + flag, () => ToggleFlag(flag), FlagIcon(flag), () => Has(ConstructKind.Attribute), $"Whether the attribute is {flag.ToLowerInvariant()}")
                                                  with { IsChecked = () => Selected is { Kind: ConstructKind.Attribute } a && a.List("flags").Contains(flag, StringComparer.OrdinalIgnoreCase) }).ToList();
     }
 
@@ -447,10 +463,10 @@ public sealed partial class SchemaLabSession
                      };
         yield return new LabTool("rename", "_Rename", LabOwner.OfSubjectType(SubjectId))
                      {
-                         IconKey     = "TbEdit",
+                         IconKey     = "Design",
                          Description = "Give the selected construct another name; whatever refers to it follows",
                          Parameters  = LabParameterSet.For(LabOf.Id, "tool:rename", "Rename", [new LabParameter("name", "New name", LabParameterKind.Text, string.Empty, "What the selected construct is to be called.", hint: "NewName")]),
-                         Commands    = [ProvidedCommand.From("rename-run", "_Rename", RenameFromTool, "TbEdit", () => Selected is { Kind: not ConstructKind.Relation }, "Rename the selected construct")]
+                         Commands    = [ProvidedCommand.From("rename-run", "_Rename", RenameFromTool, "Design", () => Selected is { Kind: not ConstructKind.Relation }, "Rename the selected construct")]
                      };
     }
 

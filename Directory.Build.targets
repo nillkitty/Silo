@@ -1,0 +1,123 @@
+<Project>
+
+  <!--
+    Version numbers: year.month.day.iteration, taken from git at build time, so nothing has to be bumped by hand.
+
+      year.month.day  the date (local time) of the HEAD commit
+      iteration       how many commits were made that day, up to and including HEAD (the first commit of a day is .1)
+
+    The version only moves when a commit is made: rebuilding while debugging keeps it (and does not force a recompile,
+    since the generated AssemblyInfo only changes with it), and uncommitted changes build as the commit they sit on.
+    InformationalVersion adds the short commit id (2026.10.26.3+1a2b3c4). Without git, or outside a clone, the version is
+    today's date with iteration 0.
+
+    Applies to every project under this folder except Silo.Analyzers (Visual Studio caches a loaded analyzer by its
+    version). A project can opt out with <SiloGitVersioning>false</SiloGitVersioning>.
+  -->
+
+  <PropertyGroup>
+    <SiloGitVersioning Condition="'$(SiloGitVersioning)' == '' and '$(MSBuildProjectName)' != 'Silo.Analyzers'">true</SiloGitVersioning>
+    <!-- the SDK would append the full commit id itself (Source Link); the short one is added below instead -->
+    <IncludeSourceRevisionInInformationalVersion Condition="'$(SiloGitVersioning)' == 'true'">false</IncludeSourceRevisionInInformationalVersion>
+  </PropertyGroup>
+
+  <UsingTask TaskName="SiloGitVersionTask" TaskFactory="RoslynCodeTaskFactory"
+             AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
+    <ParameterGroup>
+      <RepoRoot ParameterType="System.String" Required="true" />
+      <Version ParameterType="System.String" Output="true" />
+      <Commit ParameterType="System.String" Output="true" />
+    </ParameterGroup>
+    <Task>
+      <Using Namespace="System" />
+      <Using Namespace="System.Diagnostics" />
+      <Using Namespace="System.Globalization" />
+      <Code Type="Fragment" Language="cs"><![CDATA[
+        // git runs directly (no cmd), so its format placeholders need no escaping; '%' is built from its code so MSBuild
+        // cannot mistake "%ct" for an escaped character.
+        string pct = ((char)37).ToString();
+
+        Func<string, string> git = arguments =>
+        {
+            var info = new ProcessStartInfo("git", arguments)
+            {
+                WorkingDirectory       = RepoRoot,
+                UseShellExecute        = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError  = true,
+                CreateNoWindow         = true
+            };
+            using (var p = Process.Start(info))
+            {
+                var error  = p.StandardError.ReadToEndAsync();
+                string text = p.StandardOutput.ReadToEnd();
+                if (!p.WaitForExit(15000)) { try { p.Kill(); } catch { } return null; }
+                error.Wait(1000);
+                return p.ExitCode == 0 ? text.Trim() : null;
+            }
+        };
+
+        Version = null;
+        Commit  = string.Empty;
+        try
+        {
+            // "<commit time, unix seconds> <short id>" of HEAD
+            string head = git("log -1 --format=" + pct + "ct" + " " + pct + "h HEAD");
+            string[] parts = head == null ? new string[0] : head.Split(' ');
+            long headTime;
+            if (parts.Length == 2 && long.TryParse(parts[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out headTime))
+            {
+                DateTime day = DateTimeOffset.FromUnixTimeSeconds(headTime).ToLocalTime().Date;
+
+                // the commits of that day reachable from HEAD (asked from the day before, then matched exactly here)
+                string since = day.AddDays(-1).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+                string times = git("log --format=" + pct + "ct --since=" + since + " HEAD") ?? string.Empty;
+                int iteration = 0;
+                foreach (string line in times.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
+                {
+                    long t;
+                    if (long.TryParse(line.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out t) && t <= headTime &&
+                        DateTimeOffset.FromUnixTimeSeconds(t).ToLocalTime().Date == day)
+                        iteration++;
+                }
+
+                Version = string.Format(CultureInfo.InvariantCulture, "{0}.{1}.{2}.{3}", day.Year, day.Month, day.Day, Math.Max(iteration, 1));
+                Commit  = parts[1];
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.LogMessage(MessageImportance.Low, "git version lookup failed: " + ex.Message);
+        }
+
+        if (Version == null)
+        {
+            DateTime today = DateTime.Now;
+            Version = string.Format(CultureInfo.InvariantCulture, "{0}.{1}.{2}.0", today.Year, today.Month, today.Day);
+            Log.LogMessage(MessageImportance.Normal, "No git commit found; versioning as " + Version);
+        }
+      ]]></Code>
+    </Task>
+  </UsingTask>
+
+  <!-- Runs before the SDK turns Version into the assembly attributes. Skipped in Visual Studio's design-time builds. -->
+  <Target Name="SiloGitVersion" BeforeTargets="GetAssemblyVersion"
+          Condition="'$(SiloGitVersioning)' == 'true' and '$(DesignTimeBuild)' != 'true'">
+    <SiloGitVersionTask RepoRoot="$(MSBuildThisFileDirectory)">
+      <Output TaskParameter="Version" PropertyName="SiloVersion" />
+      <Output TaskParameter="Commit" PropertyName="SiloCommit" />
+    </SiloGitVersionTask>
+
+    <PropertyGroup>
+      <Version>$(SiloVersion)</Version>
+      <PackageVersion>$(SiloVersion)</PackageVersion>
+      <AssemblyVersion>$(SiloVersion)</AssemblyVersion>
+      <FileVersion>$(SiloVersion)</FileVersion>
+      <InformationalVersion>$(SiloVersion)</InformationalVersion>
+      <InformationalVersion Condition="'$(SiloCommit)' != ''">$(SiloVersion)+$(SiloCommit)</InformationalVersion>
+    </PropertyGroup>
+
+    <Message Importance="normal" Text="$(MSBuildProjectName) version $(InformationalVersion)" />
+  </Target>
+
+</Project>

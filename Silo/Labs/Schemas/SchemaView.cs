@@ -34,13 +34,24 @@ internal sealed class SchemaView : Grid
     private readonly SchemaEditor     _editor;
     private readonly TextBlock        _summary;
     private readonly Button           _promote;
-    private readonly ToggleButton_    _connect;
+    private readonly System.Windows.Controls.Primitives.ToggleButton _connect;
     private readonly ComboBox         _target;
     private          string?          _connectFrom;
     private          bool             _loading;
 
-    // a toggle that reads as a button; named apart from System.Windows.Controls.Primitives.ToggleButton so the file needs no extra using
-    private sealed class ToggleButton_ : System.Windows.Controls.Primitives.ToggleButton { }
+    /// <summary>An icon and its text, as <see cref="LabUi.Tool" /> lays them out, for a button that is not a plain one.</summary>
+    private static StackPanel ToggleContent(string text, string icon)
+    {
+        var content = new StackPanel { Orientation = Orientation.Horizontal };
+        if (LabUi.Icon(icon, 14) is { } glyph)
+        {
+            glyph.Margin = new Thickness(0, 0, 5, 0);
+            content.Children.Add(glyph);
+        }
+
+        content.Children.Add(new TextBlock { Text = text, VerticalAlignment = VerticalAlignment.Center });
+        return content;
+    }
 
     public SchemaView(SchemaLabSession session)
     {
@@ -51,18 +62,18 @@ internal sealed class SchemaView : Grid
         foreach (var kind in new[] { ConstructKind.Class, ConstructKind.Attribute, ConstructKind.Enum, ConstructKind.Syntax, ConstructKind.Unit, ConstructKind.UnitRelation })
         {
             var k = kind;
-            var b = LabUi.Button("+ " + kind.Title(), () => _session.AddConstruct(k), $"Add a {kind.Title().ToLowerInvariant()} to the draft");
+            var b = LabUi.Button("+ " + kind.Title(), () => _session.AddConstruct(k), $"Add a {kind.Title().ToLowerInvariant()} to the draft", icon: kind.IconKey());
             b.BorderBrush     = SchemaColors.Of(kind);
             b.BorderThickness = new Thickness(0, 0, 0, 2);
             bar.Children.Add(b);
         }
 
-        _connect = new ToggleButton_ { Content = "Connect", Padding = new Thickness(8, 2, 8, 2), Margin = new Thickness(8, 0, 2, 0), ToolTip = "Join two classes: click the one that inherits, then its base class (hold Ctrl for an auxiliary class it includes)" };
+        _connect = new System.Windows.Controls.Primitives.ToggleButton { Content = ToggleContent("Connect", "Link"), Padding = new Thickness(8, 2, 8, 2), Margin = new Thickness(8, 0, 2, 0), ToolTip = "Join two classes: click the one that inherits, then its base class (hold Ctrl for an auxiliary class it includes)" };
         _connect.Checked   += (_, _) => StartConnect();
         _connect.Unchecked += (_, _) => StopConnect();
         bar.Children.Add(_connect);
 
-        var show = LabUi.Button("Show ▾", () => { }, "Choose which kinds the diagram draws");
+        var show = LabUi.Button("Show ▾", () => { }, "Choose which kinds the diagram draws", icon: "Layers");
         show.Click += (_, _) => ShowMenu(show);
         bar.Children.Add(show);
 
@@ -73,7 +84,7 @@ internal sealed class SchemaView : Grid
         _target.ToolTip = "Where promoting puts the draft";
         _target.Margin  = new Thickness(10, 0, 2, 0);
         bar.Children.Add(_target);
-        _promote = LabUi.Button("Promote", () => _session.Promote(), "Write the draft into the Silo as the Promote pane says");
+        _promote = LabUi.Button("Promote", () => _session.Promote(), "Write the draft into the Silo as the Promote pane says", icon: "TbExport");
         bar.Children.Add(_promote);
         _summary = LabUi.Label(string.Empty, muted: true);
         _summary.Margin = new Thickness(8, 0, 0, 0);

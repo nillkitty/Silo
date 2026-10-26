@@ -1,5 +1,7 @@
 ﻿using System.IO;
 using System.Text;
+using Silo.Providers.Document;
+using Silo.Providers.Format;
 
 namespace Silo.Connectors.File;
 
@@ -30,11 +32,6 @@ public static class FilePreviews
     /// <summary>The largest image file that is loaded.</summary>
     public const long ImageLimit = 25L * 1024 * 1024;
 
-    private static readonly HashSet<string> ImageExtensions = new(StringComparer.OrdinalIgnoreCase)
-                                                              {
-                                                                  ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".ico", ".tif", ".tiff"
-                                                              };
-
     public static FilePreview Compute(FileModel model, CancellationToken cancel = default)
     {
         try
@@ -50,7 +47,7 @@ public static class FilePreviews
                 return new MessagePreview("This item cannot be previewed.");
 
             long length = file.Length;
-            if (ImageExtensions.Contains(file.Extension))
+            if (Formats.Is<IImageFormat>(file.Name))
                 return length <= ImageLimit
                            ? new ImagePreview(ReadBytes(file, (int)length))
                            : new MessagePreview($"This image is too large to preview ({length:N0} bytes).");

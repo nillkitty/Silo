@@ -4,6 +4,8 @@ using System.Linq;
 using System.Net;
 using System.Text;
 using System.Text.Json;
+using Silo.Providers.Format;
+using Silo.Providers.Reflection;
 
 namespace Silo.Tabular;
 
@@ -25,14 +27,15 @@ public enum SheetFormat
 /// </summary>
 public static class SheetExport
 {
-    public static readonly IReadOnlyList<(SheetFormat Format, string Name, string Extension)> Formats =
+    /// <summary>The output formats in the order they are offered, each with its name and the file format it is saved as.</summary>
+    public static readonly IReadOnlyList<(SheetFormat Format, string Name, IFileFormat File)> Formats =
     [
-        (SheetFormat.Markdown, "Markdown", ".md"),
-        (SheetFormat.Html, "HTML", ".html"),
-        (SheetFormat.Tsv, "TSV (Slack / spreadsheet)", ".tsv"),
-        (SheetFormat.Csv, "CSV", ".csv"),
-        (SheetFormat.Json, "JSON", ".json"),
-        (SheetFormat.AlignedText, "Aligned text", ".txt")
+        (SheetFormat.Markdown, "Markdown", Providers.Format.Formats.Of<MarkdownFormat>()),
+        (SheetFormat.Html, "HTML", Providers.Format.Formats.Of<HtmlFormat>()),
+        (SheetFormat.Tsv, "TSV (Slack / spreadsheet)", Providers.Format.Formats.Of<TsvFormat>()),
+        (SheetFormat.Csv, "CSV", Providers.Format.Formats.Of<CsvFormat>()),
+        (SheetFormat.Json, "JSON", Providers.Format.Formats.Of<JsonFormat>()),
+        (SheetFormat.AlignedText, "Aligned text", Providers.Format.Formats.Of<PlainTextFormat>())
     ];
 
     public static string Write(SheetData sheet, SheetFormat format)

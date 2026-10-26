@@ -8,6 +8,9 @@ using Microsoft.Web.WebView2.Wpf;
 using Newtonsoft.Json;
 using Serilog;
 using Silo.Labs.Web;
+using Silo.Providers.Document;
+using Silo.Providers.Format;
+using Silo.Providers.Reflection;
 
 namespace Silo.Labs;
 
@@ -219,7 +222,7 @@ public sealed partial class WebLabSession : LabSession<Uri>
 
     private void OpenLocalFile()
     {
-        var dialog = new OpenFileDialog { Title = "Open a file in the Web Lab", Filter = "Web documents|*.html;*.htm;*.xhtml;*.svg;*.pdf|All files|*.*" };
+        var dialog = new OpenFileDialog { Title = "Open a file in the Web Lab", Filter = Formats.Filter(Formats.All.OfType<IWebDocumentFormat>(), "Web documents", true) };
         if (dialog.ShowDialog() != true) return;
 
         var uri = new Uri(dialog.FileName);
@@ -227,25 +230,26 @@ public sealed partial class WebLabSession : LabSession<Uri>
         else Say("The Web Lab shows HTML, SVG and PDF files.");
     }
 
-    private static string? PickSave(string title, string filter, string name)
+    /// <summary>Asks where to save the page as a file of <paramref name="format" />, named after the page; null when cancelled.</summary>
+    private string? PickSave(string title, IFileFormat format)
     {
-        var dialog = new SaveFileDialog { Title = title, Filter = filter, FileName = name };
+        var dialog = new SaveFileDialog { Title = title, Filter = format.Filter(), FileName = PageFileName(format) };
         return dialog.ShowDialog() == true ? dialog.FileName : null;
     }
 
     /// <summary>A file name for the page: its title, made safe, or its host.</summary>
-    private string PageFileName(string extension)
+    private string PageFileName(IFileFormat format)
     {
         string name = !string.IsNullOrWhiteSpace(_pageTitle) ? _pageTitle! : _current?.Host is { Length: > 0 } host ? host : "page";
         foreach (char bad in Path.GetInvalidFileNameChars()) name = name.Replace(bad, '_');
-        return (name.Length > 80 ? name[..80] : name) + extension;
+        return format.FileName(name.Length > 80 ? name[..80] : name);
     }
 
     private async Task SaveHtmlAsync()
     {
         if (_dev is null) return;
 
-        string? path = PickSave("Save the page", "HTML (*.html)|*.html", PageFileName(".html"));
+        string? path = PickSave("Save the page", Formats.Of<HtmlFormat>());
         if (path is null) return;
 
         var response = await _dev.CallAsync("Runtime.evaluate", new
@@ -262,7 +266,7 @@ public sealed partial class WebLabSession : LabSession<Uri>
     {
         if (_dev is null) return;
 
-        string? path = PickSave("Save the page with its files", "MHTML (*.mhtml)|*.mhtml", PageFileName(".mhtml"));
+        string? path = PickSave("Save the page with its files", Formats.Of<MhtmlFormat>());
         if (path is null) return;
 
         var response = await _dev.CallAsync("Page.captureSnapshot", new { format = "mhtml" });
@@ -275,7 +279,7 @@ public sealed partial class WebLabSession : LabSession<Uri>
     {
         if (_view?.CoreWebView2 is not { } core) return;
 
-        string? path = PickSave("Save the page as PDF", "PDF (*.pdf)|*.pdf", PageFileName(".pdf"));
+        string? path = PickSave("Save the page as PDF", Formats.Of<PdfFormat>());
         if (path is null) return;
 
         bool saved = await core.PrintToPdfAsync(path);
@@ -286,7 +290,7 @@ public sealed partial class WebLabSession : LabSession<Uri>
     {
         if (_view?.CoreWebView2 is not { } core) return;
 
-        string? path = PickSave("Save a screenshot", "PNG image (*.png)|*.png", PageFileName(".png"));
+        string? path = PickSave("Save a screenshot", Formats.Of<PngFormat>());
         if (path is null) return;
 
         using var stream = new MemoryStream();
@@ -804,29 +808,10 @@ public sealed partial class WebLabSession : LabSession<Uri>
         }
     }
 
+    /// <summary>The <c>Content-Type</c> of a replacement file: its format's (<see cref="Formats.ContentTypeOf" />), else plain text.</summary>
     private static string MimeFor(string nameOrUrl)
     {
-        string path        = nameOrUrl;
-        int    cut         = path.IndexOfAny(['?', '#']);
-        if (cut >= 0) path = path[..cut];
-
-        return Path.GetExtension(path).ToLowerInvariant() switch
-               {
-                   ".js" or ".mjs"   => "application/javascript",
-                   ".css"            => "text/css",
-                   ".json"           => "application/json",
-                   ".html" or ".htm" => "text/html",
-                   ".svg"            => "image/svg+xml",
-                   ".png"            => "image/png",
-                   ".jpg" or ".jpeg" => "image/jpeg",
-                   ".gif"            => "image/gif",
-                   ".webp"           => "image/webp",
-                   ".ico"            => "image/x-icon",
-                   ".woff2"          => "font/woff2",
-                   ".woff"           => "font/woff",
-                   ".xml"            => "application/xml",
-                   _                 => "text/plain"
-               };
+        return Formats.ContentTypeOf(nameOrUrl) ?? "text/plain";
     }
 
     private void Flag(string url, string what)

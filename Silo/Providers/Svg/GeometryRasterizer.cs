@@ -1,21 +1,21 @@
 ﻿using System.IO;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using Silo.Providers.Document;
+using Silo.Providers.Format;
 
 namespace Silo.Providers;
 
 public static class GeometryRasterizer
 {
     /// <summary>
-    ///     Renders a Geometry to an image file. If the path ends in .ico, produces a multi-size icon.
+    ///     Renders a Geometry to an image file. If the path is an <see cref="IconFormat" /> file, produces a multi-size icon.
     ///     Otherwise, saves a single PNG at the specified dimensions.
     /// </summary>
     public static void ExportToFile(Geometry geometry,      string outputPath,     Brush stroke, double strokeThickness, Brush fill = null,
                                     int      pngWidth = 32, int    pngHeight = 32, IEnumerable<int> icoSizes = null)
     {
-        string ext = Path.GetExtension(outputPath).ToLowerInvariant();
-
-        if (ext == ".ico")
+        if (Formats.Is<IconFormat>(outputPath))
         {
             var sizes      = (icoSizes ?? new[] { 16, 24, 32, 48, 64, 128, 256 }).Distinct().OrderBy(s => s).ToList();
             var pngBuffers = new List<(int Size, byte[] Data)>();

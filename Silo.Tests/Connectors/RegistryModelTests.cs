@@ -1,6 +1,7 @@
 ﻿using Microsoft.Win32;
 using Silo.Connectors.File;
 using Silo.Connectors.System;
+using Silo.ViewModel;
 
 namespace Silo.Tests.Connectors;
 
@@ -104,7 +105,7 @@ public class RegistryModelTests
         Assert.That(model.Name, Is.EqualTo("Silo"));
         Assert.That(model.TypeName, Is.EqualTo("Registry Key"));
         Assert.That(model.Uri.AbsoluteUri, Is.EqualTo("reg:///hkey_current_user/Software/Silo"));
-        Assert.That(model.IsAccessible, Is.False);
+        Assert.That(model.Data, Is.Null);
     }
 
     [Test]
@@ -117,7 +118,7 @@ public class RegistryModelTests
         Assert.That(node, Is.InstanceOf<BlockedNode>());
         Assert.That(node.DataContext, Is.SameAs(model));
         Assert.That(node.Text, Is.EqualTo("Silo (inaccessible)"));
-        Assert.That(node.Icon!.OriginalString, Is.EqualTo("FsFileMissing"));
+        Assert.That(node.Icon!.ToString(), Is.EqualTo("FsFileMissing"));
     }
 
     [Test]
@@ -129,7 +130,7 @@ public class RegistryModelTests
 
         Assert.That(node, Is.InstanceOf<KeyNode>());
         Assert.That(node.Text, Is.EqualTo("Local Registry"));
-        Assert.That(node.Icon!.OriginalString, Is.EqualTo("RegHive"));
+        Assert.That(node.Icon!.ToString(), Is.EqualTo("RegHive"));
         Assert.That(node.IsExpanded, Is.True);
         Assert.That(node.ChildLoader, Is.Not.Null);
     }
@@ -156,7 +157,7 @@ public class RegistryModelTests
 
             Assert.That(root.Text, Is.EqualTo(name));
             Assert.That(root.Children.Select(c => c.Text), Is.EqualTo(new[] { "sub", "(Default)", "Alpha" }));
-            Assert.That(root.Children.Select(c => c.Icon!.OriginalString), Is.EqualTo(new[] { "RegKey", "RegValue", "RegValue" }));
+            Assert.That(root.Children.Select(c => c.Icon!.ToString()), Is.EqualTo(new[] { "RegKey", "RegValue", "RegValue" }));
             Assert.That(root.Children.All(c => !c.IsExpanded), Is.True);
             Assert.That(root.Children[2].Uri.Query, Is.EqualTo("?Alpha"));
             Assert.That(((INodeDetails)root.Children[2].DataContext).GetDetails().ToDictionary(r => r.Name, r => r.Value)["Data"], Is.EqualTo("one"));

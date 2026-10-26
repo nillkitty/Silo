@@ -77,7 +77,7 @@ internal sealed class SchemaPromoteInspector(SchemaLabSession session) : LiveIns
             _panel.Children.Add(line);
         }
 
-        var go = LabUi.Button("Promote", () => session.Promote(), plan.HasErrors ? "The draft has errors" : "Write it into the Silo", plan.CanApply);
+        var go = LabUi.Button("Promote", () => session.Promote(), plan.HasErrors ? "The draft has errors" : "Write it into the Silo", plan.CanApply, "TbExport");
         _panel.Children.Add(LabUi.Bar(go, LabUi.Button("Refresh from the Silo", () =>
                                                                                 {
                                                                                     session.RefreshSnapshot();
@@ -170,7 +170,7 @@ internal sealed class SchemaJsonInspector(SchemaLabSession session) : LiveInspec
                                                                                                                              {
                                                                                                                                  _text.Text  = session.Json;
                                                                                                                                  _error.Text = string.Empty;
-                                                                                                                             }, "Go back to the JSON of the draft as it is"),
+                                                                                                                             }, "Go back to the JSON of the draft as it is", icon: "Undo"),
                             LabUi.Button("Copy", () => LabUi.Copy(session.Json), "Put the draft's JSON on the clipboard"));
         var head = new StackPanel();
         head.Children.Add(bar);

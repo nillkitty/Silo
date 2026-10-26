@@ -174,6 +174,8 @@ public static class SchemaText
                 else if ((flags & MvAttributeFlags.Nullable) != 0) cs += ValueTypes.Contains(cs) || SchemaTypes.EnumOf(type) is not null ? "?" : string.Empty;
                 if (attr is not null && attr.Has("syntax")) sb.Append("    // syntax: ").AppendLine(attr.Get("syntax"));
                 if ((flags & MvAttributeFlags.Key) != 0) sb.AppendLine("    // primary key");
+                if ((flags & MvAttributeFlags.RelativeKey) != 0) sb.AppendLine("    // relative key (name within its container)");
+                if ((flags & MvAttributeFlags.AbsoluteKey) != 0) sb.AppendLine("    // absolute key (full path)");
                 sb.Append("    public ").Append(cs).Append(' ').Append(Ident(m)).Append(" { get; set; }");
                 if ((flags & MvAttributeFlags.Multivalue) != 0) sb.Append(" = [];");
                 else if (cs == "string" && (flags & MvAttributeFlags.Nullable) == 0) sb.Append(" = string.Empty;");
@@ -194,7 +196,8 @@ public static class SchemaLibrary
     [
         ("People: a class hierarchy with an enum and a syntax", People),
         ("Orders: a key, an enum and a syntax for codes", Orders),
-        ("Units: bytes, kilo and mega", Units)
+        ("Units: bytes, kilo and mega", Units),
+        ("Directory: a relative and an absolute key", Directory)
     ];
 
     private static SchemaConstruct Attr(SchemaDraft d, string name, string type, string? flags = null, string? syntax = null, string? display = null)
@@ -261,6 +264,28 @@ public static class SchemaLibrary
 
         var order = d.Add(ConstructKind.Class, "Order");
         order.Members.AddRange(["OrderId", "Sku", "Total", "Status"]);
+        return d;
+    }
+
+    private static SchemaDraft Directory()
+    {
+        var d = new SchemaDraft { Name = "Directory", Description = "Entries named within their container (cn) and by their full path (distinguishedName)." };
+
+        Attr(d, "objectGUID",        "Guid",   "Key");
+        Attr(d, "cn",                "String", "RelativeKey, Indexed", display: "Common name");
+        Attr(d, "distinguishedName", "String", "AbsoluteKey, Indexed", display: "Distinguished name");
+        Attr(d, "description",       "String", "Nullable");
+        Attr(d, "mail",              "String", "Nullable, Anr");
+
+        var entry = d.Add(ConstructKind.Class, "entry");
+        entry.Members.AddRange(["objectGUID", "cn", "distinguishedName", "description"]);
+        var user = d.Add(ConstructKind.Class, "user");
+        user.Members.Add("mail");
+        var ou = d.Add(ConstructKind.Class, "organizationalUnit");
+        ou.Set("displayName", "Organizational unit");
+
+        d.Connect("user",               "entry", false);
+        d.Connect("organizationalUnit", "entry", false);
         return d;
     }
 

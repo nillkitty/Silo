@@ -107,6 +107,18 @@
         return state.graph.getModel().getCell(id);
     }
 
+    /** The cells below the layer of an mxGraphModel XML string (the palette template format). */
+    function cellsFromXml(xml) {
+        var doc = window.mxUtils.parseXml(xml);
+        var codec = new window.mxCodec(doc);
+        var model = new window.mxGraphModel();
+        codec.decode(doc.documentElement, model);
+        var layer = model.getChildAt(model.getRoot(), 0);
+        var cells = [];
+        for (var i = 0; i < model.getChildCount(layer); i++) cells.push(model.getChildAt(layer, i));
+        return cells;
+    }
+
     // ---- features ------------------------------------------------------------------------------------------------
 
     function installMenu(ui) {
@@ -223,6 +235,18 @@
         if (options.palettes === false || !state.ui || !state.ui.sidebar) return;
 
         var sidebar = state.ui.sidebar;
+
+        // An entry is one cell made from its style, or (entry.xml) the cells of an mxGraphModel: a container with its
+        // children, cells with custom attributes. VERIFY on a draw.io bump: sidebar.createVertexTemplateFromCells.
+        function template(entry) {
+            if (entry.xml) {
+                var cells = guard('palettes.xml', function () { return cellsFromXml(entry.xml); });
+                if (cells && cells.length)
+                    return sidebar.createVertexTemplateFromCells(cells, entry.width, entry.height, entry.title || '', true, null, true);
+            }
+            return sidebar.createVertexTemplate(entry.style, entry.width, entry.height, entry.value || '', entry.title || '', true, null, true);
+        }
+
         state.palettes.forEach(function (palette) {
             var id = 'silo-' + palette.id;
 
@@ -233,20 +257,14 @@
                 state.paletteIds[id] = true;
                 sidebar.addPalette(id, palette.title, palette.expanded !== false, function (content) {
                     var current = paletteFunctions[id];
-                    (current.entries || []).forEach(function (entry) {
-                        content.appendChild(sidebar.createVertexTemplate(
-                            entry.style, entry.width, entry.height, entry.value || '', entry.title || '', true, null, true));
-                    });
+                    (current.entries || []).forEach(function (entry) { content.appendChild(template(entry)); });
                 });
             } else if (sidebar.palettes && sidebar.palettes[id]) {
                 // Already added: rebuild its content in place.
                 var wrapper = sidebar.palettes[id][1];
                 if (wrapper && wrapper.firstChild) {
                     while (wrapper.firstChild) wrapper.removeChild(wrapper.firstChild);
-                    paletteFunctions[id].entries.forEach(function (entry) {
-                        wrapper.appendChild(sidebar.createVertexTemplate(
-                            entry.style, entry.width, entry.height, entry.value || '', entry.title || '', true, null, true));
-                    });
+                    paletteFunctions[id].entries.forEach(function (entry) { wrapper.appendChild(template(entry)); });
                 }
             }
         });
@@ -1262,7 +1280,7 @@
         },
 
         /**
-         * Puts evaluated binding values into cells IN PLACE: [{ id, label?, tooltip?, style?: { key: value } }]. The cells are
+         * Puts evaluated binding values into cells IN PLACE: [{ id, label?, tooltip?, style?: { key: value }, attributes?: { name: value } }]. The cells are
          * changed directly and redrawn, outside the undoable model, so the selection, the undo history and any open
          * in-place editor are left alone and no autosave is triggered. A cell being edited is skipped.
          */
@@ -1287,6 +1305,17 @@
                     dirty = true;
                 }
 
+                // silo-attr.<name>: plain attributes (draw.io's own %name% placeholders read them)
+                if (c.attributes) {
+                    for (var name in c.attributes) {
+                        if (/^silo[-_]/i.test(name) || name === 'id') continue;
+                        if (cell.value.getAttribute(name) !== c.attributes[name]) {
+                            cell.value.setAttribute(name, c.attributes[name]);
+                            dirty = true;
+                        }
+                    }
+                }
+
                 if (c.style) {
                     var style = cell.style || '';
                     for (var key in c.style) style = window.mxUtils.setStyle(style, key, c.style[key]);
@@ -1306,9 +1335,73 @@
         },
 
         /**
+         * The data-bound nodes (cells with silo-node) and their cells, for DrawioView.Bound.cs: { nodes: [{ owner, cells }] }.
+         * cells are the node's descendants plus every cell it made (silo-bound-of = the node's id) and theirs. Each cell:
+         * { id, parent, edge, source, target, style, label, attributes, geometry: { x, y, width, height }, collapsed, visible,
+         * order (index among its parent's children) }. msg.owners limits the answer to those nodes.
+         */
+        boundCells: function (msg) {
+            var graph = state.graph;
+            var model = graph.getModel();
+            var wanted = msg.owners ? {} : null;
+            (msg.owners || []).forEach(function (id) { wanted[id] = true; });
+
+            function describe(cell) {
+                var attributes = {};
+                var value = cell.value;
+                if (value && value.attributes)
+                    for (var i = 0; i < value.attributes.length; i++) attributes[value.attributes[i].nodeName] = value.attributes[i].nodeValue;
+
+                var parent = model.getParent(cell);
+                var source = model.getTerminal(cell, true), target = model.getTerminal(cell, false);
+                var g = model.getGeometry(cell);
+                return {
+                    id: cell.id,
+                    parent: parent ? parent.id : null,
+                    edge: model.isEdge(cell),
+                    source: source ? source.id : null,
+                    target: target ? target.id : null,
+                    style: cell.style || '',
+                    label: value && value.getAttribute ? value.getAttribute('label') : (value == null ? '' : String(value)),
+                    attributes: attributes,
+                    geometry: g && !model.isEdge(cell) ? { x: g.x, y: g.y, width: g.width, height: g.height } : null,
+                    collapsed: model.isCollapsed(cell),
+                    visible: model.isVisible(cell),
+                    order: parent ? parent.getIndex(cell) : 0
+                };
+            }
+
+            var owners = [], made = {};
+            for (var id in model.cells) {
+                var cell = model.cells[id];
+                var kind = getAttribute(cell, 'silo-node');
+                if (kind && (!wanted || wanted[cell.id])) owners.push(cell);
+                var of = getAttribute(cell, 'silo-bound-of');
+                if (of) (made[of] = made[of] || []).push(cell);
+            }
+
+            return {
+                nodes: owners.map(function (owner) {
+                    var seen = {}, cells = [];
+                    var stack = model.getChildCells(owner).concat(made[owner.id] || []);
+                    while (stack.length) {
+                        var c = stack.pop();
+                        if (seen[c.id] || c === owner) continue;
+                        seen[c.id] = true;
+                        cells.push(describe(c));
+                        for (var i = 0; i < model.getChildCount(c); i++) stack.push(model.getChildAt(c, i));
+                    }
+                    return { owner: describe(owner), cells: cells };
+                })
+            };
+        },
+
+        /**
          * Adds, updates and removes cells IN PLACE, for content sources that grow while they are shown
          * (DrawioView.PluginApplyEditsAsync): { remove: [id], cells: [{ id, edge?, label?, tooltip?, link?, style?,
-         * styleEntries?: { key: value|null }, x?, y?, width?, height?, source?, target?, parent?, labelAt?, attributes?: { name: value|null } }] }.
+         * styleEntries?: { key: value|null }, x?, y?, width?, height?, source?, target?, parent?, index?, collapsed?, visible?, labelAt?,
+         * attributes?: { name: value|null } }] }. index places the cell at that position among its parent's children (stack and
+         * table layouts order rows by it); collapsed / visible set draw.io's fold state and visibility.
          * The entries of cells run IN ORDER; an entry { id, remove: true } removes that cell there (the older remove array runs
          * first, before every entry). An entry with add: true creates the cell when it does not exist yet, with an object value
          * (so it can carry attributes); an entry without it only changes an existing cell (style replaces the whole style,
@@ -1408,8 +1501,12 @@
                         cell.setId(String(c.id));
                         if (c.edge) cell.setEdge(true);
                         else cell.setVertex(true);
+                        if (c.collapsed === true) cell.collapsed = true;
+                        if (c.visible === false) cell.visible = false;
 
-                        model.add(c.parent ? model.getCell(c.parent) || parent : parent, cell);
+                        var into = c.parent ? model.getCell(c.parent) || parent : parent;
+                        if (typeof c.index === 'number') model.add(into, cell, Math.min(c.index, model.getChildCount(into)));
+                        else model.add(into, cell);
                         if (c.edge) connect(cell, c);
                         result.added++;
                         return;
@@ -1441,6 +1538,15 @@
                         }
                         if (style !== (cell.style || '')) model.setStyle(cell, style);
                     }
+
+                    if (typeof c.index === 'number') {
+                        var owner = model.getParent(cell);
+                        var at = Math.min(c.index, model.getChildCount(owner) - 1);
+                        if (owner && owner.getIndex(cell) !== at) model.add(owner, cell, at);
+                    }
+
+                    if (typeof c.collapsed === 'boolean' && model.isCollapsed(cell) !== c.collapsed) model.setCollapsed(cell, c.collapsed);
+                    if (typeof c.visible === 'boolean' && model.isVisible(cell) !== c.visible) model.setVisible(cell, c.visible);
 
                     if (model.isEdge(cell)) {
                         connect(cell, c);
@@ -1628,13 +1734,15 @@
     // ---- installation --------------------------------------------------------------------------------------------
 
     // ---- the person's edits of generated cells -------------------------------------------------------------------
-    // Generated cells (siloGenerated="1") are the person's to move and delete. Every model change that is not Silo's own
+    // Generated cells (siloGenerated="1") and the cells data-bound nodes made (silo-bound-of) are the person's to move and
+    // delete. Every model change that is not Silo's own
     // (upsertCells sets state.applying; diagram loads are root changes) is checked: generated cells removed, put back (undo) or
     // moved/resized/re-routed are reported as silo.generatedEdited { removed, restored, moved }, so the host stops putting them
     // back or moving them. Folding a container (+/-) is not a move.
 
     function isGenerated(cell) {
-        return !!(cell && cell.value && cell.value.getAttribute && cell.value.getAttribute('siloGenerated') === '1');
+        return !!(cell && cell.value && cell.value.getAttribute &&
+            (cell.value.getAttribute('siloGenerated') === '1' || !!cell.value.getAttribute('silo-bound-of')));
     }
 
     function installGeneratedWatch(graph) {
@@ -1644,8 +1752,16 @@
             guard('generatedWatch', function () {
                 var edit = evt.getProperty('edit');
                 var changes = (edit && edit.changes) || evt.getProperty('changes') || [];
-                var removed = {}, restored = {}, moved = {};
+                var removed = {}, restored = {}, moved = {}, expanded = {};
                 var folding = changes.some(function (c) { return window.mxCollapseChange && c instanceof window.mxCollapseChange; });
+
+                // a vertex of a data-bound tree was expanded: its node reads the level it was waiting for
+                changes.forEach(function (c) {
+                    if (!(window.mxCollapseChange && c instanceof window.mxCollapseChange) || model.isCollapsed(c.cell)) return;
+                    var owner = getAttribute(c.cell, 'silo-node') === 'tree' ? c.cell.id : getAttribute(c.cell, 'silo-bound-of');
+                    if (owner) expanded[owner] = true;
+                });
+                Object.keys(expanded).forEach(function (owner) { post('silo.boundExpand', { owner: owner }); });
                 if (changes.some(function (c) { return window.mxRootChange && c instanceof window.mxRootChange; })) return;
 
                 function each(cell, fn) {
