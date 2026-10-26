@@ -346,6 +346,7 @@ internal sealed class StreamDeck : Grid
         var def     = StreamAdapters.Find(spec.Key);
         var problem = StreamLabSession.ProblemOf(spec);
         var row     = new DockPanel { Margin = new Thickness(38, 2, 4, 2), LastChildFill = true };
+        row.PreviewMouseLeftButtonDown += (_, _) => _session.SelectStage(spec);
 
         void Put(UIElement e, System.Windows.Controls.Dock side)
         {

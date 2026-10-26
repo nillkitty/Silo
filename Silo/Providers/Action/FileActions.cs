@@ -1,5 +1,6 @@
 ﻿using Silo.Commanding;
 using Silo.Connectors.File;
+using Silo.TextEditing;
 
 namespace Silo.Providers.Action;
 
@@ -73,6 +74,9 @@ public class FileActions : IActionProvider<FileModel>
         {
             yield return ProvidedCommand.Of("file.launch", new LaunchFileCommand(f), null, FileGroup, CommandPlacement.Both, isDefault: true);
             yield return ProvidedCommand.Of("file.openwith", new OpenWithFileCommand(f), null, FileGroup);
+            yield return ProvidedCommand.From("file.texteditor", "Open in _Text Editor", () => TextEditors.OpenFile(f.Path), "SourceCode",
+                                              toolTip: "Edit the file as text in Silo (JSON, XML and YAML are coloured, checked and can be formatted)",
+                                              group: FileGroup, placement: CommandPlacement.Menu);
             yield return ProvidedCommand.Of("file.reveal", new RevealFileCommand(f), null, FileGroup);
             yield return ProvidedCommand.Of("file.refresh", new RefreshFileCommand(f, false), null, FileGroup, gesture: "F5");
         }

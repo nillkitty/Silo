@@ -171,7 +171,9 @@ public interface ILabSession : INotifyPropertyChanged, IDisposable
 /// </summary>
 public abstract class LabInspector
 {
-    private UIElement? _view;
+    private UIElement?   _view;
+    private LabOwner?    _scope;
+    private LabPaneType? _paneType;
 
     /// <summary>A short stable key ("dom"); how the layout remembers the inspector.</summary>
     public abstract string Id { get; }
@@ -199,6 +201,29 @@ public abstract class LabInspector
     ///     first, and the views of what is going on (<see cref="LabPaneKind.Other" />, the default) after a line.
     /// </summary>
     public virtual LabPaneKind Kind => LabPaneKind.Other;
+
+    /// <summary>
+    ///     Whether the pane shows what is always there (<see cref="LabPaneType.Static" />, the default) or what belongs to the subject, part or
+    ///     tool at hand (<see cref="LabPaneType.Instance" />: the pane is closed while its <see cref="Scope" /> does not apply).
+    /// </summary>
+    public virtual LabPaneType PaneType => _paneType ?? LabPaneType.Static;
+
+    /// <summary>
+    ///     What owns the pane: an aspect (<see cref="LabOwner.OfAspect" />) or a tool (<see cref="LabOwner.OfTool" />); null for a pane of the
+    ///     Lab itself. See <see cref="PaneType" /> for what an owner decides.
+    /// </summary>
+    public virtual LabOwner? Scope => _scope;
+
+    /// <summary>
+    ///     Makes the pane belong to an aspect or tool (see <see cref="Scope" />): by default an instance pane, closed while its owner does
+    ///     not apply. Returns the pane, so a Lab writes <c>new MatchesPane(this).OwnedBy(LabOwner.OfAspect("matches"))</c>.
+    /// </summary>
+    public LabInspector OwnedBy(LabOwner owner, LabPaneType type = LabPaneType.Instance)
+    {
+        _scope    = owner;
+        _paneType = type;
+        return this;
+    }
 
     /// <summary>What the pane shows (made once).</summary>
     public UIElement View => _view ??= BuildView();

@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Reflection;
@@ -119,7 +119,7 @@ public sealed class DrawioOptions
     [DrawioOption(CatInterface, "Theme", "draw.io's ui= theme. Default leaves draw.io's own choice.")]
     public DrawioTheme Theme { get; set; }
 
-    [DrawioOption(CatInterface, "Dark mode", "dark= (Sketch, Minimal and Simple themes).")]
+    [DrawioOption(CatInterface, "Dark mode", "dark= for the editor. Default follows Silo's light or dark theme.")]
     public DrawioDarkMode DarkMode { get; set; }
 
     [DrawioOption(CatInterface, "Language", "lang= code, e.g. en, de, ja. Empty = draw.io's default.")]

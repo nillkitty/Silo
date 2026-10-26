@@ -1,4 +1,4 @@
-using System.Linq;
+﻿using System.Linq;
 using System.Threading;
 using System.Collections.Concurrent;
 using System.Diagnostics;
@@ -102,6 +102,10 @@ public sealed partial class DrawioView : UserControl, IDisposable
         grid.Children.Add(_overlay);
         Content = grid;
 
+        // the cover shown while the editor loads follows the Silo theme
+        _overlay.SetResourceReference(Border.BackgroundProperty, "Theme.Surface");
+        _overlayText.SetResourceReference(TextBlock.ForegroundProperty, "Theme.Text");
+
         _liveTimer        = new DispatcherTimer(DispatcherPriority.Background, Dispatcher) { Interval = TimeSpan.FromMilliseconds(750) };
         _liveTimer.Tick   += async (_, _) => { _liveTimer.Stop(); await RefreshAsync(); };
         _reconfigureTimer = new DispatcherTimer(DispatcherPriority.Background, Dispatcher) { Interval = TimeSpan.FromMilliseconds(400) };
@@ -109,6 +113,7 @@ public sealed partial class DrawioView : UserControl, IDisposable
 
         _profile.Changed          += OnProfileChanged;
         DiagramData.Changed       += OnLiveDataChanged;
+        Silo.Theming.AppTheme.Instance.PropertyChanged += OnSiloThemeChanged;
         Loaded                    += async (_, _) => await StartAsync();
         ShowStatus("Starting the diagram editor…", true);
     }
@@ -131,15 +136,20 @@ public sealed partial class DrawioView : UserControl, IDisposable
 
     public DrawioProfile Profile => _profile;
 
-    /// <summary>The generated layer for this pane, if any (e.g. <see cref="SiloModelDiagramSource" />).</summary>
+    /// <summary>
+    ///     The generated layer for this pane, if any (e.g. <see cref="SiloModelDiagramSource" />). An
+    ///     <see cref="IIncrementalDiagramSource" /> also has its edits applied in place (see <c>DrawioView.Live.cs</c>).
+    /// </summary>
     public IDiagramContentSource? Source
     {
         get => _source;
         set
         {
             if (_source is not null) _source.Changed -= OnSourceChanged;
+            if (_source is IIncrementalDiagramSource previous) previous.EditsReady -= OnSourceEdits;
             _source = value;
             if (_source is not null) _source.Changed += OnSourceChanged;
+            if (_source is IIncrementalDiagramSource incremental) incremental.EditsReady += OnSourceEdits;
             _sourceDirty = true;
             RequestRefresh();
         }
@@ -322,7 +332,10 @@ public sealed partial class DrawioView : UserControl, IDisposable
         _reconfigureTimer.Stop();
         _profile.Changed    -= OnProfileChanged;
         DiagramData.Changed -= OnLiveDataChanged;
+        Silo.Theming.AppTheme.Instance.PropertyChanged -= OnSiloThemeChanged;
         if (_source is not null) _source.Changed -= OnSourceChanged;
+        if (_source is IIncrementalDiagramSource incremental) incremental.EditsReady -= OnSourceEdits;
+        _editTimer?.Stop();
         foreach (var tcs in _exports.Values) tcs.TrySetResult(null);
         CompleteAllPending();
 
@@ -571,6 +584,7 @@ public sealed partial class DrawioView : UserControl, IDisposable
 
             case DrawioEvent.Load:
                 _loadedOnce = true;
+                _awaitingLoadSinceUtc = null;
                 HideOverlay();
                 EditorReady?.Invoke(this, EventArgs.Empty);
                 OnLoad(m);
@@ -749,6 +763,8 @@ public sealed partial class DrawioView : UserControl, IDisposable
             return;
         }
 
+        _awaitingLoadSinceUtc = DateTime.UtcNow; // live edits wait for the editor's "load" answer (DrawioView.Live.cs)
+
         var o = Options;
         var load = new DrawioLoadOptions
                    {
@@ -794,8 +810,14 @@ public sealed partial class DrawioView : UserControl, IDisposable
 
         if (_source is { } src)
         {
+            // collapsed / expanded is the person's choice: it survives the rebuild
+            var folds = doc.GeneratedFoldStates();
+            // so are where the person moved generated cells to, and which ones they deleted (DrawioView.Live.cs)
+            var moved = KeepMovedGeometry(doc);
             doc.RemoveGenerated();
             doc.AddModel(src.Build(), true, Options.LockGeneratedCells);
+            doc.ApplyFoldStates(folds);
+            RestorePersonEdits(doc, moved);
         }
 
         if (Options.EnableBindings) DiagramBindings.Apply(doc);

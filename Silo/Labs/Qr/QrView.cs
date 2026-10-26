@@ -174,6 +174,10 @@ internal sealed class QrView : Grid
 
         this.SetResourceReference(BackgroundProperty, "Theme.Background");
         _session.Changed += (_, _) => Draw();
+        _session.FieldFocusRequested += key =>
+                                        {
+                                            if (_fieldControls.TryGetValue(key, out var box)) box.Focus();
+                                        };
         _session.Loaded  += (_, _) => LoadAll();
         LoadAll();
     }
@@ -197,12 +201,15 @@ internal sealed class QrView : Grid
         Draw();
     }
 
+    private readonly Dictionary<string, UIElement> _fieldControls = new();
+
     /// <summary>The boxes for the fields of the kind the code says.</summary>
     private void BuildForm()
     {
         var doc = _session.Doc;
         _formKind = doc.Kind;
         _form.Children.Clear();
+        _fieldControls.Clear();
         var rows = new List<(string, UIElement)>();
         _loading = true;
         try
@@ -234,6 +241,8 @@ internal sealed class QrView : Grid
                     control = line.Paper();
                 }
 
+                _fieldControls[key]      =  control;
+                control.GotKeyboardFocus += (_, _) => _session.NoteField(key);
                 rows.Add((field.Title + (field.Required ? " *" : string.Empty), control));
             }
         }

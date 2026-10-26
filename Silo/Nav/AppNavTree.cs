@@ -32,8 +32,8 @@ public record AppNavItem(string Text, Geometry? Icon, string Description, AppVie
 /// <remarks>
 ///     Every leaf below either has a real <see cref="AppView" /> -- built from a
 ///     <c>Views/PlaceholderView</c> or <c>Views/EntityListView</c> stand-in where the app
-///     doesn't have the real feature yet -- or, where the nav structure diagram draws no view
-///     for it (most Settings leaves, a handful of Schema/Connections entries), a
+///     doesn't have the real feature yet (every Settings section has a placeholder page) -- or, where the
+///     nav structure diagram draws no view for it (a handful of Schema/Connections entries), a
 ///     <see langword="null" /> one; selecting it just leaves whatever content was already
 ///     showing rather than clearing it to something misleading. The nine or so "ListView of X"
 ///     boxes in that diagram (worlds, data sources, meta types/fields/indexes, connection
@@ -229,79 +229,117 @@ public static class AppNavTree
                                                                   });
     }
 
+    /// <summary>The text of the Settings root, which <c>MainWindow</c> treats specially (selecting it unfolds the whole branch).</summary>
+    public const string SettingsText = "Settings";
+
     /// <summary>
-    ///     Settings' own second-level flyout (the structure diagram's separate "Settings Nav"
-    ///     panel). None of its leaves are wired to a view yet -- the diagram doesn't define their
-    ///     content, only their grouping, so that's all this reproduces for now.
+    ///     Settings' own second-level flyout (the structure diagram's separate "Settings Nav" panel). The diagram defines
+    ///     only the grouping, not the content, so every section (and every group) opens a placeholder page for now --
+    ///     one document tab per section, keyed by its path so Settings ▸ Silo Settings ▸ Providers does not share a tab
+    ///     with Connections ▸ Providers.
     /// </summary>
     public static AppNavNode BuildSettings()
     {
-        return _group("Settings", "Settings", null, settings => new[]
-                                                                {
-                                                                    _group("Silo Settings", "Settings", settings, silo => new[]
-                                                                                                                          {
-                                                                                                                              _leaf("Assemblies",
-                                                                                                                                    "Modules",
-                                                                                                                                    silo),
-                                                                                                                              _leaf("Branding",
-                                                                                                                                    "Design",
-                                                                                                                                    silo),
-                                                                                                                              _leaf("Security/Scripting",
-                                                                                                                                    "Shield",
-                                                                                                                                    silo),
-                                                                                                                              _leaf("Snapshots",
-                                                                                                                                    "Record",
-                                                                                                                                    silo),
-                                                                                                                              _leaf("Backup/Restore",
-                                                                                                                                    "Backup",
-                                                                                                                                    silo),
-                                                                                                                              _leaf("Providers",
-                                                                                                                                    "Server",
-                                                                                                                                    silo),
-                                                                                                                              _leaf("Network & Energy",
-                                                                                                                                    "Network",
-                                                                                                                                    silo),
-                                                                                                                              _leaf("Auditing & Undo",
-                                                                                                                                    "Undo",
-                                                                                                                                    silo),
-                                                                                                                              _leaf("Data Transfer",
-                                                                                                                                    "TransferData",
-                                                                                                                                    silo),
-                                                                                                                              _leaf("Startup Layout",
-                                                                                                                                    "Layers",
-                                                                                                                                    silo),
-                                                                                                                              _leaf("Keyboard",
-                                                                                                                                    "Command",
-                                                                                                                                    silo)
-                                                                                                                          }),
-                                                                    _group("Owner Settings", "Key2", settings, owner => new[]
-                                                                                                                        {
-                                                                                                                            _leaf("Access Control",
-                                                                                                                                  "Lock",
-                                                                                                                                  owner),
-                                                                                                                            _leaf("Encryption",
-                                                                                                                                  "Padlock",
-                                                                                                                                  owner)
-                                                                                                                        }),
-                                                                    _group("User Settings", "FaceRecognition", settings,
-                                                                           user => new[]
-                                                                                   {
-                                                                                       _leaf("Developer Settings", "Coding",
-                                                                                             user),
-                                                                                       _leaf("Display Preferences", "Opacity",
-                                                                                             user),
-                                                                                       _leaf("Personalization", "Design", user)
-                                                                                   }),
-                                                                    _group("App Settings", "Settings", settings, app => new[]
-                                                                                                                        {
-                                                                                                                            _leaf("Auto-Update",
-                                                                                                                                  "Refresh",
-                                                                                                                                  app),
-                                                                                                                            _leaf("Registered Handlers",
-                                                                                                                                  "Link1",
-                                                                                                                                  app)
-                                                                                                                        })
-                                                                });
+        return _settingsGroup(SettingsText, "Settings", null,
+                              "Everything that can be set, grouped by whom it applies to: this Silo, its owner, you, and the app.",
+                              settings => new[]
+                                          {
+                                              _settingsGroup("Silo Settings", "Settings", settings,
+                                                             "Settings kept in the Silo itself, shared by everyone who opens it.",
+                                                             silo => new[]
+                                                                     {
+                                                                         _setting("Assemblies", "Modules", silo,
+                                                                                  "The assemblies (extensions) this Silo loads and carries with it."),
+                                                                         _setting("Branding", "Design", silo,
+                                                                                  "This Silo's name, icon and look as other people see it."),
+                                                                         _setting("Security/Scripting", "Shield", silo,
+                                                                                  "Which scripts and extensions in this Silo may run, and with what rights."),
+                                                                         _setting("Snapshots", "Record", silo,
+                                                                                  "Point-in-time snapshots of this Silo's data."),
+                                                                         _setting("Backup/Restore", "Backup", silo,
+                                                                                  "Backing this Silo up and restoring it from a backup."),
+                                                                         _setting("Providers", "Server", silo,
+                                                                                  "Which providers (data, type, format...) this Silo uses."),
+                                                                         _setting("Network & Energy", "Network", silo,
+                                                                                  "When this Silo may use the network and run background work (metered connections, battery)."),
+                                                                         _setting("Auditing & Undo", "Undo", silo,
+                                                                                  "What goes into the audit log, and how much undo history is kept."),
+                                                                         _setting("Data Transfer", "TransferData", silo,
+                                                                                  "Defaults for importing, exporting and moving data."),
+                                                                         _setting("Startup Layout", "Layers", silo,
+                                                                                  "What this Silo opens, and how its windows are arranged, when it starts."),
+                                                                         _setting("Keyboard", "Command", silo,
+                                                                                  "Keyboard shortcuts.")
+                                                                     }),
+                                              _settingsGroup("Owner Settings", "Key2", settings,
+                                                             "Settings only the Silo's owner can change.",
+                                                             owner => new[]
+                                                                      {
+                                                                          _setting("Access Control", "Lock", owner,
+                                                                                   "Who may open this Silo, and what each person may do in it."),
+                                                                          _setting("Encryption", "Padlock", owner,
+                                                                                   "How this Silo's secrets are protected, and which key protector it uses.")
+                                                                      }),
+                                              _settingsGroup("User Settings", "FaceRecognition", settings,
+                                                             "Your own settings: they follow you, not the Silo.",
+                                                             user => new[]
+                                                                     {
+                                                                         _setting("Developer Settings", "Coding", user,
+                                                                                  "Options for developing and debugging extensions."),
+                                                                         _setting("Display Preferences", "Opacity", user,
+                                                                                  "Theme, icon size and how things are shown."),
+                                                                         _setting("Personalization", "Design", user,
+                                                                                  "Your names, labels and layout customisations.")
+                                                                     }),
+                                              _settingsGroup("App Settings", "Settings", settings,
+                                                             "Settings of the Silo app on this computer.",
+                                                             app => new[]
+                                                                    {
+                                                                        _setting("Auto-Update", "Refresh", app,
+                                                                                 "How and when the app updates itself."),
+                                                                        _setting("Registered Handlers", "Link1", app,
+                                                                                 "The file types and URI schemes the app is registered to open.")
+                                                                    })
+                                          });
+    }
+
+    /// <summary>A Settings section: a leaf whose placeholder page names where it sits and what it will hold.</summary>
+    private static AppNavNode _setting(string text, string iconKey, AppNavItem parent, string about)
+    {
+        return _leaf(text, iconKey, parent, about, _settingsView(text, parent, () => about));
+    }
+
+    /// <summary>
+    ///     A Settings group: has a page of its own (rather than showing its first section's), listing its sections, so
+    ///     selecting the group does not look like selecting the section beneath it.
+    /// </summary>
+    private static AppNavNode _settingsGroup(string text, string iconKey, AppNavItem? parent, string about,
+                                             Func<AppNavItem, IReadOnlyList<AppNavNode>> children)
+    {
+        AppNavNode? node = null;
+
+        // the page is built when it is first shown, by which time the node and its children exist
+        var view = _settingsView(text, parent, () => node is null || node.Children.Count == 0
+                                                         ? about
+                                                         : about + "\n\nSections: " + string.Join(", ", node.Children.Select(c => c.Header)) + ".");
+        node = _group(text, iconKey, parent, children, about, view);
+        return node;
+    }
+
+    private static AppView _settingsView(string text, AppNavItem? parent, Func<string> about)
+    {
+        var path = _pathOf(parent) is { Length: > 0 } above ? above + " / " + text : text;
+        return new SimpleAppView(text, () => new PlaceholderView(text, path + "\n\n" + about() + "\n\nThis settings page is not built yet."))
+               {
+                   Key = "view:settings/" + path.Replace(" / ", "/")
+               };
+    }
+
+    private static string _pathOf(AppNavItem? item)
+    {
+        var parts = new List<string>();
+        for (var i = item; i is not null; i = i.Parent) parts.Insert(0, i.Text);
+        return string.Join(" / ", parts);
     }
 
     // --- construction helpers -------------------------------------------------------------

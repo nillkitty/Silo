@@ -8,7 +8,7 @@ using Silo.Providers.Definitions;
 namespace Silo.Labs.Schemas;
 
 /// <summary>One Schema Lab window: the draft, the construct that is selected, what is wrong with the draft, and what promoting it would do.</summary>
-public sealed class SchemaLabSession : LabSession<SchemaDraft>, ILabLive
+public sealed partial class SchemaLabSession : LabSession<SchemaDraft>, ILabLive
 {
     private static readonly LabSaved<SchemaDraft> Saved = new("schema");
 
@@ -31,7 +31,7 @@ public sealed class SchemaLabSession : LabSession<SchemaDraft>, ILabLive
     public SchemaLabSession(SchemaLab lab) : base(lab)
     {
         _notify     = new Debouncer(TimeSpan.FromMilliseconds(150), Rebuilt);
-        _inspectors = [new SchemaPromoteInspector(this), new SchemaTextInspector(this), new SchemaJsonInspector(this)];
+        _inspectors = [new SchemaPromoteInspector(this).OwnedBy(LabOwner.OfAspect("promote")), new SchemaTextInspector(this).OwnedBy(LabOwner.OfAspect("outline")), new SchemaJsonInspector(this).OwnedBy(LabOwner.OfAspect("json"))];
     }
 
     internal static LabSaved<SchemaDraft> Kept => Saved;
@@ -75,8 +75,8 @@ public sealed class SchemaLabSession : LabSession<SchemaDraft>, ILabLive
 
     public override string Title => $"{LabOf.Name} - {(string.IsNullOrWhiteSpace(_draft.Name) ? "new draft" : _draft.Name)}{(_dirty ? " *" : string.Empty)}";
 
-    /// <summary>2: the Library, Recent, Presets and Problems panes are the window's own now; windows saved with the old arrangement start afresh.</summary>
-    public override int LayoutVersion => 2;
+    /// <summary>3: the panes belong to aspects of the Lab's model now; windows saved with the old arrangement start afresh.</summary>
+    public override int LayoutVersion => 3;
 
     public override IReadOnlyList<LabInspector> Inspectors => _inspectors;
 
@@ -121,7 +121,7 @@ public sealed class SchemaLabSession : LabSession<SchemaDraft>, ILabLive
         RefreshSnapshot();
         Rebuilt();
         Loaded?.Invoke(this, EventArgs.Empty);
-        SelectionChanged?.Invoke(this, EventArgs.Empty);
+        RaiseSelection();
         RaiseValueChanged();
         RaiseActionsChanged();
     }
@@ -160,7 +160,7 @@ public sealed class SchemaLabSession : LabSession<SchemaDraft>, ILabLive
     private void Select(string? reference)
     {
         _selected = reference;
-        SelectionChanged?.Invoke(this, EventArgs.Empty);
+        RaiseSelection();
         RaiseActionsChanged();
     }
 
@@ -201,7 +201,7 @@ public sealed class SchemaLabSession : LabSession<SchemaDraft>, ILabLive
 
             _selected = item.Ref;
             Touched(true);
-            SelectionChanged?.Invoke(this, EventArgs.Empty);
+            RaiseSelection();
             return item;
         }
         catch (InvalidOperationException ex)
@@ -218,7 +218,7 @@ public sealed class SchemaLabSession : LabSession<SchemaDraft>, ILabLive
         _draft.Remove(item.Kind, item.Name);
         _selected = _draft.Items.FirstOrDefault(i => i.Kind != ConstructKind.Relation)?.Ref;
         Touched(true);
-        SelectionChanged?.Invoke(this, EventArgs.Empty);
+        RaiseSelection();
     }
 
     public void RemoveRelation(string name)
@@ -228,7 +228,7 @@ public sealed class SchemaLabSession : LabSession<SchemaDraft>, ILabLive
         _draft.Remove(ConstructKind.Relation, name);
         if (_selected is not null && _draft.FindRef(_selected) is null) _selected = null;
         Touched(true);
-        SelectionChanged?.Invoke(this, EventArgs.Empty);
+        RaiseSelection();
     }
 
     /// <summary>Renames the selected construct (everything that refers to it follows). Returns what is wrong, or null.</summary>
@@ -353,7 +353,7 @@ public sealed class SchemaLabSession : LabSession<SchemaDraft>, ILabLive
             if (auxiliary && !t.Flag("auxiliary")) t.Set("auxiliary", "true"); // an included class is auxiliary by definition
             _selected = s.Ref;
             Touched(true);
-            SelectionChanged?.Invoke(this, EventArgs.Empty);
+            RaiseSelection();
             return null;
         }
         catch (InvalidOperationException ex)
@@ -430,7 +430,7 @@ public sealed class SchemaLabSession : LabSession<SchemaDraft>, ILabLive
 
         _selected = item.Ref;
         Touched(true);
-        SelectionChanged?.Invoke(this, EventArgs.Empty);
+        RaiseSelection();
         Status = $"Took a copy of {item.Name} from the Silo.";
         return null;
     }
@@ -498,10 +498,7 @@ public sealed class SchemaLabSession : LabSession<SchemaDraft>, ILabLive
                                .ToList();
         sections.Add(new LabLibrarySection("Syntaxes of the Silo (double-click to copy into the draft)", "Code", syntaxes));
 
-        var templates = SchemaLibrary.Templates.Where(t => Wanted(t.Title))
-                                     .Select(t => new LabLibraryEntry(t.Title, "Draft", null, "DataModel", () => StartFrom(t.Make()), IsTemplate: true))
-                                     .ToList();
-        sections.Add(new LabLibrarySection("Templates (double-click to start with one)", null, templates, true));
+        // the drafts to start from are prefabs of the model now (File > New Schema draft)
         return sections;
     }
 
@@ -574,7 +571,7 @@ public sealed class SchemaLabSession : LabSession<SchemaDraft>, ILabLive
         _draft.Relink();
         Touched(true);
         Loaded?.Invoke(this, EventArgs.Empty);
-        SelectionChanged?.Invoke(this, EventArgs.Empty);
+        RaiseSelection();
         return null;
     }
 
@@ -625,11 +622,6 @@ public sealed class SchemaLabSession : LabSession<SchemaDraft>, ILabLive
         get
         {
             yield return ProvidedCommand.From("new-draft", "_New Draft", NewDraft, "TbNew", null, "Start with an empty draft");
-            yield return ProvidedCommand.Submenu("from-template", "Start from a _Template", SchemaLibrary.Templates.Select((t, i) =>
-                                                                                                                         {
-                                                                                                                             var make = t.Make;
-                                                                                                                             return ProvidedCommand.From("template-" + i, t.Title, () => StartFrom(make()), null, null, "Start from this draft");
-                                                                                                                         }), null, "TbNew", "Drafts to start from");
             yield return ProvidedCommand.From("show-library", "Show _Library", () => Host?.ShowInspector("library"), "Folder17", null, "Show the drafts kept in the Silo, the Silo's enums and syntaxes, and the templates");
             yield return ProvidedCommand.From("show-promote", "Show _Promotion", () => Host?.ShowInspector("promote"), "Checklist", null, "Show what promoting the draft would write");
             yield return ProvidedCommand.From("paste-json", "_Paste Draft JSON", PasteJson, "TbPaste", null, "Take the JSON on the clipboard as the draft");

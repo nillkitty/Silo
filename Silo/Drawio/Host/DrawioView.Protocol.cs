@@ -542,6 +542,10 @@ public sealed partial class DrawioView
                 OnSiloDoubleClick(m);
                 break;
 
+            case SiloPluginEvent.GeneratedEdited:
+                OnGeneratedEdited(m);
+                break;
+
             case SiloPluginEvent.Log:
                 _log.Debug("[draw.io plugin] {message}", m.GetString("message"));
                 break;

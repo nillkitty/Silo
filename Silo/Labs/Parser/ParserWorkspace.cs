@@ -427,6 +427,7 @@ public sealed class ParserWorkspace
             case "unicode": return SpecNode.Unicode(string.IsNullOrEmpty(item.Id) ? "L" : item.Id);
             case "xrule" when item.Id.Split('|') is [{ Length: > 0 } spec, { Length: > 0 } rule]: return SpecNode.Ref(rule, spec);
             case "rule": return SpecNode.Ref(item.Id);
+            case "json": return Newtonsoft.Json.JsonConvert.DeserializeObject<SpecNode>(item.Id); // a whole piece, as the Lab's model makes it
             case "comb": return SpecCatalog.Combinator(item.Id)?.Make(target);
             default: return null;
         }

@@ -46,6 +46,17 @@ answer `unknownMessage`). Plugin events are ordinary `parent.postMessage` JSON w
 * **Custom shapes**: `PluginAddStencilAsync(name, stencilXml)`; use as `shape=<name>` in a style.
 * **Custom properties** (typed Format-panel fields on built-in shapes): `PluginSetCustomPropertiesAsync`.
 * **Cell operations**: select, scroll to, set attribute, read selection.
+* **Live bindings in place**: `bindingCells` / `applyBindings` re-evaluate `silo-*` bindings without reloading the diagram.
+* **The person's edits of generated cells** (2026-10-26): a model listener reports, as `silo.generatedEdited { removed, restored,
+  moved }`, every generated cell (`siloGenerated="1"`) the person deletes, puts back (undo) or moves/resizes/re-routes. Silo's own
+  changes (`upsertCells` sets `state.applying`), diagram loads (root changes) and folding (+/-) are not reported. `DrawioView.Live.cs`
+  keeps the ids: deleted cells are not added again (in place or on a rebuild), moved ones keep their geometry.
+* **Live generated cells in place** (`upsertCells`, 2026-10-26): adds, updates and removes generated cells while the diagram is
+  shown, for an `IIncrementalDiagramSource` (`DrawioView.PluginApplyEditsAsync`, queued and batched in `DrawioView.Live.cs`). One
+  model update whose undo entry is taken off again, so the person's undo history keeps only their own edits; removing a vertex
+  removes its connectors. Removal goes through `model.remove`, never `graph.removeCells`, which silently keeps cells styled
+  `deletable=0` (every cell of a locked generated layer). Checked headless against mxGraph 4.2.2 (not yet against the pinned draw.io build). VERIFY on a draw.io
+  bump: `ui.editor.undoManager` is an `mxUndoManager` with `history` / `indexOfNextAdd`.
 * **Silo Properties** section in the Format panel's Style tab, above draw.io's own Property grid (`StyleFormatPanel.prototype.init`
   wrapped).
   * **Rows:** the selection's typed properties, each with its own icon (draw.io's `Editor.*Image` / `Format.*Image`, see

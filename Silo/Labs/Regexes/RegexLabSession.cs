@@ -6,7 +6,7 @@ using SyntaxKind = Silo.DbModel.Meta.SyntaxKind;
 namespace Silo.Labs.Regexes;
 
 /// <summary>One Regex Lab window: the regex being built, what trying it came to, and the actions on it.</summary>
-public sealed class RegexLabSession : LabSession<RegexDoc>
+public sealed partial class RegexLabSession : LabSession<RegexDoc>
 {
     private readonly Debouncer          _rerun;
     private readonly List<LabInspector> _inspectors;
@@ -18,13 +18,15 @@ public sealed class RegexLabSession : LabSession<RegexDoc>
     public RegexLabSession(RegexLab lab) : base(lab)
     {
         _rerun = new Debouncer(TimeSpan.FromMilliseconds(180), Rerun);
+        // each pane belongs to an aspect: it is there while its aspect applies (see DefineAspects)
         _inspectors =
         [
-            new RegexMatchesInspector(this),
-            new RegexReplaceInspector(this),
-            new RegexExplainInspector(this),
-            new RegexReferenceInspector(this),
-            new RegexCodeInspector(this)
+            new RegexMatchesInspector(this).OwnedBy(LabOwner.OfAspect("matches")),
+            new RegexReplaceInspector(this).OwnedBy(LabOwner.OfAspect("matches")),
+            new RegexExplainInspector(this).OwnedBy(LabOwner.OfAspect("explain")),
+            new RegexReferenceInspector(this).OwnedBy(LabOwner.OfAspect("explain")),
+            new RegexCodeInspector(this).OwnedBy(LabOwner.OfAspect("code")),
+            new RegexGroupInspector(this).OwnedBy(LabOwner.OfAspect("group"))
         ];
     }
 
@@ -56,8 +58,8 @@ public sealed class RegexLabSession : LabSession<RegexDoc>
 
     private RegexLab Lab_ => (RegexLab)LabOf;
 
-    /// <summary>2: the Library, Recent, Presets and Problems panes are the window's own now; windows saved with the old arrangement start afresh.</summary>
-    public override int LayoutVersion => 2;
+    /// <summary>3: the panes belong to aspects, and there is a pane for the active group; windows saved with the old arrangement start afresh.</summary>
+    public override int LayoutVersion => 3;
 
     public override IReadOnlyList<LabInspector> Inspectors => _inspectors;
 
@@ -182,10 +184,8 @@ public sealed class RegexLabSession : LabSession<RegexDoc>
                              .Select(name => new LabLibraryEntry(name, "Regex", LabUi.Shorten(RegexStore.Load(name)?.Pattern ?? string.Empty, 40), "Search", () => OpenKept(name), name == _doc.Name,
                                                                  ToolTip: "Double-click to open", Delete: () => RegexStore.Delete(name)))
                              .ToList();
-        var templates = RegexLibrary.Entries.Where(e => Wanted(e.Name) || Wanted(e.Description))
-                                    .Select(e => new LabLibraryEntry(e.Name, "Regex", LabUi.Shorten(e.Pattern, 40), "Search", () => Replace(RegexLibrary.ToDoc(e), keepText: false), IsTemplate: true, ToolTip: e.Description))
-                                    .ToList();
-        return [new("In the Silo", "Database5", kept), new("Templates", null, templates, true)];
+        // the ready-made regexes are the prefabs of the Regex subject type (the window lists them under Prefabs)
+        return [new("In the Silo", "Database5", kept)];
     }
 
     protected override IEnumerable<LabProblem> Validate()

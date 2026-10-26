@@ -50,7 +50,7 @@ public sealed class DrawioProfile
 /// <summary>
 ///     The set of known profiles. Three are built in, spanning the range the person asked for --
 ///     a locked read-only view of existing constructs, the same with room for annotations, and the
-///     full editor for design-world drawing and notes -- and every field of each is editable from the
+///     full editor for design-world drawing and notes -- plus <see cref="Traceroute" /> for the Visual Traceroute tool, and every field of each is editable from the
 ///     Author-level options window. Edits persist to <c>%AppData%\Silo\drawio-profiles.json</c>.
 /// </summary>
 public sealed class DrawioProfiles
@@ -58,6 +58,7 @@ public sealed class DrawioProfiles
     public const string ModelReadOnly   = "model-readonly";
     public const string ModelAnnotatable = "model-annotatable";
     public const string Canvas          = "canvas";
+    public const string Traceroute      = "traceroute";
 
     private static readonly string SettingsFile =
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Silo", "drawio-profiles.json");
@@ -103,6 +104,24 @@ public sealed class DrawioProfiles
                                   ShowLibraries      = true,
                                   LockGeneratedCells = false,
                                   AllowDownloads     = true
+                              }));
+
+        Add(new DrawioProfile(Traceroute,
+                              "Live network traces: the generated cells can be moved and deleted, room for notes, quick live updates.",
+                              new DrawioOptions
+                              {
+                                  ShowLibraries           = false,
+                                  HideSidebar             = true,
+                                  HideAllMoreShapes       = true,
+                                  DisableCustomLibraries  = true,
+                                  HideTemplates           = true,
+                                  HideMenus               = ["file", "extras", "help"],
+                                  LockGeneratedCells      = false,
+                                  ZoomWheel               = true,
+                                  FitOnLoad               = true,
+                                  ShowLinkIcons           = true,
+                                  LiveThrottleMs          = 150,
+                                  LiveDeferWhileEditingMs = 600
                               }));
 
         Load();

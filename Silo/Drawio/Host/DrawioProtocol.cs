@@ -82,6 +82,8 @@ public static class SiloPluginEvent
     public const string Click         = "silo.click";
     public const string DoubleClick   = "silo.dblclick";
     public const string Error         = "silo.error";
+    /// <summary>The person removed, put back or moved generated cells. Fields: <c>removed</c>, <c>restored</c>, <c>moved</c> (cell ids).</summary>
+    public const string GeneratedEdited = "silo.generatedEdited";
     public const string Log           = "silo.log";
     /// <summary>The host page found no plugin in the editor frame and asks for it (answered with <c>siloBootstrap</c>).</summary>
     public const string NeedPlugin    = "silo.needPlugin";

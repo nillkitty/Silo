@@ -282,6 +282,27 @@ public static class DiagramBindings
         return changed;
     }
 
+    /// <summary>
+    ///     Turns a live diagram into a plain one: every binding is evaluated into its cell (<see cref="Apply" />), then the
+    ///     <c>silo-*</c> binding attributes and the generated mark are dropped and, with <paramref name="unlock" />, the lock styles
+    ///     too, so the cells become ordinary cells of the person's own (e.g. to keep a snapshot as a canvas diagram).
+    /// </summary>
+    public static void Freeze(DrawioDocument doc, bool unlock = true)
+    {
+        Apply(doc);
+
+        foreach (var cell in doc.Cells.ToList())
+        {
+            foreach (var a in cell.Attributes()
+                                  .Where(a => a.Name.LocalName.StartsWith("silo-", StringComparison.Ordinal) ||
+                                              a.Name.LocalName == DrawioDocument.GeneratedAttribute)
+                                  .ToList())
+                a.Remove();
+
+            if (unlock && DrawioDocument.CellOf(cell).Attribute("style") is { } style) style.Value = DrawioDocument.Unlock(style.Value);
+        }
+    }
+
     private static bool StyleEquals(string a, string b)
     {
         return a.Split(';', StringSplitOptions.RemoveEmptyEntries).OrderBy(s => s, StringComparer.Ordinal)

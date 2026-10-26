@@ -11,7 +11,7 @@ using Silo.Model;
 namespace Silo.Ui;
 
 /// <summary>
-///     The status bar at the bottom of the main window. From the left: the status line (the last result, or what is being
+///     The status bar at the bottom of the main window. From the left: the terminal (<see cref="TerminalLine" />), the status line (the last result, or what is being
 ///     loaded
 ///     right now, with a progress bar while something is), a place for the last event that fired and one for the running
 ///     tasks (both
@@ -52,24 +52,36 @@ public sealed class AppStatusBar : UserControl
 
     private OpenSilo? _watched;
 
+    /// <summary>The terminal at the left of the bar, as the Lab windows have one (see <see cref="TerminalLine" />).</summary>
+    public TerminalLine Terminal { get; } = new();
+
     private UIElement Build()
     {
         var grid = new Grid { Margin                            = new Thickness(0) };
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star), MinWidth = 160 });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1.3, GridUnitType.Star) });
         for (int i = 0; i < 5; i++) grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
-        var statusCell = new DockPanel { Margin = new Thickness(8, 2, 8, 2), LastChildFill = true };
+        Place(grid, Terminal, 0, false);
+
+        // as in a Lab, the terminal answers in the status line, and clicking the status line opens the terminal's log
+        var statusCell = new DockPanel
+                         {
+                             Margin = new Thickness(8, 2, 8, 2), LastChildFill = true, Background = Brushes.Transparent,
+                             Cursor = System.Windows.Input.Cursors.Hand
+                         };
         DockPanel.SetDock(_busy, Dock.Left);
         statusCell.Children.Add(_busy);
         statusCell.Children.Add(_status);
-        Place(grid, statusCell, 0, false);
+        statusCell.MouseLeftButtonUp += (_, _) => Terminal.ShowLog();
+        Place(grid, statusCell, 1, true);
 
         _event.MaxWidth     = 300;
         _event.TextTrimming = TextTrimming.CharacterEllipsis;
-        Place(grid, Cell(_event), 1, true);
-        Place(grid, Cell(_tasks), 2, true);
-        Place(grid, Cell(_silo),  3, true);
-        Place(grid, Cell(_count), 4, true);
+        Place(grid, Cell(_event), 2, true);
+        Place(grid, Cell(_tasks), 3, true);
+        Place(grid, Cell(_silo),  4, true);
+        Place(grid, Cell(_count), 5, true);
 
         var memory  = Cell(_memory);
         var menu    = new ContextMenu();
@@ -77,7 +89,7 @@ public sealed class AppStatusBar : UserControl
         collect.Click += (_, _) => CollectGarbage();
         menu.Items.Add(collect);
         memory.ContextMenu = menu;
-        Place(grid, memory, 5, true);
+        Place(grid, memory, 6, true);
 
         var bar = new Border { BorderThickness = new Thickness(0, 1, 0, 0), Child = grid, MinHeight = 22 };
         bar.SetResourceReference(Border.BackgroundProperty,  "Theme.BackgroundAlt");

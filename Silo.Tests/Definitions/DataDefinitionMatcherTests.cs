@@ -1,5 +1,7 @@
 using System.IO;
 using System.Text;
+using Silo.DataDefs;
+using Silo.Parsing;
 using Silo.Providers.Data;
 
 namespace Silo.Tests.Definitions;

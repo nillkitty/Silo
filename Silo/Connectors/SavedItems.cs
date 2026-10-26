@@ -42,8 +42,12 @@ public sealed class SavedItem : INodeDetails, IRealmed
     /// <summary>Only the permanent tier is listed, which is kept in the Silo's own (global) database.</summary>
     public Realm Realm => Realm.Global;
 
-    public SavedItem(StoredRecord record, Type? clrType, Uri uri)
+    /// <summary>Where the value is kept (to edit it in the text editor); null when that is not known.</summary>
+    public IStoredStore? Store { get; }
+
+    public SavedItem(StoredRecord record, Type? clrType, Uri uri, IStoredStore? store = null)
     {
+        Store     = store;
         Record    = record;
         ClrType   = clrType;
         Shape     = SavedItems.ShapeOf(clrType);
@@ -111,7 +115,7 @@ public static class SavedItems
 
                 var type = ResolveType(record.TypeName);
                 var uri  = (UriConstants.LocalSiloUri ?? new Uri("silo:///active/")).Append("saved", scope.ToString(), record.Key);
-                items.Add(new SavedItem(record, type, uri));
+                items.Add(new SavedItem(record, type, uri, store));
             }
         }
 

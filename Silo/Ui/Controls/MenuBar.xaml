@@ -57,6 +57,16 @@
         <MenuItem Header="_Open Silo" InputGestureText="Ctrl+O" Command="{Binding OpenSiloCommand}" />
         <MenuItem Header="Open from _URL..." InputGestureText="Ctrl+Shift+O" Command="{Binding OpenSiloFromUrlCommand}" />
         <Separator />
+        <!-- The text editor (TextEditing/TextEditors.cs): a new document (each item's Tag names its language), or a file. -->
+        <MenuItem Header="New _Text Document">
+            <MenuItem Header="_Plain Text" Tag="PlainText" Click="NewTextDocument_Click" />
+            <MenuItem Header="_JSON" Tag="Json" Click="NewTextDocument_Click" />
+            <MenuItem Header="_XML" Tag="Xml" Click="NewTextDocument_Click" />
+            <MenuItem Header="_YAML" Tag="Yaml" Click="NewTextDocument_Click" />
+        </MenuItem>
+        <MenuItem Header="Open Te_xt File..." Click="OpenTextFile_Click"
+                  ToolTip="Open a file in the text editor (JSON, XML and YAML are coloured, checked and can be formatted)" />
+        <Separator />
         <!-- These act on the active Silo: each item re-points its own DataContext from App (this menu's) to App.ActiveSilo. -->
         <MenuItem Header="_Save Silo" InputGestureText="Ctrl+S"
                   DataContext="{Binding ActiveSilo}"
@@ -185,6 +195,8 @@
         <MenuItem x:Name="ViewExplorer" Header="_Explorer" IsCheckable="True" Click="ViewPane_Click" />
         <MenuItem x:Name="ViewProperties" Header="_Properties" IsCheckable="True" Click="ViewPane_Click" />
         <MenuItem x:Name="ViewToolbox" Header="_Toolbox" IsCheckable="True" Click="ViewPane_Click" />
+        <MenuItem x:Name="ViewProblems" Header="Pro_blems" IsCheckable="True" Click="ViewPane_Click"
+                  ToolTip="What is wrong in the open text documents (JSON, XML and YAML that cannot be read, keys used twice...)" />
         <MenuItem x:Name="ViewSelectedItem" Header="Selected _Item" IsCheckable="True" Click="ViewPane_Click"
                   ToolTip="The view of the item selected in the Explorer (the italic preview tab; picking something in the navigation flyout replaces it)" />
         <Separator />
@@ -198,6 +210,12 @@
         <Separator />
         <MenuItem Header="Reset _Window Layout" Click="ResetLayout_Click"
                   ToolTip="Put the panes back where a new window has them and forget the remembered window sizes" />
+        <Separator />
+        <!-- the terminal in the status bar, as the Lab windows have it (Ui/Terminal/TerminalLine.cs, MainTerminal.cs) -->
+        <MenuItem Header="_Terminal" InputGestureText="Ctrl+`" Click="Terminal_Click"
+                  ToolTip="Put the cursor in the terminal in the status bar (help lists its commands)" />
+        <MenuItem Header="Terminal _Log" Click="TerminalLog_Click"
+                  ToolTip="What was typed in the terminal and what it answered" />
         <!-- Tables popped out into their own windows are listed here (filled in ViewMenu_SubmenuOpened). -->
         <Separator x:Name="ViewWindowsSeparator" Visibility="Collapsed" />
     </MenuItem>

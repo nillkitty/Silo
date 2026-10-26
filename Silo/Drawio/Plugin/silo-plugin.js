@@ -30,6 +30,7 @@
  *   mxStencilRegistry.addStencil(name, new mxStencil)  custom shapes
  *   mxCellRenderer.defaultShapes[name].prototype.customProperties   typed Format-panel properties
  *   StyleFormatPanel.prototype.init (wrapped)          the Silo Properties section above draw.io's Property grid
+ *   ui.formatContainer / ui.formatWidth / ui.refresh   the drag handle that resizes the Format panel
  */
 (function () {
     'use strict';
@@ -1302,8 +1303,303 @@
             });
 
             return { changed: changed };
+        },
+
+        /**
+         * Adds, updates and removes cells IN PLACE, for content sources that grow while they are shown
+         * (DrawioView.PluginApplyEditsAsync): { remove: [id], cells: [{ id, edge?, label?, tooltip?, link?, style?,
+         * styleEntries?: { key: value|null }, x?, y?, width?, height?, source?, target?, parent?, labelAt?, attributes?: { name: value|null } }] }.
+         * The entries of cells run IN ORDER; an entry { id, remove: true } removes that cell there (the older remove array runs
+         * first, before every entry). An entry with add: true creates the cell when it does not exist yet, with an object value
+         * (so it can carry attributes); an entry without it only changes an existing cell (style replaces the whole style,
+         * styleEntries change single entries) and is skipped when the cell is gone. Removing a vertex removes its connectors too. It is one model update, and the undo entry it makes is taken off again so the person's undo history
+         * keeps only their own edits (VERIFY on a draw.io bump: ui.editor.undoManager is an mxUndoManager with history /
+         * indexOfNextAdd). A cell being edited is left alone.
+         */
+        upsertCells: function (msg) {
+            var graph = state.graph;
+            var model = graph.getModel();
+            var parent = graph.getDefaultParent();
+            var editing = graph.isEditing() ? graph.cellEditor.getEditingCell() : null;
+            var undo = state.ui.editor ? state.ui.editor.undoManager : null;
+            var lastEdit = undo && undo.history && undo.history.length ? undo.history[undo.history.length - 1] : null;
+            var result = { added: 0, updated: 0, removed: 0, skipped: [], missingTerminals: [] };
+
+            // Through the model, not graph.removeCells: that one silently keeps cells styled deletable=0, which is every
+            // generated cell of a locked layer. The cell goes with what it holds and every connector at either.
+            function removeCell(id) {
+                var cell = model.getCell(id);
+                if (!cell || cell === editing) return;
+
+                var doomed = [cell];
+                var stack = [cell];
+                while (stack.length) {
+                    var c = stack.pop();
+                    for (var i = 0; i < model.getChildCount(c); i++) stack.push(model.getChildAt(c, i));
+                    var edges = model.getEdges(c) || [];
+                    for (var j = 0; j < edges.length; j++) if (doomed.indexOf(edges[j]) < 0) doomed.push(edges[j]);
+                }
+
+                doomed.forEach(function (d) { if (model.contains(d)) model.remove(d); });
+                result.removed++;
+            }
+
+            function newValue(label) {
+                var value = window.mxUtils.createXmlDocument().createElement('object');
+                value.setAttribute('label', label === null || label === undefined ? '' : String(label));
+                return value;
+            }
+
+            function writeValue(value, c) {
+                if (c.label !== undefined && c.label !== null) value.setAttribute('label', c.label);
+                if (c.tooltip !== undefined && c.tooltip !== null) value.setAttribute('tooltip', c.tooltip);
+                if (c.link !== undefined && c.link !== null) value.setAttribute('link', c.link);
+                if (c.attributes) {
+                    for (var name in c.attributes) {
+                        var v = c.attributes[name];
+                        if (v === null || v === undefined) value.removeAttribute(name);
+                        else value.setAttribute(name, String(v));
+                    }
+                }
+            }
+
+            function connect(cell, c) {
+                var source = c.source ? model.getCell(c.source) : null;
+                var target = c.target ? model.getCell(c.target) : null;
+                if (source && model.getTerminal(cell, true) !== source) model.setTerminal(cell, source, true);
+                if (target && model.getTerminal(cell, false) !== target) model.setTerminal(cell, target, false);
+                if ((c.source && !source) || (c.target && !target)) result.missingTerminals.push(c.id);
+            }
+
+            state.applying = true; // the change below is Silo's, not the person's (see installGeneratedWatch)
+            model.beginUpdate();
+            try {
+                (msg.remove || []).forEach(removeCell);
+
+                (msg.cells || []).forEach(function (c) {
+                    if (c.remove) {
+                        removeCell(c.id);
+                        return;
+                    }
+
+                    var cell = model.getCell(c.id);
+                    if (cell && cell === editing) return;
+
+                    if (!cell) {
+                        // an update of a cell that is gone (removed earlier) must not bring it back as a default box
+                        if (!c.add) {
+                            result.skipped.push(c.id);
+                            return;
+                        }
+
+                        var value = newValue(c.label);
+                        writeValue(value, c);
+
+                        var geometry;
+                        if (c.edge) {
+                            geometry = new window.mxGeometry();
+                            geometry.relative = true;
+                            if (typeof c.labelAt === 'number') geometry.x = c.labelAt;
+                        } else {
+                            geometry = new window.mxGeometry(c.x || 0, c.y || 0, c.width || 120, c.height || 60);
+                        }
+
+                        cell = new window.mxCell(value, geometry, c.style || '');
+                        cell.setId(String(c.id));
+                        if (c.edge) cell.setEdge(true);
+                        else cell.setVertex(true);
+
+                        model.add(c.parent ? model.getCell(c.parent) || parent : parent, cell);
+                        if (c.edge) connect(cell, c);
+                        result.added++;
+                        return;
+                    }
+
+                    var touchesValue = (c.label !== undefined && c.label !== null) || (c.tooltip !== undefined && c.tooltip !== null) ||
+                        (c.link !== undefined && c.link !== null) || !!c.attributes;
+                    if (touchesValue) {
+                        var current = cell.value;
+                        var next = current && current.cloneNode && current.setAttribute ? current.cloneNode(true) : newValue(current);
+                        // an add is the whole cell: bindings it no longer has go (an update only changes what it names)
+                        if (c.add && c.attributes && next.attributes) {
+                            for (var a = next.attributes.length - 1; a >= 0; a--) {
+                                var attr = next.attributes[a].nodeName;
+                                if (/^silo[-_]/i.test(attr) && !(attr in c.attributes)) next.removeAttribute(attr);
+                            }
+                        }
+                        writeValue(next, c);
+                        model.setValue(cell, next);
+                    }
+
+                    if (typeof c.style === 'string' && c.style !== (cell.style || '')) model.setStyle(cell, c.style);
+
+                    if (c.styleEntries) {
+                        var style = cell.style || '';
+                        for (var key in c.styleEntries) {
+                            var entry = c.styleEntries[key];
+                            style = window.mxUtils.setStyle(style, key, entry === undefined ? null : entry);
+                        }
+                        if (style !== (cell.style || '')) model.setStyle(cell, style);
+                    }
+
+                    if (model.isEdge(cell)) {
+                        connect(cell, c);
+                    } else if (c.x != null || c.y != null || c.width != null || c.height != null) {
+                        var g = cell.geometry ? cell.geometry.clone() : new window.mxGeometry();
+                        if (c.x != null) g.x = c.x;
+                        if (c.y != null) g.y = c.y;
+                        if (c.width != null) g.width = c.width;
+                        if (c.height != null) g.height = c.height;
+                        model.setGeometry(cell, g);
+                    }
+
+                    result.updated++;
+                });
+            } finally {
+                try { model.endUpdate(); } finally { state.applying = false; }
+            }
+
+            guard('upsertCells.undo', function () {
+                if (undo && undo.history && undo.history.length && undo.history[undo.history.length - 1] !== lastEdit) {
+                    undo.history.pop();
+                    undo.indexOfNextAdd = undo.history.length;
+                }
+            });
+
+            return result;
         }
     };
+
+    // ---- a Format panel that can be resized --------------------------------------------------------------------------
+    // draw.io gives the Format panel (the right-hand sidebar) one width and no splitter. A thin handle on its left edge
+    // lets the width change; it is kept in localStorage. Two layouts exist:
+    //   grid layout (current draw.io): the panel is a CSS grid column and its width comes from the stylesheet (240px);
+    //     EditorUi.refresh clears any inline width and ui.formatWidth is only an on/off flag (0 = hidden). The plugin puts the
+    //     inline width back after every refresh.
+    //   absolute layout (older draw.io): EditorUi.refresh lays the panel out from ui.formatWidth.
+    // The handle is fixed-positioned on the page, not a child of the panel: the Format panel empties its container when it
+    // refreshes. draw.io internals used (VERIFY on a version change): ui.formatContainer, ui.formatWidth, ui.refresh,
+    // ui.format.refresh, ui.editor.graph.sizeDidChange.
+
+    var FORMAT_WIDTH_KEY = 'silo.formatWidth';
+    var FORMAT_WIDTH_MIN = 200;
+
+    function installFormatResizer(ui) {
+        var container = ui.formatContainer;
+        if (!container || !container.parentNode || typeof ui.refresh !== 'function') throw new Error('ui.formatContainer or ui.refresh not found');
+
+        var defaultWidth = 240;
+        var width = 0;                     // 0 = the panel's own width
+        var isGrid = window.getComputedStyle(container.parentNode).display === 'grid';
+
+        function clamp(w) {
+            var max = Math.max(FORMAT_WIDTH_MIN, Math.floor(window.innerWidth * 0.6));
+            return Math.max(FORMAT_WIDTH_MIN, Math.min(max, Math.round(w)));
+        }
+
+        function isOn() { return ui.format != null && (typeof ui.formatWidth !== 'number' || ui.formatWidth > 0); }
+
+        // puts the wanted width on the panel (draw.io's refresh has just reset it)
+        function apply() {
+            if (!width || !isOn()) return false;
+            if (isGrid) {
+                var text = width + 'px';
+                if (container.style.width === text) return false;
+                container.style.width = text;
+                return true;
+            }
+
+            if (ui.formatWidth === width) return false;
+            ui.formatWidth = width;
+            return true;
+        }
+
+        var handle = document.createElement('div');
+        handle.className = 'silo-format-resizer';
+        handle.title = 'Drag to resize the panel; double-click for the usual width';
+        handle.style.cssText = 'position:fixed;width:7px;cursor:ew-resize;z-index:2147483000;background:transparent;touch-action:none;display:none;';
+        document.body.appendChild(handle);
+
+        function place() {
+            var box = container.getBoundingClientRect();
+            var shown = container.style.display !== 'none' && box.width > 20 && box.height > 0;
+            handle.style.display = shown ? 'block' : 'none';
+            if (!shown) return;
+            handle.style.left = (box.left - 3) + 'px';
+            handle.style.top = box.top + 'px';
+            handle.style.height = box.height + 'px';
+        }
+
+        function sizeChanged() {
+            var graph = ui.editor && ui.editor.graph;
+            if (graph && typeof graph.sizeDidChange === 'function') graph.sizeDidChange();
+        }
+
+        var refresh = ui.refresh;
+        var inRefresh = false;
+        ui.refresh = function () {
+            var result = refresh.apply(this, arguments);
+            if (!inRefresh && apply()) {
+                inRefresh = true;
+                try { if (!isGrid) refresh.apply(this, arguments); else sizeChanged(); } finally { inRefresh = false; }
+            }
+            place();
+            return result;
+        };
+
+        function setWidth(w, rebuild) {
+            width = w ? clamp(w) : 0;
+            if (!width && isGrid) container.style.width = '';
+            if (!width && !isGrid) ui.formatWidth = defaultWidth;
+            ui.refresh(true);
+            place();
+            if (rebuild && ui.format && typeof ui.format.refresh === 'function') ui.format.refresh();
+        }
+
+        if (typeof ResizeObserver === 'function') new ResizeObserver(place).observe(container);
+        window.addEventListener('resize', function () { place(); });
+
+        var dragging = false;
+        var frame = 0;
+        var wanted = 0;
+
+        function shade(on) { handle.style.background = on ? 'rgba(128,128,128,0.45)' : 'transparent'; }
+
+        handle.addEventListener('mouseenter', function () { shade(true); });
+        handle.addEventListener('mouseleave', function () { if (!dragging) shade(false); });
+        handle.addEventListener('pointerdown', function (e) {
+            if (e.button !== 0) return;
+            dragging = true;
+            shade(true);
+            try { handle.setPointerCapture(e.pointerId); } catch (x) { /* the drag still works while the pointer stays over the handle */ }
+            e.preventDefault();
+        });
+        handle.addEventListener('pointermove', function (e) {
+            if (!dragging) return;
+            // the panel runs to the right edge of the page: its width is what is between the pointer and that edge
+            wanted = container.getBoundingClientRect().right - e.clientX;
+            if (!frame) frame = requestAnimationFrame(function () { frame = 0; setWidth(wanted, false); });
+        });
+        function finish(e) {
+            if (!dragging) return;
+            dragging = false;
+            shade(false);
+            try { handle.releasePointerCapture(e.pointerId); } catch (x) { }
+            if (frame) { cancelAnimationFrame(frame); frame = 0; setWidth(wanted, false); }
+            writeStored(FORMAT_WIDTH_KEY, width);
+            setWidth(width, true);
+        }
+        handle.addEventListener('pointerup', finish);
+        handle.addEventListener('pointercancel', finish);
+        handle.addEventListener('dblclick', function () {
+            writeStored(FORMAT_WIDTH_KEY, null);
+            setWidth(0, true);
+        });
+
+        var kept = readStored(FORMAT_WIDTH_KEY, null);
+        if (typeof kept === 'number' && kept > 0) setWidth(kept, true);
+        else place();
+    }
 
     function receive(msg) {
         var answer = { requestId: msg.requestId, ok: true };
@@ -1331,6 +1627,55 @@
 
     // ---- installation --------------------------------------------------------------------------------------------
 
+    // ---- the person's edits of generated cells -------------------------------------------------------------------
+    // Generated cells (siloGenerated="1") are the person's to move and delete. Every model change that is not Silo's own
+    // (upsertCells sets state.applying; diagram loads are root changes) is checked: generated cells removed, put back (undo) or
+    // moved/resized/re-routed are reported as silo.generatedEdited { removed, restored, moved }, so the host stops putting them
+    // back or moving them. Folding a container (+/-) is not a move.
+
+    function isGenerated(cell) {
+        return !!(cell && cell.value && cell.value.getAttribute && cell.value.getAttribute('siloGenerated') === '1');
+    }
+
+    function installGeneratedWatch(graph) {
+        var model = graph.getModel();
+        model.addListener(window.mxEvent.CHANGE, function (sender, evt) {
+            if (state.applying) return;
+            guard('generatedWatch', function () {
+                var edit = evt.getProperty('edit');
+                var changes = (edit && edit.changes) || evt.getProperty('changes') || [];
+                var removed = {}, restored = {}, moved = {};
+                var folding = changes.some(function (c) { return window.mxCollapseChange && c instanceof window.mxCollapseChange; });
+                if (changes.some(function (c) { return window.mxRootChange && c instanceof window.mxRootChange; })) return;
+
+                function each(cell, fn) {
+                    var stack = [cell];
+                    while (stack.length) {
+                        var c = stack.pop();
+                        fn(c);
+                        for (var i = 0; i < model.getChildCount(c); i++) stack.push(model.getChildAt(c, i));
+                    }
+                }
+
+                changes.forEach(function (c) {
+                    if (window.mxChildChange && c instanceof window.mxChildChange) {
+                        if (c.parent == null && c.previous != null) {
+                            each(c.child, function (x) { if (isGenerated(x)) { removed[x.id] = true; delete restored[x.id]; } });
+                        } else if (c.parent != null && c.previous == null) {
+                            each(c.child, function (x) { if (isGenerated(x)) { restored[x.id] = true; delete removed[x.id]; } });
+                        }
+                    } else if (!folding && ((window.mxGeometryChange && c instanceof window.mxGeometryChange) ||
+                                            (window.mxTerminalChange && c instanceof window.mxTerminalChange))) {
+                        if (isGenerated(c.cell)) moved[c.cell.id] = true;
+                    }
+                });
+
+                var report = { removed: Object.keys(removed), restored: Object.keys(restored), moved: Object.keys(moved) };
+                if (report.removed.length || report.restored.length || report.moved.length) post('silo.generatedEdited', report);
+            });
+        });
+    }
+
     function install(ui) {
         state.ui = ui;
         state.graph = ui.editor.graph;
@@ -1340,7 +1685,9 @@
         features.contextMenu = guard('contextMenu', function () { installContextMenu(ui); return true; }) === true;
         features.selection = guard('selection', function () { installSelectionEvents(state.graph); return true; }) === true;
         features.clicks = guard('clicks', function () { installClickEvents(state.graph); return true; }) === true;
+        features.generatedWatch = guard('generatedWatch', function () { installGeneratedWatch(state.graph); return true; }) === true;
         features.propertiesPanel = guard('propertiesPanel', function () { installPropertiesPanel(ui); return true; }) === true;
+        features.formatResizer = options.resizableFormat === false ? false : guard('formatResizer', function () { installFormatResizer(ui); return true; }) === true;
 
         post('silo.ready', {
             version: window.EditorUi && window.EditorUi.VERSION ? window.EditorUi.VERSION : null,

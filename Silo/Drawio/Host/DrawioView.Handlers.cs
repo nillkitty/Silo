@@ -1,4 +1,4 @@
-using System.Text.Json.Nodes;
+﻿using System.Text.Json.Nodes;
 using Silo.Drawio.Extensions;
 using Silo.Drawio.Options;
 
@@ -33,7 +33,25 @@ public sealed partial class DrawioView
     /// </summary>
     private string CustomizeQuery(string query)
     {
+        // draw.io follows Silo's light/dark theme, unless the options chose a dark mode (or the old dark theme) themselves
+        if (FollowsSiloTheme && !query.Contains("dark=", StringComparison.Ordinal))
+            query += "&dark=" + (Silo.Theming.AppTheme.Instance.IsEffectivelyDark ? "1" : "0");
+
         return query;
+    }
+
+    /// <summary>Whether draw.io's light/dark follows Silo's: the options leave the dark mode and the theme at their defaults.</summary>
+    private bool FollowsSiloTheme => Options.DarkMode == DrawioDarkMode.Default && Options.Theme != DrawioTheme.Dark;
+
+    /// <summary>Silo's theme was switched: the editor is opened again in the matching mode (the diagram is carried across).</summary>
+    private void OnSiloThemeChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (_disposed || e.PropertyName != nameof(Silo.Theming.AppTheme.IsEffectivelyDark) || !FollowsSiloTheme) return;
+
+        Dispatcher.InvokeAsync(async () =>
+                               {
+                                   if (!_disposed && _webInitialized) await ReloadEditorAsync();
+                               });
     }
 
     /// <summary>Last chance to change the <c>load</c> action (Silo has filled in the XML, title, autosave and fit already).</summary>

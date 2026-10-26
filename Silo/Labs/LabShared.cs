@@ -258,6 +258,50 @@ public static class LabProfile
         return true;
     }
 
+    // ---- macros: terminal lines kept under a name (a command's id is a line too)
+
+    public static IReadOnlyList<string> MacroNames(string labId)
+    {
+        lock (Gate)
+            return Load().Macros.TryGetValue(labId, out var macros) ? macros.Keys.OrderBy(n => n, StringComparer.CurrentCultureIgnoreCase).ToList() : [];
+    }
+
+    public static IReadOnlyList<string>? GetMacro(string labId, string name)
+    {
+        lock (Gate)
+            return Load().Macros.TryGetValue(labId, out var macros) && macros.TryGetValue(name, out var lines) ? lines.ToList() : null;
+    }
+
+    public static void SaveMacro(string labId, string name, IEnumerable<string> lines)
+    {
+        if (string.IsNullOrWhiteSpace(name)) throw new InvalidOperationException("Give the macro a name first.");
+
+        lock (Gate)
+        {
+            var data = Load();
+            if (!data.Macros.TryGetValue(labId, out var macros)) data.Macros[labId] = macros = [];
+
+            macros[name.Trim()] = lines.Where(l => !string.IsNullOrWhiteSpace(l)).Select(l => l.Trim()).ToList();
+            Save(data);
+        }
+
+        Changed?.Invoke();
+    }
+
+    public static bool DeleteMacro(string labId, string name)
+    {
+        lock (Gate)
+        {
+            var data = Load();
+            if (!data.Macros.TryGetValue(labId, out var macros) || !macros.Remove(name)) return false;
+
+            Save(data);
+        }
+
+        Changed?.Invoke();
+        return true;
+    }
+
     // ---- the file
 
     private static Data Load()
@@ -298,6 +342,9 @@ public static class LabProfile
 
         /// <summary>Lab, then kind of settings, then preset name, then the settings.</summary>
         public Dictionary<string, Dictionary<string, Dictionary<string, Dictionary<string, string>>>> Presets { get; set; } = [];
+
+        /// <summary>Lab, then macro name, then its lines.</summary>
+        public Dictionary<string, Dictionary<string, List<string>>> Macros { get; set; } = [];
     }
 }
 

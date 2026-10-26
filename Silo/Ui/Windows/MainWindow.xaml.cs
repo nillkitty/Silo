@@ -23,6 +23,7 @@ using Silo.Providers.Data;
 using Silo.Remote;
 using Silo.Settings;
 using Silo.Tabular;
+using Silo.TextEditing;
 using Silo.Theming;
 using Silo.Toolbar;
 using Silo.Tools;
@@ -80,7 +81,19 @@ public partial class MainWindow : Window, IWindowLayout
     /// <summary>The node currently selected, in whichever of the two nav trees it is.</summary>
     private AppNavNode? _selectedNode;
 
+    /// <summary>
+    ///     True while the selection is in the Settings branch: the bottom tree may then take all the room the top tree's
+    ///     rows leave, instead of the usual 60% (see <see cref="FitNavTrees" />).
+    /// </summary>
+    private bool _settingsFocused;
+
+    /// <summary>Top-tree nodes folded away to make room for Settings; unfolded again when the selection leaves it.</summary>
+    private readonly List<AppNavNode> _foldedForSettings = [];
+
     private OpenSilo? _watched;
+
+    /// <summary>What the terminal in the status bar runs (see <see cref="Silo.Ui.MainTerminal" />).</summary>
+    private readonly Ui.MainTerminal _terminal = null!;
 
     /// <summary>The selected document tab's content, when it adds items to the Edit menu (a table does); else null.</summary>
     public IEditContributor? ActiveEditContributor => Documents.SelectedContent as IEditContributor;
@@ -248,6 +261,14 @@ public partial class MainWindow : Window, IWindowLayout
     protected override async void OnClosing(CancelEventArgs e)
     {
         base.OnClosing(e);
+
+        // text editors with unsaved files (or new documents) ask first; texts kept in a Silo are written into it as it closes
+        if (!_closeApproved && !e.Cancel && !TextEditors.ConfirmCloseAll())
+        {
+            e.Cancel = true;
+            return;
+        }
+
         if (_closeApproved || e.Cancel || OpenSilo.OpenSilos.Count == 0)
         {
             // it is going: remember where it was (also when it was maximized or minimized)
@@ -289,6 +310,9 @@ public partial class MainWindow : Window, IWindowLayout
         NavRail.Visibility        = collapsed ? Visibility.Visible : Visibility.Collapsed;
         NavRailBottom.Visibility  = collapsed ? Visibility.Visible : Visibility.Collapsed;
         NavCollapseToggle.ToolTip = collapsed ? "Expand navigation pane" : "Collapse navigation pane";
+
+        // Settings may have been picked from the rail while the trees were hidden (nothing could be measured then)
+        if (!collapsed && _settingsFocused) QueueSettingsFit();
     }
 
     /// <summary>
@@ -297,7 +321,103 @@ public partial class MainWindow : Window, IWindowLayout
     /// </summary>
     private void NavHost_SizeChanged(object sender, SizeChangedEventArgs e)
     {
-        NavTreeBottom.MaxHeight = Math.Max(120, NavHost.ActualHeight * 0.6);
+        FitNavTrees();
+    }
+
+    /// <summary>
+    ///     Sizes the bottom tree: normally at most 60% of the pane; while Settings is the focus, everything the top
+    ///     tree's rows leave over (so the unfolded Settings branch shows whole when it fits).
+    /// </summary>
+    private void FitNavTrees()
+    {
+        var usual = Math.Max(120, NavHost.ActualHeight * 0.6);
+        if (!_settingsFocused || NavTree.Visibility != Visibility.Visible)
+        {
+            NavTreeBottom.MaxHeight = usual;
+            return;
+        }
+
+        NavTreeBottom.MaxHeight = Math.Max(usual, NavAvailableHeight() - ContentHeight(NavTree));
+    }
+
+    /// <summary>The height both trees share: the pane minus its header bar.</summary>
+    private double NavAvailableHeight()
+    {
+        return Math.Max(0, NavHost.ActualHeight - NavHost.RowDefinitions[0].ActualHeight);
+    }
+
+    /// <summary>How tall a nav tree's rows are, all of them, whether or not they fit (its scroll viewer's extent).</summary>
+    private static double ContentHeight(TreeView tree)
+    {
+        if (FindDescendant<ScrollViewer>(tree) is not { } scroll) return tree.ActualHeight;
+
+        // item-based scrolling reports its extent in items, not pixels: ask the items for their size instead
+        if (scroll.CanContentScroll && FindDescendant<ItemsPresenter>(scroll) is { } items) return items.DesiredSize.Height + 4;
+
+        return scroll.ExtentHeight + 4;
+    }
+
+    private static T? FindDescendant<T>(DependencyObject parent) where T : DependencyObject
+    {
+        for (var i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
+        {
+            var child = VisualTreeHelper.GetChild(parent, i);
+            if (child is T found) return found;
+            if (FindDescendant<T>(child) is { } deeper) return deeper;
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    ///     Selecting Settings unfolds it and every group beneath it. If the whole branch does not fit below the top
+    ///     tree, the top tree's nodes (the Silos, Connections) are folded to make room; they unfold again when the
+    ///     selection moves back out of Settings (<see cref="LeaveSettings" />).
+    /// </summary>
+    private void UnfoldSettings(AppNavNode settings)
+    {
+        ExpandAll(settings);
+        QueueSettingsFit();
+    }
+
+    private static void ExpandAll(AppNavNode node)
+    {
+        if (node.Children.Count == 0) return;
+
+        node.IsExpanded = true;
+        foreach (var child in node.Children) ExpandAll(child);
+    }
+
+    /// <summary>
+    ///     Measures once the unfolded rows exist (after layout), folds the top tree if Settings still would not fit, then
+    ///     sizes the bottom tree (after the next layout, when the folded top tree has shrunk).
+    /// </summary>
+    private void QueueSettingsFit()
+    {
+        Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(() =>
+        {
+            if (!_settingsFocused || NavTree.Visibility != Visibility.Visible) return;
+
+            if (ContentHeight(NavTreeBottom) + ContentHeight(NavTree) > NavAvailableHeight())
+                foreach (var root in _topRoots.Where(r => r.IsExpanded))
+                {
+                    root.IsExpanded = false;
+                    if (!_foldedForSettings.Contains(root)) _foldedForSettings.Add(root);
+                }
+
+            Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(FitNavTrees));
+        }));
+    }
+
+    /// <summary>The selection left Settings: the bottom tree goes back to its usual share and the folded nodes unfold.</summary>
+    private void LeaveSettings()
+    {
+        // a Silo that stopped being the active one meanwhile stays folded, as SyncNav would have left it
+        foreach (var node in _foldedForSettings.Where(n => _topRoots.Contains(n)))
+            if (SiloOf(node) is not { } silo || ReferenceEquals(silo, App.ActiveSilo))
+                node.IsExpanded = true;
+        _foldedForSettings.Clear();
+        FitNavTrees();
     }
 
     // --- nav tree contents ---------------------------------------------------------------------
@@ -384,8 +504,21 @@ public partial class MainWindow : Window, IWindowLayout
             var isActive = ReferenceEquals(silo, active);
             nav.Node.IsEmphasized = isActive;
             if (isActive != nav.Node.IsExpanded && (isActive || silos.Count > 1))
-                nav.Node.IsExpanded = isActive; // the active Silo opens, the others fold away
+            {
+                if (isActive && _settingsFocused)
+                {
+                    // Settings has the room for now: the active Silo opens when the selection leaves it
+                    if (!_foldedForSettings.Contains(nav.Node)) _foldedForSettings.Add(nav.Node);
+                }
+                else
+                {
+                    nav.Node.IsExpanded = isActive; // the active Silo opens, the others fold away
+                }
+            }
         }
+
+        _foldedForSettings.RemoveAll(n => !_topRoots.Contains(n));
+        if (_settingsFocused) QueueSettingsFit();
 
         // a selection inside a Silo that has been closed no longer exists
         if (_selectedNode is { } selected && !AllRoots().Contains(RootNodeOf(selected)))
@@ -490,6 +623,16 @@ public partial class MainWindow : Window, IWindowLayout
         foreach (var candidate in AllRoots())
             candidate.IsActiveRoot = ReferenceEquals(candidate, root);
 
+        // Settings: selecting its root unfolds the whole branch (and folds the top tree if need be); moving out of the
+        // branch gives the room back
+        var inSettings = root is not null && _bottomRoots.Contains(root) && root.Item.Text == AppNavTree.SettingsText;
+        var wasInSettings = _settingsFocused;
+        _settingsFocused = inSettings;
+        if (inSettings && ReferenceEquals(node, root))
+            UnfoldSettings(root);
+        else if (wasInSettings && !inSettings)
+            LeaveSettings();
+
         // working inside another Silo's branch makes that Silo the active one
         if (SiloOf(root) is { } silo && !ReferenceEquals(App.ActiveSilo, silo))
             App.ActiveSilo = silo;
@@ -503,7 +646,7 @@ public partial class MainWindow : Window, IWindowLayout
     /// <summary>The document tab key of a navigation view: views are identified by name, whichever node reached them.</summary>
     private static string ViewKey(AppView view)
     {
-        return "view:" + view.Name;
+        return view.Key ?? "view:" + view.Name;
     }
 
     private void OpenView(AppView view, bool pin)
@@ -529,6 +672,68 @@ public partial class MainWindow : Window, IWindowLayout
             e.Handled = true;
             OpenView(view, true);
         }
+    }
+
+    // --- the terminal (status bar) ----------------------------------------------------------------
+
+    /// <summary>The menu bar at the top (what the terminal's <c>menu</c> lists and clicks).</summary>
+    internal Silo.Ui.MenuBar? MainMenu => FindDescendant<Silo.Ui.MenuBar>(this);
+
+    /// <summary>View > Terminal Log, the terminal's <c>log</c>, a click on the status line.</summary>
+    public void ShowTerminalLog()
+    {
+        StatusStrip.Terminal.ShowLog();
+    }
+
+    public void ClearTerminalLog()
+    {
+        StatusStrip.Terminal.ClearLog();
+    }
+
+    /// <summary>Every node of the navigation with its path as shown ("Settings / Silo Settings / Snapshots"), for the terminal's <c>nav</c>.</summary>
+    internal IEnumerable<string> NavPaths()
+    {
+        return NavWalk().Select(e => e.Path);
+    }
+
+    /// <summary>
+    ///     Selects the navigation node at <paramref name="path" /> (segments split by <c>/</c>, <c>&gt;</c> or <c>" / "</c>, compared
+    ///     without case, spaces or punctuation; the end of a path is enough when only one node has it), unfolding its parents.
+    ///     Returns the node's full path, or null when there is no such node.
+    /// </summary>
+    internal string? Navigate(string path)
+    {
+        static string Squeeze(string text) => new string(text.Where(char.IsLetterOrDigit).ToArray()).ToLowerInvariant();
+
+        var wanted = path.Replace('>', '/').Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Select(Squeeze).ToArray();
+        if (wanted.Length == 0) return null;
+
+        var all   = NavWalk().ToList();
+        var exact = all.Where(e => e.Segments.Select(Squeeze).SequenceEqual(wanted)).ToList();
+        var hits  = exact.Count > 0 ? exact : all.Where(e => e.Segments.Length >= wanted.Length && e.Segments[^wanted.Length..].Select(Squeeze).SequenceEqual(wanted)).ToList();
+        if (hits.Count == 0) return null;
+        if (hits.Count > 1) throw new InvalidOperationException($"'{path}' could be: {string.Join("; ", hits.Select(h => h.Path))}");
+
+        var (found, _, _, ancestors) = hits[0];
+        foreach (var ancestor in ancestors) ancestor.IsExpanded = true;
+        Select(found);
+        return hits[0].Path;
+    }
+
+    private IEnumerable<(AppNavNode Node, string Path, string[] Segments, AppNavNode[] Ancestors)> NavWalk()
+    {
+        IEnumerable<(AppNavNode, string, string[], AppNavNode[])> Walk(AppNavNode node, string[] above, AppNavNode[] ancestors)
+        {
+            if (node.IsHidden) yield break;
+
+            string[] segments = [.. above, node.Header];
+            yield return (node, string.Join(" / ", segments), segments, ancestors);
+            foreach (var child in node.Children)
+            foreach (var inner in Walk(child, segments, [.. ancestors, node]))
+                yield return inner;
+        }
+
+        return AllRoots().SelectMany(root => Walk(root, [], []));
     }
 
     // --- the Explorer tree and the Properties pane -----------------------------------------------
@@ -591,6 +796,7 @@ public partial class MainWindow : Window, IWindowLayout
     {
         string prefix = TableEditors.DocPrefix(silo);
         Documents.CloseWhere(key => key.StartsWith(prefix, StringComparison.Ordinal));
+        TextEditors.CloseFor(silo);
     }
 
     /// <summary>The view of <paramref name="node" />, else of the first node under it (depth first) that has one.</summary>
@@ -652,12 +858,12 @@ public partial class MainWindow : Window, IWindowLayout
     ///     Opens a tool's pane: the first time it is added to the bottom of the dock area (it can be dragged out into a
     ///     floating window from there, or onto any side), afterwards it returns to wherever it was.
     /// </summary>
-    public void ShowToolPane(LayoutAnchorable pane)
+    public void ShowToolPane(LayoutAnchorable pane, double height = 360)
     {
         if (pane.Root is null)
         {
             pane.AddToLayout(DockHost, AnchorableShowStrategy.Bottom);
-            if (pane.Parent is LayoutAnchorablePane group) group.DockHeight = new GridLength(360);
+            if (pane.Parent is LayoutAnchorablePane group) group.DockHeight = new GridLength(height);
         }
         else if (!pane.IsVisible)
         {
@@ -807,6 +1013,11 @@ public partial class MainWindow : Window, IWindowLayout
 
         // Ctrl+N / Ctrl+O / Ctrl+S ... -- the keys shown beside the menu items (see Commanding/Shortcuts.cs).
         Shortcuts.Install(this);
+
+        // the terminal in the status bar, as in the Lab windows; Ctrl+` puts the cursor in it
+        _terminal                      = new Ui.MainTerminal(this);
+        StatusStrip.Terminal.Terminal  = _terminal;
+        InputBindings.Add(new KeyBinding(new DelegateCommand(_ => StatusStrip.Terminal.FocusInput()), Key.OemTilde, ModifierKeys.Control));
         ClipboardCommands.Install(this); // Edit > Cut / Copy / Paste, Ctrl+X / C / V, Escape ends a cut
 
         // Drag a .silo file (or a link to one) onto the window to open it: a Solo Silo or a URL then gets a process of its own.

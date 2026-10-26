@@ -29,6 +29,7 @@ internal sealed class SyntaxView : Grid
     private readonly ListBox          _results;
     private readonly TextBlock        _score;
     private bool                      _loading;
+    private bool                      _following;
 
     public SyntaxView(SyntaxLabSession session)
     {
@@ -61,6 +62,11 @@ internal sealed class SyntaxView : Grid
 
         _pattern = new TextBox { FontFamily = LabUi.Mono, VerticalContentAlignment = VerticalAlignment.Center, ToolTip = "The regular expression (.NET syntax); all of the string has to match" };
         _pattern.TextChanged += (_, _) => Edit(d => d.Pattern = _pattern.Text);
+        _pattern.SelectionChanged += (_, _) =>
+                                     {
+                                         // the caret is somewhere in a group: that group is the active part
+                                         if (!_loading && !_following && _pattern.IsKeyboardFocusWithin) _session.NotePatternCaret(_pattern.CaretIndex);
+                                     };
         var toRegex = LabUi.Button("Regex Lab", () => RunAction("to-regex"), "Edit the pattern in the Regex Lab with the strings below as its text");
         DockPanel.SetDock(toRegex, System.Windows.Controls.Dock.Right);
         _patternPanel = new DockPanel();
@@ -100,6 +106,9 @@ internal sealed class SyntaxView : Grid
         _valid   = LabUi.Memo(string.Empty, v => _session.EditBook(b => b.Valid = v));
         _invalid = LabUi.Memo(string.Empty, v => _session.EditBook(b => b.Invalid = v));
         _try     = LabUi.Memo(string.Empty, v => _session.EditBook(b => b.Try = v));
+        _valid.GotKeyboardFocus   += (_, _) => _session.NoteSet("valid");
+        _invalid.GotKeyboardFocus += (_, _) => _session.NoteSet("invalid");
+        _try.GotKeyboardFocus     += (_, _) => _session.NoteSet("try");
         _escapes = LabUi.Check("Read \\n \\t \\\\ in a string", true, on =>
                                                                       {
                                                                           if (!_loading) _session.EditBookNow(b => b.Escapes = on);
@@ -131,6 +140,10 @@ internal sealed class SyntaxView : Grid
         _score   = LabUi.Label(string.Empty, muted: true);
         _score.Margin = new Thickness(8, 2, 8, 2);
         _results = LabUi.List();
+        _results.SelectionChanged += (_, _) =>
+                                     {
+                                         if (!_following && _results.SelectedIndex >= 0) _session.NoteResult(_results.SelectedIndex);
+                                     };
         var resultsBox = LabUi.Layout(_score, _results);
         SetRow(resultsBox, 4);
         Children.Add(resultsBox);
@@ -139,7 +152,32 @@ internal sealed class SyntaxView : Grid
 
         _session.Changed += (_, _) => OnChanged();
         _session.Loaded  += (_, _) => Load();
+        _session.ProductionFocusRequested += index => Following(() =>
+                                                               {
+                                                                   if (index >= 0 && index < _results.Items.Count) _results.SelectedIndex = index;
+                                                                   _results.ScrollIntoView(_results.SelectedItem);
+                                                               });
+        _session.PatternRangeRequested += (start, length) => Following(() =>
+                                                                      {
+                                                                          if (_session.Draft.Kind != SyntaxKind.Pattern || start < 0 || start + length > _pattern.Text.Length) return;
+                                                                          _pattern.Select(start, length);
+                                                                      });
+        _session.SetFocusRequested += set => Following(() => (set switch { "valid" => _valid, "invalid" => _invalid, _ => _try }).Focus());
         Load();
+    }
+
+    /// <summary>Does something to the boxes because the active part changed (and so does not say, in turn, that the box changed it).</summary>
+    private void Following(Action action)
+    {
+        _following = true;
+        try
+        {
+            action();
+        }
+        finally
+        {
+            _following = false;
+        }
     }
 
     private static void AddSample(Grid grid, int column, string title, Brush color, TextBox memo)
@@ -261,9 +299,14 @@ internal sealed class SyntaxView : Grid
 
     private void DrawResults()
     {
-        _results.Items.Clear();
-        foreach (var r in _session.Results.Take(500)) _results.Items.Add(Row(r));
-        if (_session.Results.Count > 500) _results.Items.Add(new ListBoxItem { Content = LabUi.Label($"… and {_session.Results.Count - 500:N0} more", muted: true), IsEnabled = false });
+        int selected = _results.SelectedIndex;
+        Following(() =>
+                  {
+                      _results.Items.Clear();
+                      foreach (var r in _session.Results.Take(500)) _results.Items.Add(Row(r));
+                      if (_session.Results.Count > 500) _results.Items.Add(new ListBoxItem { Content = LabUi.Label($"… and {_session.Results.Count - 500:N0} more", muted: true), IsEnabled = false });
+                      if (selected >= 0 && selected < _results.Items.Count) _results.SelectedIndex = selected;
+                  });
     }
 
     private static UIElement Row(TrialResult r)

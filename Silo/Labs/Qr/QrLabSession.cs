@@ -12,7 +12,7 @@ namespace Silo.Labs.Qr;
 public sealed record QrReading(string Source, QrDecodeResult Result, string? Note);
 
 /// <summary>One QR Code Lab window: the code as it is set up, what making it came to, and what reading it (or a spoiled copy of it) came to.</summary>
-public sealed class QrLabSession : LabSession<QrDoc>, ILabLive
+public sealed partial class QrLabSession : LabSession<QrDoc>, ILabLive
 {
     private static readonly LabSaved<QrDoc> Saved = new("qr");
     private static readonly Random          Chance = new();
@@ -28,7 +28,7 @@ public sealed class QrLabSession : LabSession<QrDoc>, ILabLive
     public QrLabSession(QrLab lab) : base(lab)
     {
         _rebuild    = new Debouncer(TimeSpan.FromMilliseconds(150), Rebuild);
-        _inspectors = [new QrOptionsInspector(this), new QrAnatomyInspector(this), new QrReadInspector(this), new QrTextInspector(this)];
+        _inspectors = [new QrOptionsInspector(this).OwnedBy(LabOwner.OfAspect("options")), new QrAnatomyInspector(this).OwnedBy(LabOwner.OfAspect("anatomy")), new QrReadInspector(this).OwnedBy(LabOwner.OfAspect("read")), new QrTextInspector(this).OwnedBy(LabOwner.OfAspect("text"))];
     }
 
     internal static LabSaved<QrDoc> Kept => Saved;
@@ -58,8 +58,8 @@ public sealed class QrLabSession : LabSession<QrDoc>, ILabLive
 
     public override string Title => $"{LabOf.Name} - {(string.IsNullOrWhiteSpace(_doc.Name) ? Shorten(_build.Payload) : _doc.Name)}{(_dirty ? " *" : string.Empty)}";
 
-    /// <summary>2: the Library, Recent, Presets and Problems panes are the window's own now; windows saved with the old arrangement start afresh.</summary>
-    public override int LayoutVersion => 2;
+    /// <summary>3: the panes belong to aspects of the code now (the model); windows saved with the old arrangement start afresh.</summary>
+    public override int LayoutVersion => 3;
 
     public override IReadOnlyList<LabInspector> Inspectors => _inspectors;
 
@@ -399,15 +399,8 @@ public sealed class QrLabSession : LabSession<QrDoc>, ILabLive
         var kept = Saved.Names().Where(Wanted)
                         .Select(name => new LabLibraryEntry(name, "QR code", null, "QrCode", () => OpenSaved(name), name == _doc.Name, ToolTip: "Double-click to open", Delete: () => Saved.Delete(name)))
                         .ToList();
-        var templates = Examples.Where(e => Wanted(e.Title))
-                                .Select(e => new LabLibraryEntry(e.Title, "QR code", LabUi.Shorten(e.Payload, 30), "QrCode",
-                                                                 () =>
-                                                                 {
-                                                                     Replace(QrDoc.FromPayload(e.Payload, string.Empty), true);
-                                                                     Say($"Started with an example: {e.Title.ToLowerInvariant()}");
-                                                                 }, IsTemplate: true, ToolTip: LabUi.Shorten(e.Payload, 120)))
-                                .ToList();
-        return [new("In the Silo", "Database5", kept, Note: Saved.IsAvailable ? null : "No Silo is open"), new("Templates: examples (double-click to start with one)", null, templates, true)];
+        // the examples are the subject type's prefabs and templates: the Library shows them
+        return [new("In the Silo", "Database5", kept, Note: Saved.IsAvailable ? null : "No Silo is open")];
     }
 
     private void SaveCode()

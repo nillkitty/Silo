@@ -17,7 +17,7 @@ namespace Silo.Labs;
 ///     it sends, what it is given, what it may ask for), and the inspectors that read the page back through the DevTools
 ///     protocol.
 /// </summary>
-public sealed class WebLabSession : LabSession<Uri>
+public sealed partial class WebLabSession : LabSession<Uri>
 {
     /// <summary>Its own browser profile, apart from the Draw.io editor's: what a page stores here stays here.</summary>
     private static readonly string UserDataFolder =
@@ -118,7 +118,7 @@ public sealed class WebLabSession : LabSession<Uri>
     public override string Title => string.IsNullOrWhiteSpace(_pageTitle) ? base.Title : $"{_pageTitle} - {Lab.Name}";
 
     /// <summary>The panes and menus moved around in this version: the saved layouts start over once.</summary>
-    public override int LayoutVersion => 2;
+    public override int LayoutVersion => 3;
 
     /// <summary>The Lab's parameters, the Console's filter and the Network's filter can all be kept as presets.</summary>
     public override IReadOnlyList<LabPresetKind> PresetKinds => [.. ParameterPresets(), _console.Preset, _network.Preset];
@@ -526,6 +526,7 @@ public sealed class WebLabSession : LabSession<Uri>
         Say(e.IsSuccess ? "Loaded" : "Failed: " + e.WebErrorStatus);
         ReportNavigation(e);
         foreach (var inspector in _webInspectors) inspector.OnNavigated(CurrentValue);
+        _ = RunAsync(ReadFramesAfterLoadAsync);
         RaiseActionsChanged();
     }
 
@@ -979,10 +980,17 @@ public sealed class WebLabSession : LabSession<Uri>
     internal WebLabSession(WebLab lab) : base(lab)
     {
         var dom = new DomInspector(this);
+        _dom           = dom;
         _console       = new ConsoleInspector(this);
         _network       = new NetworkInspector(this);
-        _webInspectors = [dom, _console, _network, new StyleInspector(this, dom)];
+        var style      = new StyleInspector(this, dom);
+        _webInspectors = [dom, _console, _network, style];
+        dom.OwnedBy(LabOwner.OfAspect("dom"));
+        _console.OwnedBy(LabOwner.OfAspect("console"));
+        _network.OwnedBy(LabOwner.OfAspect("network"));
+        style.OwnedBy(LabOwner.OfAspect("node"));
         _inspectors    = _webInspectors.Cast<LabInspector>().ToList();
+        dom.SelectionChanged += (_, _) => OnDomSelectionChanged();
 
         ParseParameters();
     }

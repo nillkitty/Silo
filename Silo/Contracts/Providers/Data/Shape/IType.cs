@@ -68,7 +68,16 @@ public enum DataKind
 
 public enum DataShape
 {
+    /// <summary>
+    ///     Unknown data shape
+    /// </summary>
     Unknown,
+
+    /// <summary>
+    ///     The shape of this type is an empty set with no dimension. (NULL)
+    /// </summary>
+    Empty,
+
 
     /// <summary>
     ///     The shape this type represents is dynamic and changes from value to value
@@ -108,5 +117,10 @@ public enum DataShape
     /// <summary>
     ///     The type represents an subset of objects which contain other objects (i.e. are enumerable)
     /// </summary>
-    Container
+    Container,
+
+    /// <summary>
+    ///     The type represents a node in a tree.
+    /// </summary>
+    Tree
 }

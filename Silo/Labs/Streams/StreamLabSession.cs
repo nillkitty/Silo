@@ -42,7 +42,7 @@ public sealed class StreamCut
 }
 
 /// <summary>One Stream Lab window: the reel, the chain of adapters on it, the strips of what was read and written, the marks and the cuts.</summary>
-public sealed class StreamLabSession : LabSession<StreamSetup>, ILabLive
+public sealed partial class StreamLabSession : LabSession<StreamSetup>, ILabLive
 {
     private static readonly LabSaved<StreamSetup> Saved = new("stream");
 
@@ -71,11 +71,11 @@ public sealed class StreamLabSession : LabSession<StreamSetup>, ILabLive
         _wire = new ByteStrip(lab.BufferLimit);
         _inspectors =
         [
-            new StreamPropertiesInspector(this),
-            new StreamAdaptersInspector(this),
-            new StreamTextInspector(this),
-            new StreamCutsInspector(this),
-            new StreamLogInspector(this)
+            new StreamPropertiesInspector(this).OwnedBy(LabOwner.OfAspect("properties")),
+            new StreamAdaptersInspector(this).OwnedBy(LabOwner.OfAspect("adapters")),
+            new StreamTextInspector(this).OwnedBy(LabOwner.OfAspect("text")),
+            new StreamCutsInspector(this).OwnedBy(LabOwner.OfAspect("cuts")),
+            new StreamLogInspector(this).OwnedBy(LabOwner.OfAspect("log"))
         ];
     }
 
@@ -157,8 +157,8 @@ public sealed class StreamLabSession : LabSession<StreamSetup>, ILabLive
 
     public override string Title => $"{LabOf.Name} - {(string.IsNullOrWhiteSpace(_setup.Name) ? _setup.Source.Label : _setup.Name)}{(_dirty ? " *" : string.Empty)}";
 
-    /// <summary>2: the Library, Recent, Presets and Problems panes are the window's own now; windows saved with the old arrangement start afresh.</summary>
-    public override int LayoutVersion => 2;
+    /// <summary>3: the panes belong to aspects of the reel now (the model); windows saved with the old arrangement start afresh.</summary>
+    public override int LayoutVersion => 3;
 
     public override IReadOnlyList<LabInspector> Inspectors => _inspectors;
 
@@ -1330,10 +1330,8 @@ public sealed class StreamLabSession : LabSession<StreamSetup>, ILabLive
                         .Select(name => new LabLibraryEntry(name, "Reel", LabUi.Shorten(Saved.Load(name)?.Source.ToString() ?? string.Empty, 40), "Reel",
                                                             () => { if (Saved.Load(name) is { } setup) OpenLibraryEntry(setup, name); }, name == _setup.Name, ToolTip: "Double-click to open", Delete: () => Saved.Delete(name)))
                         .ToList();
-        var templates = StreamLibrary.Entries.Where(e => Wanted(e.Name) || Wanted(e.Description))
-                                     .Select(e => new LabLibraryEntry(e.Name, "Reel", LabUi.Shorten(e.Description, 50), "Reel", () => OpenLibraryEntry(e.Make(), null), IsTemplate: true, ToolTip: e.Description))
-                                     .ToList();
-        return [new("In the Silo", "Database5", kept, Note: Saved.IsAvailable ? null : "No Silo is open"), new("Templates", null, templates, true)];
+        // the reels the Lab comes with are the subject type's prefabs and templates: the Library shows them
+        return [new("In the Silo", "Database5", kept, Note: Saved.IsAvailable ? null : "No Silo is open")];
     }
 
     protected override IEnumerable<LabProblem> Validate()

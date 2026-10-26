@@ -127,7 +127,7 @@ public class LocalSilo : VirtualRoot<OpenSilo>, INodeProvider<OpenSilo>
             yield return Folder("Security", Under("security"), "Shield", () =>
                                                                          [
                                                                              Folder("Certificates", Under("security", "certificates"),
-                                                                                    "Lock"),
+                                                                                    "Lock", MakeCertificates),
                                                                              Folder("Secrets", Under("security", "secrets"), "Key",
                                                                                     MakeSecrets)
                                                                          ]);
@@ -137,10 +137,10 @@ public class LocalSilo : VirtualRoot<OpenSilo>, INodeProvider<OpenSilo>
                                                                          Folder("Preferences", Under("prefs", "preferences"),
                                                                                 "Settings",    MakePreferences),
                                                                          Folder("Window Prefs", Under("prefs", "window-prefs"),
-                                                                                "Design")
+                                                                                "Design", MakeWindowPrefs)
                                                                      ]);
 
-            yield return Folder("Audit Log", Under("audit-log"), "History");
+            yield return Folder("Audit Log", Under("audit-log"), "History", MakeAuditLog);
         }
     }
 
@@ -201,22 +201,44 @@ public class LocalSilo : VirtualRoot<OpenSilo>, INodeProvider<OpenSilo>
     /// <summary>The Silo's secrets by name, kind and provider. What a secret holds is never shown.</summary>
     private IEnumerable<SiloNode> MakeSecrets()
     {
-        if (Data?.Data is not ISecretStore store) return [];
+        const string none = "(no secrets stored yet: credentials and keys saved by connections will be listed here, by name only)";
+        if (Data?.Data is not ISecretStore store) return [Nothing(none, Under("security", "secrets"))];
 
-        return store.GetSecrets()
-                    .OrderBy(s => s.Key, StringComparer.OrdinalIgnoreCase)
-                    .Select(s => new SiloNode(new SecretDetails(s), s.Key, Under("security", "secrets", s.Id.ToString()), Icon("Key"),
-                                              null));
+        var items = store.GetSecrets()
+                         .OrderBy(s => s.Key, StringComparer.OrdinalIgnoreCase)
+                         .Select(s => new SiloNode(new SecretDetails(s), s.Key, Under("security", "secrets", s.Id.ToString()), Icon("Key"),
+                                                   null))
+                         .ToList();
+        return items.Count > 0 ? items : [Nothing(none, Under("security", "secrets"))];
     }
 
     private IEnumerable<SiloNode> MakePreferences()
     {
-        if (Data?.Data is not IPreferenceStore store) return [];
+        if (Data?.Data is not IPreferenceStore store) return [Nothing("(no preferences are stored yet)", Under("prefs", "preferences"))];
 
-        return store.GetPreferences()
-                    .OrderBy(p => p.Key, StringComparer.OrdinalIgnoreCase)
-                    .Select(p => new SiloNode(new PreferenceDetails(p), p.Key, Under("prefs", "preferences", p.Key), Icon("Settings"),
-                                              null));
+        var items = store.GetPreferences()
+                         .OrderBy(p => p.Key, StringComparer.OrdinalIgnoreCase)
+                         .Select(p => new SiloNode(new PreferenceDetails(p, store), p.Key, Under("prefs", "preferences", p.Key),
+                                                   Icon("Settings"), null))
+                         .ToList();
+        return items.Count > 0 ? items : [Nothing("(no preferences are stored yet)", Under("prefs", "preferences"))];
+    }
+
+    // These folders have nothing to list yet: each says so, so it opens like any other folder instead of looking broken.
+
+    private static IEnumerable<SiloNode> MakeCertificates()
+    {
+        return [Nothing("(no certificates yet: the certificates Silo trusts or signs with will be listed here)", Under("security", "certificates"))];
+    }
+
+    private static IEnumerable<SiloNode> MakeWindowPrefs()
+    {
+        return [Nothing("(no window preferences yet)", Under("prefs", "window-prefs"))];
+    }
+
+    private static IEnumerable<SiloNode> MakeAuditLog()
+    {
+        return [Nothing("(the audit log is empty: changes to the Silo will be listed here)", Under("audit-log"))];
     }
 
     // ----- keeping up with changes ----------------------------------------------------------------------------------------
@@ -343,8 +365,11 @@ public sealed class SecretDetails(SecretRecord secret) : INodeDetails, IRealmed
 }
 
 /// <summary>A saved preference as the Explorer shows it: its key, and how much is stored.</summary>
-public sealed class PreferenceDetails(PreferenceRecord preference) : INodeDetails, IRealmed
+public sealed class PreferenceDetails(PreferenceRecord preference, IPreferenceStore? store = null) : INodeDetails, IRealmed
 {
+    /// <summary>Where the preference is kept (to edit it in the text editor); null when that is not known.</summary>
+    public IPreferenceStore? Store => store;
+
     public IconRef? Icon   => IconRef.FromKey("Settings");
     public string Name     => preference.Key;
     public string TypeName => "Preference";

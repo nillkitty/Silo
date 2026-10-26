@@ -7,7 +7,7 @@ using SyntaxKind = Silo.DbModel.Meta.SyntaxKind;
 namespace Silo.Labs.Syntaxes;
 
 /// <summary>One Syntax Lab window: the syntax being built, the strings it is tried on, what each came to, and the actions on it.</summary>
-public sealed class SyntaxLabSession : LabSession<SyntaxRecord>, ILabLive
+public sealed partial class SyntaxLabSession : LabSession<SyntaxRecord>, ILabLive
 {
     private readonly Debouncer          _rebuild;
     private readonly List<LabInspector> _inspectors;
@@ -22,7 +22,7 @@ public sealed class SyntaxLabSession : LabSession<SyntaxRecord>, ILabLive
     public SyntaxLabSession(SyntaxLab lab) : base(lab)
     {
         _rebuild = new Debouncer(TimeSpan.FromMilliseconds(200), Rebuild);
-        _inspectors = [new SyntaxDetailsInspector(this)];
+        _inspectors = [new SyntaxDetailsInspector(this).OwnedBy(LabOwner.OfAspect("details"))];
     }
 
     /// <summary>The syntax as it is now.</summary>
@@ -56,8 +56,8 @@ public sealed class SyntaxLabSession : LabSession<SyntaxRecord>, ILabLive
 
     private SyntaxLab Lab_ => (SyntaxLab)LabOf;
 
-    /// <summary>2: the Library, Recent, Presets and Problems panes are the window's own now; windows saved with the old arrangement start afresh.</summary>
-    public override int LayoutVersion => 2;
+    /// <summary>3: the panes belong to aspects of the Lab's model now; windows saved with the old arrangement start afresh.</summary>
+    public override int LayoutVersion => 3;
 
     public override IReadOnlyList<LabInspector> Inspectors => _inspectors;
 
@@ -164,6 +164,7 @@ public sealed class SyntaxLabSession : LabSession<SyntaxRecord>, ILabLive
         _results = _build.Syntax is { } syntax ? SyntaxTrial.RunAll(syntax, _book) : [];
         Status   = Summary();
         Changed?.Invoke(this, EventArgs.Empty);
+        RaisePartsChanged();
     }
 
     /// <summary>One line on where the syntax stands.</summary>
@@ -310,10 +311,7 @@ public sealed class SyntaxLabSession : LabSession<SyntaxRecord>, ILabLive
             sections.Add(new LabLibrarySection("In the Silo", "Database5", silo));
         }
 
-        var parsers = SyntaxParsers.All.Where(p => Wanted(p.Key, p.Title))
-                                   .Select(p => new LabLibraryEntry(p.Key, "Parser", $"{p.Title} → {p.ValueType.Name}", "Modules", () => StartFromParser(p), IsTemplate: true, ToolTip: p.Description))
-                                   .ToList();
-        sections.Add(new LabLibrarySection("Templates: built-in parsers (double-click to start a syntax with one)", null, parsers, true));
+        // the built-in parsers are prefabs of the model now (File > New Syntax)
         return sections;
     }
 
@@ -360,8 +358,6 @@ public sealed class SyntaxLabSession : LabSession<SyntaxRecord>, ILabLive
                                               "Move the strings of the Try list that are valid to the list of strings that have to be valid");
             yield return ProvidedCommand.From("keep-invalid", "Keep _Invalid Tries", () => MoveTries(false), "TbDelete", () => _results.Any(r => r.Expect == TrialExpect.Nothing && !r.IsValid),
                                               "Move the strings of the Try list that are not valid to the list of strings that must not be valid");
-            yield return ProvidedCommand.From("example-sample", "Example to _Valid", ExampleToValid, null, () => !string.IsNullOrWhiteSpace(_draft.Example),
-                                              "Add the syntax's example to the strings that have to be valid");
         }
     }
 

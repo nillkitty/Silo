@@ -25,6 +25,16 @@ public interface IDocumentContent
 }
 
 /// <summary>
+///     Implemented by a view in a document tab that can hold work that is not saved: when the person closes the tab, it is asked
+///     first, and can save, let go, or keep the tab open.
+/// </summary>
+public interface IDocumentCloseGuard
+{
+    /// <summary>True to let the tab close (nothing unsaved, saved now, or the changes are not wanted); false to keep it open.</summary>
+    bool ConfirmClose();
+}
+
+/// <summary>
 ///     The document tabs in the middle of the main window (the classic Visual Studio arrangement: documents in tabs,
 ///     tools and views in panes around them). Opening is by <em>key</em>: opening a key that is already open just brings
 ///     its tab forward, so a table reached from the Explorer, from the Tables list and from the navigation flyout is one tab.
@@ -176,6 +186,15 @@ public sealed class DocumentTabs
         doc.Content = content;
         doc.Closed += (_, _) => OnDocumentClosed(entry);
 
+        // the person closing the tab (its X, Ctrl+F4, the tab's menu): a document with unsaved work can say no. A tab closed from code
+        // (Close, CloseWhere) has already been taken out of the registry, and is not asked.
+        doc.Closing += (_, e) =>
+                       {
+                           if (_entries.TryGetValue(entry.Key, out var current) && ReferenceEquals(current, entry) &&
+                               entry.Content is IDocumentCloseGuard guard && !guard.ConfirmClose())
+                               e.Cancel = true;
+                       };
+
         EnsurePane().Children.Add(doc);
         if (!pin) _preview = entry;
         Reveal(entry, pin);
@@ -194,6 +213,22 @@ public sealed class DocumentTabs
 
         e.Title     = title;
         e.Doc.Title = Marked(e);
+    }
+
+    /// <summary>
+    ///     The document in the tab <paramref name="oldKey" /> is now known as <paramref name="newKey" /> (a new document was saved
+    ///     under a name): opening <paramref name="newKey" /> brings this tab forward. Nothing happens when another tab already has
+    ///     the new key.
+    /// </summary>
+    public void Rekey(string oldKey, string newKey)
+    {
+        if (oldKey == newKey || !_entries.TryGetValue(oldKey, out var e) || _entries.ContainsKey(newKey)) return;
+
+        _entries.Remove(oldKey);
+        e.Key           = newKey;
+        e.Doc.ContentId = newKey;
+        _entries[newKey] = e;
+        PinnedChanged?.Invoke(this, EventArgs.Empty);
     }
 
     /// <summary>Closes a tab from code (running its closed callback).</summary>

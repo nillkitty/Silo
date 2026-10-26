@@ -1,4 +1,6 @@
-﻿using System.Windows.Media;
+﻿using System.Runtime.CompilerServices;
+using System.Windows.Media;
+using System.Windows.Threading;
 using Silo.Model;
 using Silo.Ui.Documents;
 using Silo.ViewModel;
@@ -78,6 +80,7 @@ public static class ProvidedNodes
                    };
 
         self = node;
+        if (source.ChildLoader is not null) Track(source, node);
 
         var children = source.Children.ToList();
         for (int i = 0; i < children.Count; i++)
@@ -87,6 +90,43 @@ public static class ProvidedNodes
             node.Children.Add(new ExplorerNode(key + "/loading", "Loading...", "Placeholder"));
 
         return node;
+    }
+
+    // ---- a read that ends while the tree still shows "Loading..." ----------------------------------------------------
+
+    private sealed class LoadWatch
+    {
+        public WeakReference<ExplorerNode>? Latest;
+    }
+
+    private static readonly ConditionalWeakTable<SiloNode, LoadWatch> Watches = new();
+
+    /// <summary>
+    ///     Keeps hold (weakly) of the newest Explorer node of a node whose children are read on demand, and, once the read is over, makes
+    ///     sure that node does not go on showing "Loading..." (a read that found nothing adds no child, so nothing else tells the tree).
+    ///     One subscription per source node, however often the tree is rebuilt.
+    /// </summary>
+    private static void Track(SiloNode source, ExplorerNode node)
+    {
+        var watch = Watches.GetValue(source, s =>
+                                             {
+                                                 var created = new LoadWatch();
+                                                 s.ChildrenLoadedChanged += (_, _) => OnLoaded(s, created);
+                                                 return created;
+                                             });
+        watch.Latest = new WeakReference<ExplorerNode>(node);
+    }
+
+    private static void OnLoaded(SiloNode source, LoadWatch watch)
+    {
+        if (!source.ChildrenLoaded || Application.Current?.Dispatcher is not { } dispatcher) return;
+
+        dispatcher.BeginInvoke(new Action(() =>
+                                          {
+                                              if (watch.Latest is { } weak && weak.TryGetTarget(out var shown) &&
+                                                  shown.Children.Any(c => c.Kind == "Placeholder"))
+                                                  shown.RebuildTree?.Invoke();
+                                          }), DispatcherPriority.Background);
     }
 
     /// <summary>

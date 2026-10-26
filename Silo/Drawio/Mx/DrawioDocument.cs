@@ -191,6 +191,63 @@ public sealed class DrawioDocument
         return generated.Count;
     }
 
+    // ---- geometry ----------------------------------------------------------------------------------
+
+    /// <summary>A copy of a cell's <c>mxGeometry</c> (position, size, a connector's points and label position); null when it has none.</summary>
+    public XElement? GeometryOf(string id)
+    {
+        return Find(id) is { } e && CellOf(e).Element("mxGeometry") is { } g ? new XElement(g) : null;
+    }
+
+    /// <summary>Replaces a cell's <c>mxGeometry</c> with <paramref name="geometry" /> (e.g. one kept with <see cref="GeometryOf" />).</summary>
+    public void SetGeometry(string id, XElement geometry)
+    {
+        if (Find(id) is not { } e) return;
+        var cell = CellOf(e);
+        cell.Element("mxGeometry")?.Remove();
+        cell.Add(new XElement(geometry));
+    }
+
+    // ---- folding ---------------------------------------------------------------------------------
+
+    /// <summary>Whether each generated container is collapsed, by id (the ones with alternate bounds), e.g. to keep the person's choice across a rebuild.</summary>
+    public Dictionary<string, bool> GeneratedFoldStates()
+    {
+        var folds = new Dictionary<string, bool>();
+        foreach (var e in _root.Elements().Where(IsGenerated))
+            if (IdOf(e) is { } id && AlternateBounds(CellOf(e)) is not null)
+                folds[id] = (string?)CellOf(e).Attribute("collapsed") == "1";
+        return folds;
+    }
+
+    /// <summary>Collapses or expands the containers named in <paramref name="folds" /> (swapping their bounds), where they differ.</summary>
+    public void ApplyFoldStates(IReadOnlyDictionary<string, bool> folds)
+    {
+        foreach (var (id, collapsed) in folds)
+        {
+            if (Find(id) is not { } e) continue;
+
+            var cell = CellOf(e);
+            if (cell.Element("mxGeometry") is not { } geometry || AlternateBounds(cell) is not { } other) continue;
+            if (((string?)cell.Attribute("collapsed") == "1") == collapsed) continue;
+
+            foreach (string a in (string[])["x", "y", "width", "height"])
+            {
+                string? mine   = (string?)geometry.Attribute(a);
+                string? theirs = (string?)other.Attribute(a);
+                geometry.SetAttributeValue(a, theirs ?? "0");
+                other.SetAttributeValue(a, mine ?? "0");
+            }
+
+            cell.SetAttributeValue("collapsed", collapsed ? "1" : null);
+        }
+    }
+
+    private static XElement? AlternateBounds(XElement cell)
+    {
+        return cell.Element("mxGeometry")?.Elements("mxRectangle").FirstOrDefault(r => (string?)r.Attribute("as") == "alternateBounds");
+    }
+
     /// <summary>Adds the model's cells. <paramref name="generated" /> tags them as Silo-owned; <paramref name="locked" /> adds the lock styles.</summary>
     public void AddModel(DiagramModel model, bool generated, bool locked)
     {
@@ -204,16 +261,29 @@ public sealed class DrawioDocument
 
         string style = locked ? Lock(n.Style, false) : n.Style;
 
+        var geometry = new XElement("mxGeometry",
+                                    new XAttribute("x", Num(n.X)),
+                                    new XAttribute("y", Num(n.Y)),
+                                    new XAttribute("width", Num(n.Width)),
+                                    new XAttribute("height", Num(n.Height)),
+                                    new XAttribute("as", "geometry"));
+
         var cell = new XElement("mxCell",
                                 new XAttribute("style", style),
                                 new XAttribute("vertex", "1"),
-                                new XAttribute("parent", "1"),
-                                new XElement("mxGeometry",
-                                             new XAttribute("x", Num(n.X)),
-                                             new XAttribute("y", Num(n.Y)),
-                                             new XAttribute("width", Num(n.Width)),
-                                             new XAttribute("height", Num(n.Height)),
-                                             new XAttribute("as", "geometry")));
+                                new XAttribute("parent", n.Parent ?? "1"),
+                                geometry);
+
+        if (n.Fold is { } fold)
+        {
+            if (fold.Collapsed) cell.SetAttributeValue("collapsed", "1");
+            geometry.Add(new XElement("mxRectangle",
+                                      new XAttribute("x", Num(fold.X)),
+                                      new XAttribute("y", Num(fold.Y)),
+                                      new XAttribute("width", Num(fold.Width)),
+                                      new XAttribute("height", Num(fold.Height)),
+                                      new XAttribute("as", "alternateBounds")));
+        }
 
         _root.Add(Wrap(n.Id, n.Label, n.Data, n.Link, generated, cell));
     }
@@ -227,10 +297,11 @@ public sealed class DrawioDocument
         var cell = new XElement("mxCell",
                                 new XAttribute("style", style),
                                 new XAttribute("edge", "1"),
-                                new XAttribute("parent", "1"),
+                                new XAttribute("parent", e.Parent ?? "1"),
                                 new XAttribute("source", e.SourceId),
                                 new XAttribute("target", e.TargetId),
                                 new XElement("mxGeometry", new XAttribute("relative", "1"), new XAttribute("as", "geometry")));
+        if (e.LabelAt is { } at) cell.Element("mxGeometry")!.SetAttributeValue("x", Num(at));
 
         _root.Add(Wrap(e.Id, e.Label ?? "", e.Data, null, generated, cell));
     }
@@ -254,6 +325,14 @@ public sealed class DrawioDocument
                            ? "movable=0;deletable=0;editable=0;bendable=0;cloneable=0;"
                            : "movable=0;resizable=0;rotatable=0;deletable=0;editable=0;connectable=0;cloneable=0;";
         return (style.Length > 0 && !style.EndsWith(';') ? style + ";" : style) + locks;
+    }
+
+    /// <summary>Removes the styles <see cref="Lock" /> adds (the <c>key=0</c> entries only), so the cell can be edited again.</summary>
+    public static string Unlock(string style)
+    {
+        string[] locks = ["movable=0", "resizable=0", "rotatable=0", "deletable=0", "editable=0", "connectable=0", "cloneable=0", "bendable=0"];
+        var parts = style.Split(';', StringSplitOptions.RemoveEmptyEntries).Where(p => !locks.Contains(p)).ToList();
+        return parts.Count == 0 ? "" : string.Join(";", parts) + ";";
     }
 
     private static string Num(double d)
@@ -288,6 +367,14 @@ public sealed class DrawioDocument
                     if (u.Attributes is not null)
                         foreach (var (k, v) in u.Attributes)
                             target.SetAttributeValue(k, v);
+                    if (u.Bounds is { } b && CellOf(target).Element("mxGeometry") is { } geometry)
+                    {
+                        geometry.SetAttributeValue("x", Num(b.X));
+                        geometry.SetAttributeValue("y", Num(b.Y));
+                        geometry.SetAttributeValue("width", Num(b.Width));
+                        geometry.SetAttributeValue("height", Num(b.Height));
+                    }
+
                     break;
             }
     }

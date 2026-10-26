@@ -5,7 +5,7 @@ using Microsoft.Win32;
 namespace Silo.Labs.Menus;
 
 /// <summary>One Menu Lab window: the menu being made, the entry that is selected, what is wrong with the menu, and the log of what was clicked when it was tried out.</summary>
-public sealed class MenuLabSession : LabSession<MenuDoc>, ILabLive
+public sealed partial class MenuLabSession : LabSession<MenuDoc>, ILabLive
 {
     private static readonly LabSaved<MenuDoc> Saved = new("menu");
 
@@ -21,7 +21,8 @@ public sealed class MenuLabSession : LabSession<MenuDoc>, ILabLive
     public MenuLabSession(MenuLab lab) : base(lab)
     {
         _notify     = new Debouncer(TimeSpan.FromMilliseconds(120), Rebuilt);
-        _inspectors = [new MenuJsonInspector(this), new MenuXamlInspector(this)];
+        _inspectors = [new MenuJsonInspector(this).OwnedBy(LabOwner.OfAspect("json")), new MenuXamlInspector(this).OwnedBy(LabOwner.OfAspect("xaml"))];
+        SelectionChanged += (_, _) => NoteSelection();
     }
 
     internal static LabSaved<MenuDoc> Kept => Saved;
@@ -57,8 +58,8 @@ public sealed class MenuLabSession : LabSession<MenuDoc>, ILabLive
 
     public override string Title => $"{LabOf.Name} - {(string.IsNullOrWhiteSpace(_doc.Name) ? "new menu" : _doc.Name)}{(_dirty ? " *" : string.Empty)}";
 
-    /// <summary>2: the Library, Recent, Presets and Problems panes are the window's own now; windows saved with the old arrangement start afresh.</summary>
-    public override int LayoutVersion => 2;
+    /// <summary>3: the JSON and XAML panes belong to aspects of the menu now (the model); windows saved with the old arrangement start afresh.</summary>
+    public override int LayoutVersion => 3;
 
     public override IReadOnlyList<LabInspector> Inspectors => _inspectors;
 
@@ -274,10 +275,8 @@ public sealed class MenuLabSession : LabSession<MenuDoc>, ILabLive
         var kept = Saved.Names().Where(Wanted)
                         .Select(name => new LabLibraryEntry(name, "Menu", null, "Hamburger", () => OpenSaved(name), name == _doc.Name, ToolTip: "Double-click to open", Delete: () => Saved.Delete(name)))
                         .ToList();
-        var templates = MenuLibrary.Templates.Where(t => Wanted(t.Title))
-                                   .Select(t => new LabLibraryEntry(t.Title, "Menu", null, "Hamburger", () => StartFrom(t.Make()), IsTemplate: true))
-                                   .ToList();
-        return [new("In the Silo", "Database5", kept, Note: Saved.IsAvailable ? null : "No Silo is open"), new("Templates (double-click to start with one)", null, templates, true)];
+        // the menus to start from are the subject type's prefabs and templates: the Library shows them
+        return [new("In the Silo", "Database5", kept, Note: Saved.IsAvailable ? null : "No Silo is open")];
     }
 
     protected override IEnumerable<LabProblem> Validate()
@@ -381,11 +380,6 @@ public sealed class MenuLabSession : LabSession<MenuDoc>, ILabLive
         get
         {
             yield return ProvidedCommand.From("new-menu", "_New Menu", NewMenu, "TbNew", null, "Start with an empty menu");
-            yield return ProvidedCommand.Submenu("from-template", "Start from a _Template", MenuLibrary.Templates.Select((t, i) =>
-                                                                                                                       {
-                                                                                                                           var make = t.Make;
-                                                                                                                           return ProvidedCommand.From("template-" + i, t.Title, () => StartFrom(make()), null, null, "Start from this menu");
-                                                                                                                       }), null, "TbNew", "Menus to start from");
             yield return ProvidedCommand.From("show-menus", "Show _Menus", () => Host?.ShowInspector("menus"), "Folder17", null, "Show the menus kept in the Silo and the templates");
             yield return ProvidedCommand.From("paste-json", "_Paste Menu JSON", PasteJson, "TbPaste", null, "Take the JSON on the clipboard as the menu");
             yield return ProvidedCommand.From("settings", "Open Se_ttings", () => Host?.ShowInspector(LabParametersInspector.InspectorId), "Settings", null, "Show the Lab's parameters");
@@ -415,10 +409,6 @@ public sealed class MenuLabSession : LabSession<MenuDoc>, ILabLive
         get
         {
             yield return ProvidedCommand.From("save", "_Save Menu", SaveMenu, "TbSave", () => Saved.IsAvailable, "Keep the menu in the Silo") with { Gesture = "Ctrl+S" };
-            yield return ProvidedCommand.From("copy-xaml", "Copy _XAML", () => Copy(Xaml, "XAML"), "TbCopy", null, "Put the menu on the clipboard as XAML: one resource");
-            yield return ProvidedCommand.From("copy-json", "Copy _JSON", () => Copy(Json, "JSON"), "TbCopy", null, "Put the menu on the clipboard as JSON");
-            yield return ProvidedCommand.From("save-xaml", "Save as X_AML File...", () => SaveFile("xaml", Xaml), "TbExport", null, "Write the XAML to a file");
-            yield return ProvidedCommand.From("save-json", "Save as JS_ON File...", () => SaveFile("json", Json), "TbExport", null, "Write the JSON to a file");
             yield return ProvidedCommand.From("delete", "Delete Saved Me_nu", DeleteSaved, "TbDelete", () => Saved.IsAvailable && !string.IsNullOrWhiteSpace(_doc.Name) && Saved.Exists(_doc.Name), "Remove the menu from the Silo");
         }
     }

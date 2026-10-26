@@ -1,5 +1,6 @@
 ﻿using System.Windows.Controls;
 using Serilog;
+using Silo.Commanding;
 using Silo.Toolbar;
 
 namespace Silo.Labs;
@@ -79,7 +80,40 @@ internal static class LabMenus
         Add(Safe(() => session.ContextActions));
         Add(Safe(() => session.ValueActions));
         foreach (var menu in SafeMenus(session)) Add(menu.Items);
+
+        // the commands of the model's scopes (the subject, the parts, the aspects, the tools): macros and the terminal find them by id too
+        if (session is ILabModel model)
+        {
+            try
+            {
+                Add(LabModelRules.EveryCommand(model).Select(e => (ProvidedCommand?)e.Command));
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "Asking a Lab for its model commands failed");
+            }
+        }
+
         return result;
+    }
+
+    /// <summary>
+    ///     The command, with <paramref name="onRun" /> called just before it runs (what a macro records). A submenu's children are wrapped; the
+    ///     submenu itself runs nothing.
+    /// </summary>
+    public static ProvidedCommand Wrapped(ProvidedCommand c, Action<ProvidedCommand> onRun)
+    {
+        if (c.Children is { Count: > 0 } children) return c with { Children = children.Select(k => Wrapped(k, onRun)).ToList() };
+
+        var inner = c.Command;
+        return c with
+               {
+                   Command = new DelegateCommand(p =>
+                                                 {
+                                                     onRun(c);
+                                                     inner.Execute(p);
+                                                 }, p => inner.CanExecute(p))
+               };
     }
 
     public static List<ProvidedCommand?> Safe(Func<IEnumerable<ProvidedCommand>> get)
@@ -109,7 +143,7 @@ internal static class LabMenus
     }
 
     /// <summary>The entries of a Lab's own menu: its commands, separators where it has a null.</summary>
-    public static void Fill(MenuItem menu, IEnumerable<ProvidedCommand?> items)
+    public static void Fill(MenuItem menu, IEnumerable<ProvidedCommand?> items, Func<ProvidedCommand, ProvidedCommand>? wrap = null)
     {
         bool lastWasSeparator = true;
         foreach (var c in items)
@@ -121,7 +155,7 @@ internal static class LabMenus
                 continue;
             }
 
-            menu.Items.Add(CommandMenu.Item(NodeCommand.From(c)));
+            menu.Items.Add(CommandMenu.Item(NodeCommand.From(wrap is null ? c : wrap(c))));
             lastWasSeparator = false;
         }
 

@@ -4,8 +4,10 @@ using Silo.Clipboarding;
 using Silo.Converters;
 using Silo.Labs;
 using Silo.Tabular;
+using Silo.TextEditing;
 using Silo.Toolbar;
 using Silo.Ui.Documents;
+using Silo.Ui.Panes;
 
 namespace Silo.Ui;
 
@@ -59,6 +61,19 @@ public partial class MenuBar : Menu
     private void PasteNewTable_Click(object sender, RoutedEventArgs e)
     {
         TablePaste.AsNewTable(App.Instance?.ActiveSilo);
+    }
+
+    // ---- File: the text editor ----------------------------------------------------------------
+
+    private void NewTextDocument_Click(object sender, RoutedEventArgs e)
+    {
+        var language = sender is MenuItem { Tag: string name } && Enum.TryParse<TextLanguage>(name, out var parsed) ? parsed : TextLanguage.PlainText;
+        TextEditors.OpenNew(language);
+    }
+
+    private void OpenTextFile_Click(object sender, RoutedEventArgs e)
+    {
+        TextEditors.OpenFileDialog();
     }
 
     // ---- Node ----------------------------------------------------------------------------------
@@ -188,6 +203,7 @@ public partial class MenuBar : Menu
         ViewExplorer.IsChecked     = main.IsExplorerOpen;
         ViewProperties.IsChecked   = main.IsPropertiesOpen;
         ViewToolbox.IsChecked      = main.IsToolboxOpen;
+        ViewProblems.IsChecked     = ProblemsTool.Current?.IsChecked ?? false;
         ViewSelectedItem.IsChecked = main.IsSelectedItemOpen;
         ViewToolbar.IsChecked      = ToolbarSettings.Visible;
 
@@ -275,11 +291,28 @@ public partial class MenuBar : Menu
         {
             main.SetToolboxOpen(item.IsChecked);
         }
+        else if (ReferenceEquals(item, ViewProblems))
+        {
+            if (ProblemsTool.Current is not { } problems) return;
+            if (item.IsChecked) problems.Show();
+            else if (problems.IsChecked) problems.Toggle();
+            item.IsChecked = problems.IsChecked;
+        }
         else if (ReferenceEquals(item, ViewSelectedItem))
         {
             main.SetSelectedItemOpen(item.IsChecked);
             item.IsChecked = main.IsSelectedItemOpen; // nothing selected: nothing opened
         }
+    }
+
+    private void Terminal_Click(object sender, RoutedEventArgs e)
+    {
+        Main?.StatusStrip.Terminal.FocusInput();
+    }
+
+    private void TerminalLog_Click(object sender, RoutedEventArgs e)
+    {
+        Main?.ShowTerminalLog();
     }
 
     public MenuBar()

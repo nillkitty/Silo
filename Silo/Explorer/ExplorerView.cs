@@ -81,13 +81,14 @@ public sealed class ExplorerView : UserControl, IClipboardSurface
     {
         var template = new HierarchicalDataTemplate(typeof(ExplorerNode)) { ItemsSource = new Binding(nameof(ExplorerNode.Children)) };
 
-        var row = new FrameworkElementFactory(typeof(StackPanel));
-        row.SetValue(StackPanel.OrientationProperty, Orientation.Horizontal);
+        // icon, then the text taking what is left of the row and trimmed with an ellipsis: a long name never makes the tree scroll sideways
+        var row = new FrameworkElementFactory(typeof(DockPanel));
 
         // the icon, with a small badge in its lower-right corner for the database the thing is kept in (nothing for a node with no realm)
         var iconHost = new FrameworkElementFactory(typeof(Grid));
         iconHost.SetValue(MarginProperty,            new Thickness(0, 0, 6, 0));
         iconHost.SetValue(VerticalAlignmentProperty, VerticalAlignment.Center);
+        iconHost.SetValue(DockPanel.DockProperty,    Dock.Left);
 
         var icon = new FrameworkElementFactory(typeof(AppIcon));
         icon.SetBinding(AppIcon.IconProperty, new Binding(nameof(ExplorerNode.Icon)));
@@ -107,6 +108,8 @@ public sealed class ExplorerView : UserControl, IClipboardSurface
         var text = new FrameworkElementFactory(typeof(TextBlock));
         text.SetBinding(TextBlock.TextProperty, new Binding(nameof(ExplorerNode.Display)));
         text.SetValue(VerticalAlignmentProperty, VerticalAlignment.Center);
+        text.SetValue(TextBlock.TextTrimmingProperty, TextTrimming.CharacterEllipsis);
+        text.SetBinding(ToolTipProperty, new Binding(nameof(ExplorerNode.Display)));
         row.AppendChild(text);
 
         template.VisualTree = row;
@@ -628,6 +631,7 @@ public sealed class ExplorerView : UserControl, IClipboardSurface
                     BorderThickness    = new Thickness(0), ItemsSource = _roots, ItemTemplate = MakeTemplate(),
                     ItemContainerStyle = MakeContainerStyle()
                 };
+        ScrollViewer.SetHorizontalScrollBarVisibility(_tree, ScrollBarVisibility.Disabled);
         _tree.SelectedItemChanged += OnSelectedItemChanged;
         _tree.MouseDoubleClick    += OnDoubleClick;
         _tree.PreviewMouseLeftButtonDown += (_, _) =>

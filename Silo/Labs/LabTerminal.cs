@@ -12,7 +12,8 @@ internal sealed class LabTerminal
 {
     private static readonly string[] BuiltIns =
     [
-        "help", "actions", "value", "open", "go", "params", "get", "set", "add", "remove", "clear", "reset", "preset", "inspectors", "show", "hide", "layout", "log", "close"
+        "help", "actions", "value", "open", "go", "params", "get", "set", "add", "remove", "clear", "reset", "preset", "inspectors", "show", "hide", "layout", "log", "close",
+        "macro", "parts", "part", "tools", "tool", "aspects", "prefabs"
     ];
 
     private readonly ILabSession _session;
@@ -25,6 +26,8 @@ internal sealed class LabTerminal
     }
 
     private LabParameterSet Parameters => _session.Lab.Parameters;
+
+    private ILabModel? Model => _session as ILabModel;
 
     /// <summary>Splits a line into words; "double quotes" keep words together.</summary>
     public static List<string> Tokenize(string line)
@@ -73,7 +76,9 @@ internal sealed class LabTerminal
     public async Task<string?> ExecuteAsync(string line)
     {
         line = line.Trim();
-        if (line.Length == 0) return null;
+
+        // a line that starts with # is a comment (a macro keeps what it did that way: # prefab x)
+        if (line.Length == 0 || line[0] == '#') return null;
 
         int    space = line.IndexOfAny([' ', '\t']);
         string word  = space < 0 ? line : line[..space];
@@ -96,7 +101,21 @@ internal sealed class LabTerminal
             case "open" or "go":
                 return await OpenAsync(rest);
             case "params":
-                return Parameters.Count == 0 ? "This Lab has no parameters." : string.Join(Environment.NewLine, Parameters.Select(p => $"{p.Name} = {Shorten(p.Display())}{(p.IsDefault ? string.Empty : "  *")}"));
+                return ParameterList();
+            case "macro":
+                return await MacroAsync(rest, args);
+            case "parts":
+                return Parts();
+            case "part":
+                return Part(rest);
+            case "tools":
+                return Tools();
+            case "tool":
+                return Tool(rest);
+            case "aspects":
+                return Aspects();
+            case "prefabs":
+                return Prefabs();
             case "get":
                 return Get(args);
             case "set":
@@ -173,6 +192,9 @@ internal sealed class LabTerminal
         text.AppendLine("  value                       show the value being studied");
         text.AppendLine("  params | get <p> | set <p> <value> | add <p> <line> | remove <p> <line> | clear <p> | reset [p]");
         text.AppendLine("  preset list | save <name> | load <name> | delete <name>");
+        text.AppendLine("  parts | part [<name> | parent | child | next | previous | none]   the parts of the subject, and the active one");
+        text.AppendLine("  tools | tool [<name> | none] | aspects | prefabs");
+        text.AppendLine("  macro list | record <name> | stop | run <name> | show <name> | save <name> <line>; <line> | delete <name>");
         text.AppendLine("  inspectors | show <id> | hide <id> | layout reset");
         text.AppendLine("  actions                     list the actions; type an id to run it");
         text.AppendLine("  log | clear | close");
@@ -274,7 +296,192 @@ internal sealed class LabTerminal
 
     private LabParameter RequireParameter(string key)
     {
-        return Parameters.Find(key) ?? throw new InvalidOperationException($"There is no parameter '{key}'. See params.");
+        // "dom.collapse" names a parameter of another list (an aspect's, a tool's...) by the list's title
+        int dot = key.IndexOf('.');
+        if (dot > 0)
+        {
+            string wanted = Squeeze(key[..dot]);
+            foreach (var (title, set) in ParameterSets())
+                if (Squeeze(title) == wanted && set.Find(key[(dot + 1)..]) is { } named)
+                    return named;
+        }
+
+        foreach (var (_, set) in ParameterSets())
+            if (set.Find(key) is { } found)
+                return found;
+
+        throw new InvalidOperationException($"There is no parameter '{key}'. See params.");
+    }
+
+    private static string Squeeze(string text) => new string(text.Where(char.IsLetterOrDigit).ToArray()).ToLowerInvariant();
+
+    /// <summary>The Lab's parameters, then the other lists that apply now (an aspect's, a tool's, the active part's).</summary>
+    private IEnumerable<(string Title, LabParameterSet Set)> ParameterSets()
+    {
+        yield return ("Lab", Parameters);
+        if (Model is not { } model) yield break;
+
+        foreach (var source in LabModelRules.SourcesFor(model, null, LabPaneType.Static))
+            if (!ReferenceEquals(source.Set, Parameters))
+                yield return (source.Title, source.Set);
+    }
+
+    private string ParameterList()
+    {
+        var text = new StringBuilder();
+        foreach (var (title, set) in ParameterSets())
+        {
+            bool lab = ReferenceEquals(set, Parameters);
+            foreach (var p in set)
+            {
+                if (text.Length > 0) text.AppendLine();
+                string name = lab ? p.Name : $"{Squeeze(title)}.{p.Name}";
+                text.Append($"{name} = {Shorten(p.Display())}{(p.IsDefault ? string.Empty : "  *")}");
+            }
+        }
+
+        return text.Length == 0 ? "This Lab has no parameters." : text.ToString();
+    }
+
+    // ---- the model: parts, tools, aspects, prefabs and macros
+
+    private ILabModel RequireModel() => Model ?? throw new InvalidOperationException($"{_session.Lab.Name} has no parts or tools.");
+
+    private string Parts()
+    {
+        var model = RequireModel();
+        var all   = LabModelRules.AllParts(model).ToList();
+        if (all.Count == 0) return "No parts: the subject has none right now.";
+
+        var active = model.ActivePart;
+        return string.Join(Environment.NewLine, all.Select(p => $"{(active is not null && p.Key == active.Key ? "* " : "  ")}{new string(' ', Math.Min(p.Depth, 8) * 2)}{p.Name}  [{p.Type.Name}]{(string.IsNullOrEmpty(p.Detail) ? string.Empty : "  " + Shorten(p.Detail))}"));
+    }
+
+    private string? Part(string rest)
+    {
+        var    model = RequireModel();
+        string word  = Unquote(rest.Trim());
+        var    all   = LabModelRules.AllParts(model).ToList();
+        var    now   = model.ActivePart;
+        int    at    = now is null ? -1 : all.FindIndex(p => p.Key == now.Key);
+
+        switch (word.ToLowerInvariant())
+        {
+            case "":
+                return now is null ? "(no part)" : $"{now.Path}  [{now.Type.Name}]";
+            case "none":
+                model.ActivatePart(null);
+                return null;
+            case "parent":
+                model.ActivatePart(now?.Parent ?? throw new InvalidOperationException("The active part has no parent."));
+                return null;
+            case "child":
+                model.ActivatePart(now is { Children.Count: > 0 } ? now.Children[0] : throw new InvalidOperationException("The active part has no children."));
+                return null;
+            case "next":
+                model.ActivatePart(at >= 0 && at < all.Count - 1 ? all[at + 1] : throw new InvalidOperationException("There is no next part."));
+                return null;
+            case "previous":
+                model.ActivatePart(at > 0 ? all[at - 1] : throw new InvalidOperationException("There is no previous part."));
+                return null;
+        }
+
+        var part = LabModelRules.FindPart(model, word) ?? throw new InvalidOperationException($"There is no part '{word}'. See parts.");
+        model.ActivatePart(part);
+        return null;
+    }
+
+    private string Tools()
+    {
+        var model     = RequireModel();
+        var available = LabModelRules.AvailableTools(model).ToList();
+        if (model.Tools.Count == 0) return "No tools.";
+
+        return string.Join(Environment.NewLine, model.Tools.Select(t => $"{(ReferenceEquals(t, model.ActiveTool) ? "* " : "  ")}{t.Id,-16} {Strip(t.Name)}{(available.Contains(t) ? string.Empty : "  (not now)")}"));
+    }
+
+    private string? Tool(string rest)
+    {
+        var    model = RequireModel();
+        string word  = Unquote(rest.Trim());
+        if (word.Length == 0) return model.ActiveTool is { } active ? Strip(active.Name) : "(no tool)";
+
+        if (word.Equals("none", StringComparison.OrdinalIgnoreCase))
+        {
+            model.ActivateTool(null);
+            return null;
+        }
+
+        var tool = LabModelRules.FindTool(model, word) ?? throw new InvalidOperationException($"There is no tool '{word}'. See tools.");
+        if (!LabModelRules.AvailableTools(model).Contains(tool)) throw new InvalidOperationException($"{Strip(tool.Name)} is not available right now.");
+
+        model.ActivateTool(tool);
+        return null;
+    }
+
+    private string Aspects()
+    {
+        var model = RequireModel();
+        if (model.Aspects.Count == 0) return "No aspects.";
+
+        return string.Join(Environment.NewLine, model.Aspects.Select(a => $"{a.Id,-16} {a.Title}  ({a.Owner}){(LabModelRules.IsActive(model, a.Owner) ? "  active" : string.Empty)}"));
+    }
+
+    private string Prefabs()
+    {
+        var model = RequireModel();
+        var lines = new List<string>();
+        foreach (var type in model.SubjectTypes)
+        {
+            lines.AddRange(type.PrefabList.Select(p => $"{type.Name}: {p.Name}  (prefab)"));
+            lines.AddRange(type.TemplateList.Select(t => $"{type.Name}: {t.Name}  (template: {string.Join(", ", t.Placeholders.Select(p => p.Name))})"));
+        }
+
+        foreach (var type in LabModelRules.AddableTypes(model, model.ActivePart))
+        {
+            lines.AddRange(type.PrefabList.Select(p => $"add {type.Name}: {p.Name}  (prefab)"));
+            lines.AddRange(type.TemplateList.Select(t => $"add {type.Name}: {t.Name}  (template: {string.Join(", ", t.Placeholders.Select(p => p.Name))})"));
+        }
+
+        return lines.Count == 0 ? "No prefabs or templates." : string.Join(Environment.NewLine, lines);
+    }
+
+    private async Task<string?> MacroAsync(string rest, IReadOnlyList<string> args)
+    {
+        string verb = args.Count > 0 ? args[0].ToLowerInvariant() : "list";
+        string name = args.Count > 1 ? args[1] : string.Empty;
+        string id   = _session.Lab.Id;
+
+        switch (verb)
+        {
+            case "list":
+                var names = LabProfile.MacroNames(id);
+                return names.Count == 0 ? "No macros yet. macro record <name>, do things, macro stop." : string.Join(Environment.NewLine, names.Select(n => $"{n}  ({LabProfile.GetMacro(id, n)?.Count ?? 0} steps)"));
+            case "record" when name.Length > 0:
+                _window.StartRecording(name);
+                return $"Recording '{name}'. macro stop keeps it.";
+            case "stop":
+                string? recording = _window.RecordingName;
+                int     steps     = _window.StopRecording();
+                return $"Saved macro '{recording}' ({steps} step(s)).";
+            case "run" when name.Length > 0:
+                await _window.RunMacroAsync(name);
+                return null;
+            case "show" when name.Length > 0:
+                return string.Join(Environment.NewLine, _window.MacroLines(name) ?? throw new InvalidOperationException($"There is no macro '{name}'."));
+            case "save" when name.Length > 0:
+                int    at    = rest.IndexOf(name, StringComparison.Ordinal);
+                string after = at < 0 ? string.Empty : rest[(at + name.Length)..].Trim();
+                var    lines = after.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                if (lines.Length == 0) throw new InvalidOperationException("macro save <name> <line>; <line>");
+
+                LabProfile.SaveMacro(id, name, lines);
+                return $"Saved macro '{name}' ({lines.Length} step(s)).";
+            case "delete" when name.Length > 0:
+                return LabProfile.DeleteMacro(id, name) ? $"Deleted macro '{name}'." : throw new InvalidOperationException($"There is no macro '{name}'.");
+            default:
+                throw new InvalidOperationException("macro list | record <name> | stop | run <name> | show <name> | save <name> <line>; <line> | delete <name>");
+        }
     }
 
     private IEnumerable<ProvidedCommand> AllActions()

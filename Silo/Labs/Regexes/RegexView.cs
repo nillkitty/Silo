@@ -18,6 +18,7 @@ internal sealed class RegexView : Grid
     private readonly Dictionary<char, CheckBox> _flags = [];
     private readonly Debouncer       _mark;
     private bool                     _loading;
+    private bool                     _revealing;
 
     public RegexView(RegexLabSession session)
     {
@@ -123,8 +124,13 @@ internal sealed class RegexView : Grid
 
         _session.Changed         += (_, _) => OnChanged();
         _session.Loaded          += (_, _) => Load();
-        _session.RevealRequested += Reveal;
-        _session.InsertRequested += InsertIntoPattern;
+        _session.RevealRequested       += Reveal;
+        _session.InsertRequested       += InsertIntoPattern;
+        _session.PatternRangeRequested += SelectInPattern;
+        _pattern.SelectionChanged      += (_, _) =>
+                                          {
+                                              if (!_loading && !_revealing) _session.NotePatternSelection(_pattern.SelectionStart, _pattern.SelectionLength);
+                                          };
         Load();
     }
 
@@ -226,6 +232,22 @@ internal sealed class RegexView : Grid
         _text.Focus();
         _text.Select(index, Math.Min(length, _text.Text.Length - index));
         _text.ScrollToLine(_text.GetLineIndexFromCharacterIndex(index));
+    }
+
+    private void SelectInPattern(int index, int length)
+    {
+        if (index < 0 || index > _pattern.Text.Length) return;
+
+        _revealing = true;
+        try
+        {
+            _pattern.Focus();
+            _pattern.Select(index, Math.Min(length, _pattern.Text.Length - index));
+        }
+        finally
+        {
+            _revealing = false;
+        }
     }
 
     private void InsertIntoPattern(string text)

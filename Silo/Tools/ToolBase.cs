@@ -53,6 +53,9 @@ public abstract class ToolBase : ITool, ICommand, INotifyPropertyChanged
     /// </summary>
     protected virtual bool UsesPane => false;
 
+    /// <summary>How tall the pane is the first time it opens at the bottom of the dock area.</summary>
+    protected virtual double PaneHeight => 360;
+
     /// <summary>The main window, when this tool opens as a pane in it.</summary>
     private MainWindow? PaneHost => UsesPane && Application.Current?.MainWindow is MainWindow w ? w : null;
 
@@ -219,7 +222,7 @@ public abstract class ToolBase : ITool, ICommand, INotifyPropertyChanged
         if (PaneHost is { } host && GetPane() is { } pane)
         {
             if (host.IsToolPaneOpen(pane)) host.HideToolPane(pane);
-            else host.ShowToolPane(pane);
+            else host.ShowToolPane(pane, PaneHeight);
 
             OnPropertyChanged(nameof(IsChecked));
             return null;
@@ -265,7 +268,7 @@ public abstract class ToolBase : ITool, ICommand, INotifyPropertyChanged
 
         if (PaneHost is { } host && GetPane() is { } pane)
         {
-            host.ShowToolPane(pane);
+            host.ShowToolPane(pane, PaneHeight);
             OnPropertyChanged(nameof(IsChecked));
             return;
         }

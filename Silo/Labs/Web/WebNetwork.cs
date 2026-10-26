@@ -733,6 +733,28 @@ internal sealed class NetworkInspector : WebInspector
 
     // ---- copy and export --------------------------------------------------------------------
 
+    /// <summary>Opens the body of the answer in a text editor tab of the main window (JSON, XML and YAML are coloured and checked there).</summary>
+    private void OpenInTextEditor(NetworkEntry entry)
+    {
+        if (entry.Body is null)
+        {
+            Session.Say(entry.BodyError ?? "There is no answer to open.");
+            return;
+        }
+
+        if (entry.BodyIsBinary)
+        {
+            Session.Say("The answer is not text, so it cannot be opened in the text editor.");
+            return;
+        }
+
+        string path  = Uri.TryCreate(entry.Url, UriKind.Absolute, out var uri) ? uri.AbsolutePath : entry.Path;
+        string name  = Path.GetFileName(path.TrimEnd('/'));
+        string title = name.Length > 0 ? name : entry.Host.Length > 0 ? entry.Host : "Response";
+        TextEditing.TextEditors.OpenText("text:weblab:" + entry.RequestId + ":" + entry.Url, title, entry.Url, entry.Body, path, entry.Mime);
+        Application.Current?.MainWindow?.Activate();
+    }
+
     private ContextMenu RequestMenu()
     {
         var menu = new ContextMenu();
@@ -775,6 +797,11 @@ internal sealed class NetworkInspector : WebInspector
                                                                            if (one.Body is not null) _list!.Dispatcher.Invoke(() => CopyText(one.Body, "the response"));
                                                                        }));
         menu.Items.Add(copy);
+        Item(menu, "Open Response in Text Editor", "SourceCode", () => RunSafe(async () =>
+                                                                         {
+                                                                             await ReadBodyAsync(one);
+                                                                             _list!.Dispatcher.Invoke(() => OpenInTextEditor(one));
+                                                                         }));
         Item(menu, "Open in Browser", "Launch", () =>
                                                 {
                                                     try

@@ -337,6 +337,7 @@ public partial class App : Application, IContainerHost
         StartBackgroundDiscovery();
         AppTheme.Apply();
         _themeDerivedWindows();
+        TitleBars.Install();
         AppDesignSettings.Apply();
         AppDesignLevel.Apply();
         SiloFileSettings.Apply();

@@ -1,3 +1,4 @@
+using System.Collections;
 using System.ComponentModel;
 using System.Globalization;
 using System.Reflection;
@@ -23,16 +24,23 @@ public interface IWorldTypePart
 /// </summary>
 public class World : ItemContainer<IWorldPart>, ISupportInitialize
 {
-    /// <inheritdoc />
-    void ISupportInitialize.BeginInit()
-    {
-    }
+    /// <summary>Renamable, human-readable display name</summary>
+    public string DisplayName { get; set; } = string.Empty;
 
-    /// <inheritdoc />
-    void ISupportInitialize.EndInit()
-    {
-        BindReferences();
-    }
+    /// <summary>World-level flags</summary>
+    public WorldFlags Flags { get; set; }
+
+    /// <summary>Primary key</summary>
+    public int Id { get; set; }
+
+    /// <summary>Unique key within the Silo for this world (cannot be changed -- used in its file name)</summary>
+    public string Key { get; set; } = string.Empty;
+
+    /// <summary>The type name of the World provider</summary>
+    public string Provider { get; set; } = string.Empty;
+
+    /// <summary>The URI of the World root</summary>
+    public Uri Uri { get; set; } = null!;
 
     /// <summary>
     ///     Points every <see cref="IRuntimeRef" /> held by this world's parts at this world, and sets their
@@ -60,7 +68,7 @@ public class World : ItemContainer<IWorldPart>, ISupportInitialize
         if (Key is { Length: > 0 } && name.StartsWith(Key + ":", StringComparison.Ordinal)) name = name[(Key.Length + 1)..];
 
         foreach (var part in Parts())
-            if (type.IsInstanceOfType(part) &&
+            if (type.IsInstanceOfType(part)                                                                                 &&
                 part.GetType().GetProperty("Name", BindingFlags.Public | BindingFlags.Instance)?.GetValue(part) is string n &&
                 string.Equals(n, name, StringComparison.Ordinal))
                 return part;
@@ -79,30 +87,23 @@ public class World : ItemContainer<IWorldPart>, ISupportInitialize
             var part = pending.Pop();
             yield return part;
 
-            if (part.GetType().GetProperty(nameof(Items))?.GetValue(part) is System.Collections.IEnumerable children)
+            if (part.GetType().GetProperty(nameof(Items))?.GetValue(part) is IEnumerable children)
                 foreach (var child in children.Cast<object>().Reverse())
                     if (child is not null)
                         pending.Push(child);
         }
     }
 
-    /// <summary>Renamable, human-readable display name</summary>
-    public string DisplayName { get; set; } = string.Empty;
+    /// <inheritdoc />
+    void ISupportInitialize.BeginInit()
+    {
+    }
 
-    /// <summary>World-level flags</summary>
-    public WorldFlags Flags { get; set; }
-
-    /// <summary>Primary key</summary>
-    public int Id { get; set; }
-
-    /// <summary>Unique key within the Silo for this world (cannot be changed -- used in its file name)</summary>
-    public string Key { get; set; } = string.Empty;
-
-    /// <summary>The type name of the World provider</summary>
-    public string Provider { get; set; } = string.Empty;
-
-    /// <summary>The URI of the World root</summary>
-    public Uri Uri { get; set; } = null!;
+    /// <inheritdoc />
+    void ISupportInitialize.EndInit()
+    {
+        BindReferences();
+    }
 }
 
 /// <summary>
@@ -171,102 +172,6 @@ public interface IRuntimeRef
     ///     Sets how names are looked up: <c>(type, name) =&gt; part or null</c>.
     /// </summary>
     void Bind(Func<Type, string, object?> resolver);
-}
-
-/// <summary>
-///     A by-name reference to a <typeparamref name="TTarget" /> (or, when <typeparamref name="TTarget" /> is an array, to
-///     several parts named in a comma-separated list), resolved on first use by the owner that bound it (see
-///     <see cref="World.BindReferences" />). In XAML it is written as the plain name, e.g. <c>Inherits="Contact"</c>.
-/// </summary>
-[ContentProperty(nameof(Value))]
-[TypeConverter(typeof(RuntimeRefConverter))]
-public class RuntimeRef<TTarget> : IRuntimeRef
-{
-    private Func<Type, string, object?>? _resolver;
-    private bool                         _resolved;
-    private TTarget?                     _target;
-    private string?                      _value;
-
-    /// <summary>
-    ///     The referenced part, resolving it on first use.
-    /// </summary>
-    /// <exception cref="InvalidOperationException">Not bound yet, or a name is not found.</exception>
-    public TTarget Target
-    {
-        get
-        {
-            if (!_resolved)
-            {
-                _target   = Resolve();
-                _resolved = true;
-            }
-
-            return _target!;
-        }
-    }
-
-    /// <inheritdoc />
-    public Type ElementType => typeof(TTarget).IsArray ? typeof(TTarget).GetElementType()! : typeof(TTarget);
-
-    /// <inheritdoc />
-    public bool IsBound => _resolver is not null;
-
-    /// <inheritdoc />
-    public string? Value
-    {
-        get => _value;
-        set
-        {
-            _value    = value;
-            _resolved = false;
-        }
-    }
-
-    /// <inheritdoc />
-    public void Bind(Func<Type, string, object?> resolver)
-    {
-        _resolver = resolver;
-        _resolved = false;
-    }
-
-    public override string ToString()
-    {
-        return _value ?? string.Empty;
-    }
-
-    private TTarget Resolve()
-    {
-        if (_resolver is null)
-            throw new InvalidOperationException(
-                $"The reference to {typeof(TTarget).Name} '{_value}' is not bound; its owner must bind it (e.g. World.BindReferences) before it is used.");
-
-        if (!typeof(TTarget).IsArray)
-            return string.IsNullOrWhiteSpace(_value) ? default! : (TTarget)Find(_value.Trim());
-
-        var names = (_value ?? string.Empty).Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
-        var items = Array.CreateInstance(ElementType, names.Length);
-        for (int i = 0; i < names.Length; i++) items.SetValue(Find(names[i]), i);
-        return (TTarget)(object)items;
-    }
-
-    private object Find(string name)
-    {
-        return _resolver!(ElementType, name) ??
-               throw new InvalidOperationException($"No {ElementType.Name} named '{name}' was found.");
-    }
-
-    /// <summary>
-    ///     The referenced part (see <see cref="Target" />); null when <paramref name="r" /> is null.
-    /// </summary>
-    public static implicit operator TTarget(RuntimeRef<TTarget> r)
-    {
-        return r is null ? default! : r.Target;
-    }
-
-    public static implicit operator RuntimeRef<TTarget>(string s)
-    {
-        return new RuntimeRef<TTarget> { Value = s.Required() };
-    }
 }
 
 /// <summary>
@@ -364,178 +269,6 @@ public class FieldMapping
     public int               Id          { get; set; }
     public string            MvFieldName { get; set; } = string.Empty;
     public string            MvTypeName  { get; set; } = string.Empty;
-}
-
-/// <summary>
-///     Values indicating how a field mapping is to behave upon synchronization
-/// </summary>
-[Flags]
-public enum FieldMappingFlags
-{
-    /// <summary>
-    ///     Default behavior
-    /// </summary>
-    None = 0,
-
-    /// <summary>
-    ///     Value will be imported into the Metaverse from
-    ///     the world value
-    /// </summary>
-    Import = 1,
-
-    /// <summary>
-    ///     Value will be exported into the World from the
-    ///     Metaverse value
-    /// </summary>
-    Export = 2,
-
-    /// <summary>
-    ///     Allow NULL to flow from World to Metaverse
-    /// </summary>
-    ImportNulls = 4,
-
-    /// <summary>
-    ///     Allow NULL to flow from Metaverse to World
-    /// </summary>
-    ExportNulls = 8,
-
-    /// <summary>
-    ///     If set on a multivalued field, each value
-    ///     is treated as a keyed sub-field and thus each unique
-    ///     element is tracked for adds, removes, and changes.
-    /// </summary>
-    Reconciled = 0x10
-}
-
-/// <summary>
-///     Defines a mapping between a <see cref="WorldType" /> and a meta-type (Metaverse type).
-/// </summary>
-public class WorldMapping : Item, IWorldTypePart
-{
-    /// <summary>Primary Key</summary>
-    public int Id { get; set; }
-
-    /// <summary>Optional rules for auto-joining objects to connectors</summary>
-    public JoinRules? Joining { get; set; }
-
-    /// <summary>The meta-type name targeted</summary>
-    public string MvTypeName { get; set; } = string.Empty;
-
-    /// <summary>Relative priority used during synchronization</summary>
-    public int Priority { get; set; }
-
-    /// <summary>Optional rules for auto-creating connectors for each object</summary>
-    public ProjRules? Projection { get; set; }
-
-    /// <summary>Optional rules for custom provisioning</summary>
-    public ProvRules? Provisioning { get; set; }
-
-    /// <summary>The world owning the type being mapped</summary>
-    public World World { get; set; } = null!;
-
-    /// <summary>The world type being mapped</summary>
-    public WorldType WorldType { get; set; } = null!;
-}
-
-/// <summary>
-///     Defines a synchronization job profile upon which one or all WorldTypes from a World are synchronized
-/// </summary>
-public class WorldSync : Item, IWorldPart
-{
-    /// <summary>Specifies how instances are imported</summary>
-    public ImportType ImportType { get; set; }
-
-    /// <summary>Relative priority used during synchronization</summary>
-    public int Priority { get; set; }
-
-    /// <summary>Specifies the interval upon which this should take place</summary>
-    public TimeSpan SyncInterval { get; set; }
-
-    /// <summary>Specifies how instances are synchronized</summary>
-    public SyncType SyncType { get; set; }
-
-    /// <summary>Specifies a specific WorldType to sync, if null all mapped types are synced.</summary>
-    public WorldType? WorldType { get; set; }
-
-    /// <summary>Specifies the World which will be synced</summary>
-    public World World { get; set; } = null!;
-}
-
-/// <summary>
-///     Values indicating how an import job is to be handled
-/// </summary>
-public enum ImportType
-{
-    /// <summary>
-    ///     Do not import any data, read it live as it is required
-    /// </summary>
-    None,
-
-    /// <summary>
-    ///     Only cache data locally for performance; do not stage object instance in
-    ///     the world database.
-    /// </summary>
-    Cache,
-
-    /// <summary>
-    ///     Cache the data, but do so in the temp database.
-    /// </summary>
-    CacheTemp,
-
-    /// <summary>
-    ///     Import changes, adds, and deletes since the last import (if possible);
-    ///     will be upgraded to <see cref="Full" /> if a delta import is not possible.
-    /// </summary>
-    Delta,
-
-    /// <summary>
-    ///     Performs a full import of all qualified objects.
-    /// </summary>
-    Full
-}
-
-/// <summary>
-///     Values indicating how imported (or loaded) data is synchronized from
-///     world space into the metaverse.
-/// </summary>
-[Flags]
-public enum SyncType
-{
-    /// <summary>
-    ///     The data is not synchronized at all
-    /// </summary>
-    NoSync = 0,
-
-    /// <summary>
-    ///     Sync objects on this sync cycle, by default delta (only changed objects)
-    /// </summary>
-    Sync = 1,
-
-    /// <summary>
-    ///     A full synchronization is forced across all objects
-    /// </summary>
-    Full = 2,
-
-    /// <summary>
-    ///     Whether to enable Provisioning
-    /// </summary>
-    Provision = 4,
-
-    /// <summary>
-    ///     Whether to enable Joins
-    /// </summary>
-    Join = 8,
-
-    /// <summary>
-    ///     Whether to enable Projection
-    /// </summary>
-    Project = 0x10,
-
-    /// <summary>
-    ///     Whether to enable metaverse attribute flow
-    /// </summary>
-    FlowToMv = 0x20,
-    Default  = Sync | Provision | Join | Project | FlowToMv
 }
 
 [Flags]

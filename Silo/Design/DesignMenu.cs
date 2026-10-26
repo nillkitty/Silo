@@ -327,6 +327,11 @@ public static class DesignMenu
                        Padding         = new Thickness(2)
                    };
 
+        // The app's themed TextBlock and Label styles set a Foreground of their own (pale on the dark theme), and a style beats
+        // the Foreground a MenuItem passes down: without these the menu's text (headers, notes, the slider's value) is pale on pink.
+        menu.Resources[typeof(TextBlock)] = new Style(typeof(TextBlock)) { Setters = { new Setter(TextBlock.ForegroundProperty, PinkText) } };
+        menu.Resources[typeof(Label)]     = new Style(typeof(Label)) { Setters = { new Setter(Control.ForegroundProperty, PinkText) } };
+
         var hosted = new List<UIElement>();
 
         for (int g = 0; g < groups.Count; g++)
@@ -418,7 +423,7 @@ public static class DesignMenu
             else
             {
                 var labeled = new StackPanel();
-                labeled.Children.Add(new TextBlock { Text = item.Header, FontWeight = FontWeights.Bold, Margin = new Thickness(0, 0, 0, 3) });
+                labeled.Children.Add(new TextBlock { Text = item.Header, FontWeight = FontWeights.Bold, Margin = new Thickness(0, 0, 0, 3), Foreground = PinkText });
                 labeled.Children.Add(TakeContent(item.Content));
                 mi.Header = labeled;
             }
@@ -432,7 +437,8 @@ public static class DesignMenu
         }
         else
         {
-            mi.Header           = item.Header;
+            // a TextBlock of our own, not the string: the one a ContentPresenter makes for a string does not see the menu's resources
+            mi.Header           = item.Header is { Length: > 0 } header ? new TextBlock { Text = header, Foreground = PinkText } : item.Header;
             mi.Command          = item.Command;
             mi.CommandParameter = item.CommandParameter;
         }
@@ -440,7 +446,7 @@ public static class DesignMenu
         if (item.IsInfo || !item.IsEnabled)
         {
             mi.IsEnabled = false;
-            if (item.IsInfo && mi.Header is string text) mi.Header = new TextBlock { Text = text, FontStyle = FontStyles.Italic };
+            if (item.IsInfo && item.Header is { Length: > 0 } text) mi.Header = new TextBlock { Text = text, FontStyle = FontStyles.Italic, Foreground = PinkText };
         }
 
         return mi;

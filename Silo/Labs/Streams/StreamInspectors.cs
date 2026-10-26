@@ -279,7 +279,9 @@ internal sealed class StreamAdaptersInspector : LiveInspector
         panel.Children.Add(report);
         _reports.Add((spec, report));
 
-        return LabUi.Box(panel);
+        var box = LabUi.Box(panel);
+        box.PreviewMouseLeftButtonDown += (_, _) => _session.SelectStage(spec);
+        return box;
     }
 }
 
@@ -349,6 +351,10 @@ internal sealed class StreamCutsInspector(StreamLabSession session) : LiveInspec
         _list = LabUi.List();
         _list.SelectionMode = SelectionMode.Extended;
         _list.MouseDoubleClick += (_, _) => Rename();
+        _list.SelectionChanged += (_, _) =>
+                                  {
+                                      if (_list.SelectedItems.Count == 1 && (_list.SelectedItem as ListBoxItem)?.Tag is StreamCut picked) session.SelectStage(picked);
+                                  };
         _info = LabUi.Label(string.Empty, muted: true, wrap: true);
         _info.Margin = new Thickness(8, 4, 8, 2);
 

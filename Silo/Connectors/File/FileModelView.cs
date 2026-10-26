@@ -34,6 +34,23 @@ public sealed class FileModelView : UserControl
         _ = LoadAsync(model);
     }
 
+    /// <summary>A text file's preview gets a way into the text editor (the preview itself is read-only, and cut short for a large file).</summary>
+    private static UIElement WithEditButton(UIElement preview, FileModel model)
+    {
+        var button = new Button
+                     {
+                         Content = "Open in Text Editor", Padding = new Thickness(10, 2, 10, 2), Margin = new Thickness(16, 0, 16, 6),
+                         HorizontalAlignment = HorizontalAlignment.Left, ToolTip = "Edit this file (JSON, XML and YAML are coloured, checked and can be formatted)"
+                     };
+        button.Click += (_, _) => TextEditing.TextEditors.OpenFile(model.Path);
+
+        var panel = new DockPanel();
+        DockPanel.SetDock(button, Dock.Top);
+        panel.Children.Add(button);
+        panel.Children.Add(preview);
+        return panel;
+    }
+
     private async Task LoadAsync(FileModel model)
     {
         FilePreview preview;
@@ -46,7 +63,7 @@ public sealed class FileModelView : UserControl
             preview = new MessagePreview(ex.Message);
         }
 
-        _body.Content = Build(preview);
+        _body.Content = preview is TextPreview ? WithEditButton(Build(preview), model) : Build(preview);
     }
 
     private static UIElement Build(FilePreview preview)

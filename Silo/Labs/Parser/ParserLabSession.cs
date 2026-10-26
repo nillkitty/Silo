@@ -8,7 +8,7 @@ using Silo.Providers.Data;
 namespace Silo.Labs.Parser;
 
 /// <summary>One window of the Parser Lab: the spec being built, its canvas, its inspectors and its commands.</summary>
-public sealed class ParserLabSession : LabSession<IDataSpec>
+public sealed partial class ParserLabSession : LabSession<IDataSpec>
 {
     private readonly List<LabInspector> _inspectors;
     private readonly ParserWorkspace    _ws;
@@ -191,7 +191,8 @@ public sealed class ParserLabSession : LabSession<IDataSpec>
         }
     }
 
-    public override int LayoutVersion => 2;
+    /// <summary>3: the panes belong to aspects of the spec now (the model); windows saved with the old arrangement start afresh.</summary>
+    public override int LayoutVersion => 3;
 
     public override string ValueText => _ws.Spec.Name;
 
@@ -329,6 +330,7 @@ public sealed class ParserLabSession : LabSession<IDataSpec>
 
         // the status line says how the tests went whenever they were run (from a button, the menu, the Tests pane or the terminal)
         if ((change & WorkspaceChange.TestsRan) != 0 && _ws.LastTestLine.Length > 0) Say(_ws.LastTestLine);
+        if ((change & (WorkspaceChange.Selection | WorkspaceChange.Header | WorkspaceChange.Loaded | WorkspaceChange.Rules)) != 0) NoteSelection();
         RaiseActionsChanged();
     }
 
@@ -690,11 +692,11 @@ public sealed class ParserLabSession : LabSession<IDataSpec>
         _inspectors =
         [
             // the lanes, left to right: Syntax | Tokens | Combinators; along the bottom: Tests | Samples | Terminal
-            new SyntaxInspector(_ws, OpenSpec),
-            new TokensInspector(_ws),
-            new CombinatorsInspector(_ws),
-            _tests,
-            _samples,
+            new SyntaxInspector(_ws, OpenSpec).OwnedBy(LabOwner.OfAspect("syntax")),
+            new TokensInspector(_ws).OwnedBy(LabOwner.OfAspect("palette")),
+            new CombinatorsInspector(_ws).OwnedBy(LabOwner.OfAspect("palette")),
+            _tests.OwnedBy(LabOwner.OfAspect("tests")),
+            _samples.OwnedBy(LabOwner.OfAspect("tests")),
             new TerminalInspector(_ws)
         ];
 

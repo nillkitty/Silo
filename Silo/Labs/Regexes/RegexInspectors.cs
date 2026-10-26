@@ -35,7 +35,7 @@ internal abstract class RegexInspector : LabInspector
 
     public override void OnShown() => Refresh();
 
-    private void Poke()
+    protected void Poke()
     {
         if (!_ready || _pending) return;
 

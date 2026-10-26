@@ -105,7 +105,7 @@ public abstract class LabBase<TValue> : ILab
 ///     actions, inspectors and terminal commands.
 /// </summary>
 /// <typeparam name="TValue">The kind of value studied.</typeparam>
-public abstract class LabSession<TValue> : ILabSession, ILabReporter, ILabProblems, ILabLibrary, ILabPresets, ILabRecent
+public abstract class LabSession<TValue> : ILabSession, ILabModel, ILabReporter, ILabProblems, ILabLibrary, ILabPresets, ILabRecent
 {
     private readonly LabBase<TValue> _lab;
     private readonly List<LabProblem> _reported = [];
@@ -334,11 +334,23 @@ public abstract class LabSession<TValue> : ILabSession, ILabReporter, ILabProble
     /// <summary>The kinds of settings the Presets pane can keep: by default the Lab's parameters; a Lab adds its filters and tools.</summary>
     public virtual IReadOnlyList<LabPresetKind> PresetKinds => ParameterPresets();
 
-    /// <summary>The Lab's parameters as a kind of preset (none when the Lab has no parameters).</summary>
+    /// <summary>
+    ///     Every list of parameters that has settings as a kind of preset: the Lab's, an aspect's, a tool's, the active part's... (none for a
+    ///     list that has only buttons). Presets of a list are filed under its <see cref="LabParameterSet.ScopeKey" />.
+    /// </summary>
     protected IReadOnlyList<LabPresetKind> ParameterPresets()
     {
-        var set = _lab.Parameters;
-        return set.Count == 0 ? [] : [new LabPresetKind("parameters", "Lab parameters", set.Snapshot, set.Restore, "Settings")];
+        var kinds = new List<LabPresetKind>();
+        foreach (var source in ParameterSources)
+        {
+            var set = source.Set;
+            if (set.All(p => p.Kind == LabParameterKind.Action) || kinds.Any(k => k.Id == set.ScopeKey)) continue;
+
+            string title = set.ScopeKey == LabParameterSet.LabScope ? "Lab parameters" : $"{source.Title} parameters";
+            kinds.Add(new LabPresetKind(set.ScopeKey, title, set.Snapshot, set.Restore, "Settings"));
+        }
+
+        return kinds;
     }
 
     /// <summary>Studies the value.</summary>
@@ -352,12 +364,222 @@ public abstract class LabSession<TValue> : ILabSession, ILabReporter, ILabProble
     {
     }
 
-    /// <summary>Call after <see cref="CurrentValue" /> changed.</summary>
+    /// <summary>Call after <see cref="CurrentValue" /> changed (the parts are read again).</summary>
     protected void RaiseValueChanged()
     {
+        _parts = null;
         ValueChanged?.Invoke(this, EventArgs.Empty);
         Raise(nameof(ValueText));
         Raise(nameof(Title));
+        RaiseModelChanged();
+    }
+
+    // ---- the model: subject types, parts, aspects, tools, commands and parameters (see ILabModel) ----------
+
+    private IReadOnlyList<LabSubjectType>? _subjectTypes;
+    private IReadOnlyList<LabPartType>?    _partTypes;
+    private IReadOnlyList<LabPart>?        _parts;
+    private IReadOnlyList<LabAspect>?      _aspects;
+    private IReadOnlyList<LabTool>?        _tools;
+    private string?                        _activePartKey;
+    private string?                        _activeToolId;
+
+    /// <inheritdoc />
+    public event EventHandler? ModelChanged;
+
+    /// <summary>Call when the parts, the active part or tool, or what applies may have changed (the value changing already does).</summary>
+    protected void RaiseModelChanged() => ModelChanged?.Invoke(this, EventArgs.Empty);
+
+    /// <summary>Call when the parts changed without the value changing (a part was renamed in the Lab's own view): they are read again.</summary>
+    protected void RaisePartsChanged()
+    {
+        _parts = null;
+        RaiseModelChanged();
+    }
+
+    /// <summary>What one subject of the Lab is called ("regex", "menu", "page"); lower case, for sentences.</summary>
+    protected virtual string SubjectNoun => "item";
+
+    /// <summary>The kinds of subject. By default one, named for the Lab; a Lab adds its prefabs and templates to it.</summary>
+    protected virtual IEnumerable<LabSubjectType> DefineSubjectTypes() => [new LabSubjectType(_lab.Id, SubjectNoun.Length == 0 ? "Item" : char.ToUpperInvariant(SubjectNoun[0]) + SubjectNoun[1..], _lab.IconKey, _lab.Description)];
+
+    /// <summary>The kinds of part; none unless overridden.</summary>
+    protected virtual IEnumerable<LabPartType> DefinePartTypes() => [];
+
+    /// <summary>The top-level parts of the value as it is now; none unless overridden. Called again after the value changes.</summary>
+    protected virtual IEnumerable<LabPart> BuildParts() => [];
+
+    /// <summary>The aspects (their tools and tools' aspects are found through them); none unless overridden. Made once.</summary>
+    protected virtual IEnumerable<LabAspect> DefineAspects() => [];
+
+    /// <summary>The tools that do not belong to an aspect; none unless overridden. Made once.</summary>
+    protected virtual IEnumerable<LabTool> DefineTools() => [];
+
+    /// <summary>The commands of the Lab, the instance, the subject (type) and the parts (types). Asked each time, so what is checked or enabled is current.</summary>
+    protected virtual IEnumerable<LabCommandEntry> DefineModelCommands() => [];
+
+    /// <summary>Parameter lists besides the Lab's, the aspects', the tools' and the active part's: the instance's, the subject's...</summary>
+    protected virtual IEnumerable<LabParameterSource> ExtraParameterSources() => [];
+
+    /// <summary>The Lab selected a part itself (the person clicked a rule in the main view): the model follows without calling <see cref="OnPartActivated" />.</summary>
+    protected void SetActivePart(string? key)
+    {
+        if (string.Equals(_activePartKey, key, StringComparison.Ordinal)) return;
+
+        _activePartKey = key;
+        RaiseModelChanged();
+    }
+
+    /// <summary>The person made <paramref name="part" /> the active part from outside the Lab's main view (the toolbar, the terminal): show it there.</summary>
+    protected virtual void OnPartActivated(LabPart? part)
+    {
+    }
+
+    /// <summary>A new subject from content; by default the content is read as a value and opened. A Lab whose subjects are named records overrides.</summary>
+    protected virtual async Task OnNewSubjectAsync(LabSubjectType type, string content)
+    {
+        if (!TryParseValue(content, out var value)) throw new InvalidOperationException($"'{LabUi.Shorten(content, 40)}' is not something {_lab.Name} can open.");
+
+        await OpenAsync(value);
+    }
+
+    /// <summary>A new part from content; by default the Lab cannot add parts.</summary>
+    protected virtual Task OnAddPartAsync(LabPartType type, LabPart? parent, string content)
+    {
+        throw new InvalidOperationException($"{_lab.Name} cannot add a {type.Name.ToLowerInvariant()} this way.");
+    }
+
+    /// <inheritdoc />
+    public IReadOnlyList<LabSubjectType> SubjectTypes => _subjectTypes ??= Safe(DefineSubjectTypes).ToList();
+
+    /// <inheritdoc />
+    public virtual LabSubjectType? SubjectType => SubjectTypes.FirstOrDefault();
+
+    /// <inheritdoc />
+    public IReadOnlyList<LabPartType> PartTypes => _partTypes ??= Safe(DefinePartTypes).ToList();
+
+    /// <inheritdoc />
+    public IReadOnlyList<LabPart> Parts => _parts ??= Safe(BuildParts).ToList();
+
+    /// <inheritdoc />
+    public LabPart? ActivePart => _activePartKey is null ? null : Parts.SelectMany(p => p.Self()).FirstOrDefault(p => p.Key == _activePartKey);
+
+    /// <inheritdoc />
+    public void ActivatePart(LabPart? part)
+    {
+        _activePartKey = part?.Key;
+        try
+        {
+            OnPartActivated(part);
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Showing a part of {Lab} failed", _lab.Name);
+        }
+
+        RaiseModelChanged();
+        RaiseActionsChanged();
+    }
+
+    /// <inheritdoc />
+    public IReadOnlyList<LabAspect> Aspects => _aspects ??= Flatten().Aspects;
+
+    /// <inheritdoc />
+    public IReadOnlyList<LabTool> Tools => _tools ??= Flatten().Tools;
+
+    /// <summary>All aspects and tools: the declared ones, and those of aspects and tools (each once, by id).</summary>
+    private (List<LabAspect> Aspects, List<LabTool> Tools) Flatten()
+    {
+        var aspects = new List<LabAspect>();
+        var tools   = new List<LabTool>();
+
+        void VisitAspect(LabAspect aspect)
+        {
+            if (aspects.Any(a => a.Id == aspect.Id)) return;
+
+            aspects.Add(aspect);
+            foreach (var tool in aspect.Tools) VisitTool(tool);
+        }
+
+        void VisitTool(LabTool tool)
+        {
+            if (tools.Any(t => t.Id == tool.Id)) return;
+
+            tools.Add(tool);
+            foreach (var aspect in tool.Aspects) VisitAspect(aspect);
+        }
+
+        foreach (var aspect in Safe(DefineAspects)) VisitAspect(aspect);
+        foreach (var tool in Safe(DefineTools)) VisitTool(tool);
+        return (aspects, tools);
+    }
+
+    /// <inheritdoc />
+    public LabTool? ActiveTool => _activeToolId is null ? null : Tools.FirstOrDefault(t => t.Id == _activeToolId && LabModelRules.IsActive(this, t.Owner));
+
+    /// <inheritdoc />
+    public void ActivateTool(LabTool? tool)
+    {
+        var before = ActiveTool;
+        if (ReferenceEquals(before, tool)) return;
+
+        _activeToolId = tool?.Id;
+        try
+        {
+            before?.Activated?.Invoke(false);
+            tool?.Activated?.Invoke(true);
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Switching tools in {Lab} failed", _lab.Name);
+        }
+
+        RaiseModelChanged();
+        RaiseActionsChanged();
+    }
+
+    /// <inheritdoc />
+    public IReadOnlyList<LabCommandEntry> ModelCommands => Safe(DefineModelCommands).ToList();
+
+    /// <inheritdoc />
+    public IReadOnlyList<LabParameterSource> ParameterSources
+    {
+        get
+        {
+            var list = new List<LabParameterSource>();
+            if (_lab.Parameters.Count > 0) list.Add(new LabParameterSource(LabOwner.Lab, _lab.Name, _lab.Parameters, true));
+
+            list.AddRange(Safe(ExtraParameterSources));
+            foreach (var aspect in Aspects)
+                if (aspect.Parameters is { Count: > 0 } aspectSet)
+                    list.Add(new LabParameterSource(LabOwner.OfAspect(aspect.Id), aspect.Title, aspectSet, true));
+
+            foreach (var tool in Tools)
+                if (tool.Parameters is { Count: > 0 } toolSet)
+                    list.Add(new LabParameterSource(LabOwner.OfTool(tool.Id), tool.Name, toolSet, true));
+
+            if (ActivePart is { Parameters: { Count: > 0 } partSet } part) list.Add(new LabParameterSource(LabOwner.Part, part.Name, partSet, false));
+            return list;
+        }
+    }
+
+    /// <inheritdoc />
+    public Task NewSubjectAsync(LabSubjectType type, string content) => OnNewSubjectAsync(type, content);
+
+    /// <inheritdoc />
+    public Task AddPartAsync(LabPartType type, LabPart? parent, string content) => OnAddPartAsync(type, parent, content);
+
+    private IEnumerable<T> Safe<T>(Func<IEnumerable<T>> get)
+    {
+        try
+        {
+            return get().ToList();
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Asking {Lab} for its model failed", _lab.Name);
+            return [];
+        }
     }
 
     /// <summary>Call after the context actions, or whether an action can run, changed.</summary>

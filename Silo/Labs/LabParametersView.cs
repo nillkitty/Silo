@@ -1,56 +1,82 @@
 ﻿using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Threading;
 using Serilog;
 
 namespace Silo.Labs;
 
-/// <summary>The Lab's parameters as a pane: every Lab window has one (Open Settings shows it).</summary>
+/// <summary>
+///     A pane of parameters: the Lab's own (the general pane), an aspect's or a tool's. Which lists of parameters it shows, and when the pane is
+///     there at all, follows from its <see cref="PaneType" /> and <see cref="Scope" /> (see <see cref="LabModelRules.SourcesFor" />):
+///     an aspect pane shows the aspect's, the part's, the subject's and the Lab's parameters, a tool pane the tool's, the part's, the subject's
+///     and the Lab's, and the general pane everything that applies. Commands tied to the same owners are buttons at the top.
+/// </summary>
 public sealed class LabParametersInspector : LabInspector
 {
-    private readonly LabParameterSet _parameters;
+    private readonly ILabModel    _model;
+    private readonly string       _id;
+    private readonly string       _title;
+    private readonly string?      _icon;
+    private readonly LabOwner?    _scope;
+    private readonly LabPaneType  _type;
 
-    public LabParametersInspector(LabParameterSet parameters)
+    public LabParametersInspector(ILabModel model, string id = InspectorId, string title = "Parameters", string? iconKey = "Settings", LabOwner? scope = null, LabPaneType type = LabPaneType.Static)
     {
-        _parameters = parameters;
+        _model = model;
+        _id    = id;
+        _title = title;
+        _icon  = iconKey;
+        _scope = scope;
+        _type  = type;
     }
 
     public const string InspectorId = "parameters";
 
-    public override string Id => InspectorId;
+    public override string Id => _id;
 
-    public override string Title => "Parameters";
+    public override string Title => _title;
 
-    public override string IconKey => "Settings";
+    public override string? IconKey => _icon;
 
     public override LabDock Dock => LabDock.Right;
 
     public override bool VisibleByDefault => false;
 
-    protected override UIElement BuildView() => new LabParametersView(_parameters);
+    public override LabPaneType PaneType => _type;
+
+    public override LabOwner? Scope => _scope;
+
+    protected override UIElement BuildView() => new LabParametersView(_model, _scope, _type);
 }
 
 /// <summary>
-///     Edits a <see cref="LabParameterSet" />: one editor per parameter by its kind, under its group's heading, and a bar to reset
-///     everything and to keep and load presets. A change is kept in the Silo as soon as the editor is left (Enter on a line of text).
+///     Edits the lists of parameters that apply to a pane: one editor per parameter by its kind under its list's heading, each list with a
+///     button to reset it and a menu of its presets. A change is kept in the Silo as soon as the editor is left (Enter on a line of text).
 /// </summary>
 internal sealed class LabParametersView : Grid
 {
-    private readonly LabParameterSet _parameters;
-    private readonly StackPanel      _list = new() { Margin = new Thickness(10, 6, 10, 10) };
-    private readonly ComboBox        _presets = new() { MinWidth = 120, IsEditable = false };
-    private readonly TextBox         _presetName = new() { MinWidth = 100, ToolTip = "A name for the preset to keep" };
-    private          bool            _rebuilding;
-    private          bool            _committing;
+    private readonly ILabModel               _model;
+    private readonly LabOwner?               _scope;
+    private readonly LabPaneType             _type;
+    private readonly StackPanel              _commands = new() { Orientation = Orientation.Horizontal };
+    private readonly StackPanel              _list     = new() { Margin = new Thickness(10, 4, 10, 10) };
+    private readonly List<LabParameterSet>   _watched  = [];
+    private          bool                    _rebuilding;
+    private          bool                    _committing;
+    private          bool                    _pending;
 
-    public LabParametersView(LabParameterSet parameters)
+    public LabParametersView(ILabModel model, LabOwner? scope, LabPaneType type)
     {
-        _parameters = parameters;
+        _model = model;
+        _scope = scope;
+        _type  = type;
 
         RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
 
-        var bar = BuildBar();
+        var bar = new WrapPanel { Margin = new Thickness(8, 6, 8, 0) };
+        bar.Children.Add(_commands);
         SetRow(bar, 0);
         Children.Add(bar);
 
@@ -59,91 +85,45 @@ internal sealed class LabParametersView : Grid
         Children.Add(scroll);
 
         Rebuild();
-        RefreshPresets();
 
-        // changes made somewhere else (a preset loaded from the terminal, another window) show here; this view's own edits do not rebuild it
-        _parameters.Changed += OnParametersChanged;
-        Unloaded            += (_, _) => _parameters.Changed -= OnParametersChanged;
-        Loaded              += (_, _) =>
-                               {
-                                   _parameters.Changed -= OnParametersChanged;
-                                   _parameters.Changed += OnParametersChanged;
-                               };
+        // what applies changes with the active part and tool, and a preset loaded from the terminal changes the values
+        model.ModelChanged += OnModelChanged;
+        Unloaded           += (_, _) => Detach();
+        Loaded             += (_, _) =>
+                              {
+                                  model.ModelChanged -= OnModelChanged;
+                                  model.ModelChanged += OnModelChanged;
+                                  Schedule();
+                              };
     }
 
-    private FrameworkElement BuildBar()
+    private void Detach()
     {
-        var bar = new WrapPanel { Margin = new Thickness(8, 6, 8, 2) };
-
-        bar.Children.Add(MakeButton("Reset all", () => _parameters.ResetToDefaults(), "Put every parameter back to its default"));
-
-        bar.Children.Add(new TextBlock { Text = "Preset:", Margin = new Thickness(10, 0, 4, 0), VerticalAlignment = VerticalAlignment.Center });
-        bar.Children.Add(_presets);
-        bar.Children.Add(MakeButton("Load", LoadPreset, "Put the parameters to the chosen preset"));
-        bar.Children.Add(MakeButton("Delete", DeletePreset, "Forget the chosen preset"));
-
-        _presetName.Margin = new Thickness(10, 0, 4, 0);
-        bar.Children.Add(_presetName);
-        bar.Children.Add(MakeButton("Save as", SavePreset, "Keep the parameters as they are now under the name"));
-        return bar;
+        _model.ModelChanged -= OnModelChanged;
+        foreach (var set in _watched) set.Changed -= OnParametersChanged;
+        _watched.Clear();
     }
 
-    private static Button MakeButton(string text, Action click, string tip)
-    {
-        var button = new Button { Content = text, Padding = new Thickness(8, 2, 8, 2), Margin = new Thickness(0, 0, 4, 0), ToolTip = tip };
-        button.Click += (_, _) => click();
-        return button;
-    }
+    private void OnModelChanged(object? sender, EventArgs e) => Schedule();
 
     private void OnParametersChanged(LabParameter? changed)
     {
         // a single parameter changed by this view's own editor is already showing
         if (changed is not null && _committing) return;
 
+        Schedule();
+    }
+
+    private void Schedule()
+    {
+        if (_pending) return;
+
+        _pending = true;
         Dispatcher.InvokeAsync(() =>
                                {
+                                   _pending = false;
                                    Rebuild();
-                                   RefreshPresets();
-                               });
-    }
-
-    private void RefreshPresets()
-    {
-        string? selected = _presets.SelectedItem as string;
-        _presets.ItemsSource = _parameters.PresetNames();
-        if (selected is not null && _presets.Items.Contains(selected)) _presets.SelectedItem = selected;
-    }
-
-    private void LoadPreset()
-    {
-        if (_presets.SelectedItem is string name && !_parameters.LoadPreset(name)) Log.Warning("There is no preset {Name}", name);
-    }
-
-    private void DeletePreset()
-    {
-        if (_presets.SelectedItem is not string name) return;
-
-        _parameters.DeletePreset(name);
-        RefreshPresets();
-    }
-
-    private void SavePreset()
-    {
-        string name = _presetName.Text.Trim();
-        if (name.Length == 0) return;
-
-        try
-        {
-            _parameters.SavePreset(name);
-            _presetName.Clear();
-            RefreshPresets();
-            _presets.SelectedItem = name;
-        }
-        catch (Exception ex)
-        {
-            Log.Warning(ex, "Saving the preset failed");
-            MessageBox.Show(Window.GetWindow(this), ex.Message, "Preset", MessageBoxButton.OK, MessageBoxImage.Warning);
-        }
+                               }, DispatcherPriority.Background);
     }
 
     private void Rebuild()
@@ -153,24 +133,172 @@ internal sealed class LabParametersView : Grid
         _rebuilding = true;
         try
         {
+            foreach (var set in _watched) set.Changed -= OnParametersChanged;
+            _watched.Clear();
+
+            RebuildCommands();
             _list.Children.Clear();
 
-            string? group = null;
-            foreach (var p in _parameters)
+            var sources = LabModelRules.SourcesFor(_model, _scope, _type);
+            if (sources.Count == 0)
             {
-                if (p.Group != group)
+                var note = new TextBlock { Text = "Nothing to set here right now.", Margin = new Thickness(0, 10, 0, 0), TextWrapping = TextWrapping.Wrap };
+                note.SetResourceReference(TextBlock.ForegroundProperty, "Theme.TextMuted");
+                _list.Children.Add(note);
+                return;
+            }
+
+            foreach (var source in sources)
+            {
+                if (!_watched.Contains(source.Set))
                 {
-                    group = p.Group;
-                    if (group.Length > 0) _list.Children.Add(Heading(group));
+                    _watched.Add(source.Set);
+                    source.Set.Changed += OnParametersChanged;
                 }
 
-                _list.Children.Add(Editor(p));
+                _list.Children.Add(SectionHeader(source));
+
+                string? group = null;
+                foreach (var p in source.Set)
+                {
+                    if (p.Group != group)
+                    {
+                        group = p.Group;
+                        if (group.Length > 0) _list.Children.Add(Heading(group));
+                    }
+
+                    _list.Children.Add(Editor(p));
+                }
             }
         }
         finally
         {
             _rebuilding = false;
         }
+    }
+
+    private void RebuildCommands()
+    {
+        _commands.Children.Clear();
+        foreach (var command in LabModelRules.CommandsFor(_model, _scope, _type))
+        {
+            var button = new Button
+                         {
+                             Command          = command.Command,
+                             CommandParameter = command.Parameter,
+                             Padding          = new Thickness(7, 3, 8, 3),
+                             Margin           = new Thickness(0, 0, 4, 4),
+                             ToolTip          = string.IsNullOrEmpty(command.ToolTip) ? LabTerminal.Strip(command.Header) : command.ToolTip
+                         };
+
+            var content = new StackPanel { Orientation = Orientation.Horizontal };
+            if (LabUi.Icon(LabMenus.IconFor(command), 14) is { } glyph)
+            {
+                glyph.Margin = new Thickness(0, 0, 5, 0);
+                content.Children.Add(glyph);
+            }
+
+            content.Children.Add(new TextBlock { Text = LabTerminal.Strip(command.Header), VerticalAlignment = VerticalAlignment.Center });
+            button.Content = content;
+            _commands.Children.Add(button);
+        }
+    }
+
+    private UIElement SectionHeader(LabParameterSource source)
+    {
+        var row = new DockPanel { Margin = new Thickness(0, 10, 0, 2), LastChildFill = true };
+
+        bool anySetting = source.Set.Any(p => p.Kind != LabParameterKind.Action);
+        if (anySetting)
+        {
+            var presets = new Button { Content = "Presets ▾", Padding = new Thickness(6, 1, 6, 1), Margin = new Thickness(4, 0, 0, 0), ToolTip = "Keep these settings under a name, or put a kept set back" };
+            presets.Click += (_, _) => ShowPresets(presets, source.Set);
+            DockPanel.SetDock(presets, Dock.Right);
+            row.Children.Add(presets);
+
+            var reset = new Button { Content = "Reset", Padding = new Thickness(6, 1, 6, 1), ToolTip = "Put every setting in this list back to its default" };
+            reset.Click += (_, _) => source.Set.ResetToDefaults();
+            DockPanel.SetDock(reset, Dock.Right);
+            row.Children.Add(reset);
+        }
+
+        string kind = source.Owner.Kind switch
+                      {
+                          LabOwnerKind.Aspect => "Aspect",
+                          LabOwnerKind.Tool   => "Tool",
+                          LabOwnerKind.Part   => "Part",
+                          LabOwnerKind.Lab    => "Lab",
+                          _                   => string.Empty
+                      };
+        var title = new TextBlock
+                    {
+                        Text              = kind.Length == 0 ? source.Title : $"{kind}: {source.Title}",
+                        FontWeight        = FontWeights.Bold,
+                        VerticalAlignment = VerticalAlignment.Center,
+                        TextTrimming      = TextTrimming.CharacterEllipsis
+                    };
+        title.SetResourceReference(TextBlock.ForegroundProperty, "Theme.Text");
+        row.Children.Add(title);
+
+        var box = new Border { BorderThickness = new Thickness(0, 0, 0, 1), Padding = new Thickness(0, 0, 0, 3), Child = row };
+        box.SetResourceReference(Border.BorderBrushProperty, "Theme.TextMuted");
+        return box;
+    }
+
+    private void ShowPresets(Button anchor, LabParameterSet set)
+    {
+        var menu = new ContextMenu { PlacementTarget = anchor, Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom };
+
+        var save = new MenuItem { Header = "Save current as...", Icon = LabUi.Icon("TbSave") };
+        save.Click += (_, _) =>
+                      {
+                          string? name = LabUi.Ask("Preset", $"Keep these {set.Title} settings under the name:");
+                          if (string.IsNullOrWhiteSpace(name)) return;
+
+                          try
+                          {
+                              set.SavePreset(name);
+                          }
+                          catch (Exception ex)
+                          {
+                              Log.Warning(ex, "Saving the preset failed");
+                              MessageBox.Show(Window.GetWindow(this), ex.Message, "Preset", MessageBoxButton.OK, MessageBoxImage.Warning);
+                          }
+                      };
+        menu.Items.Add(save);
+
+        var names = set.PresetNames();
+        if (names.Count > 0)
+        {
+            menu.Items.Add(new Separator());
+            foreach (string name in names)
+            {
+                string captured = name;
+                var    load     = new MenuItem { Header = captured.Replace("_", "__"), ToolTip = "Put the settings back as this preset has them" };
+                load.Click += (_, _) =>
+                              {
+                                  if (!set.LoadPreset(captured)) Log.Warning($"There is no preset {captured}");
+                              };
+                menu.Items.Add(load);
+            }
+
+            menu.Items.Add(new Separator());
+            var delete = new MenuItem { Header = "Delete preset", Icon = LabUi.Icon("TbDelete") };
+            foreach (string name in names)
+            {
+                string captured = name;
+                var    item     = new MenuItem { Header = captured.Replace("_", "__") };
+                item.Click += (_, _) =>
+                              {
+                                  if (LabUi.Confirm($"Forget the preset '{captured}'?", "Preset")) set.DeletePreset(captured);
+                              };
+                delete.Items.Add(item);
+            }
+
+            menu.Items.Add(delete);
+        }
+
+        menu.IsOpen = true;
     }
 
     private static TextBlock Heading(string text)
@@ -184,11 +312,22 @@ internal sealed class LabParametersView : Grid
     {
         var panel = new StackPanel { Margin = new Thickness(0, 6, 0, 0) };
 
-        if (p.Kind != LabParameterKind.Bool)
+        if (p.Kind is not (LabParameterKind.Bool or LabParameterKind.Action))
             panel.Children.Add(new TextBlock { Text = p.Title, FontWeight = FontWeights.SemiBold });
 
         switch (p.Kind)
         {
+            case LabParameterKind.Action:
+                var run = new Button { Content = p.Title, Padding = new Thickness(8, 3, 8, 3), HorizontalAlignment = HorizontalAlignment.Left, ToolTip = p.Hint };
+                if (p.Linked is { } linked)
+                {
+                    run.Command          = linked.Command;
+                    run.CommandParameter = linked.Parameter;
+                }
+
+                panel.Children.Add(run);
+                break;
+
             case LabParameterKind.Bool:
                 var check = new CheckBox { Content = p.Title, IsChecked = p.Bool, FontWeight = FontWeights.SemiBold, ToolTip = p.Hint };
                 check.Click += (_, _) => Commit(p, check.IsChecked == true);
@@ -247,7 +386,7 @@ internal sealed class LabParametersView : Grid
                 break;
         }
 
-        if (p.Description.Length > 0)
+        if (p.Description.Length > 0 && p.Kind != LabParameterKind.Action)
         {
             var description = new TextBlock { Text = p.Description, TextWrapping = TextWrapping.Wrap, FontSize = 11, Margin = new Thickness(0, 2, 0, 0) };
             description.SetResourceReference(TextBlock.ForegroundProperty, "Theme.TextMuted");
