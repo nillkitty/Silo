@@ -1,4 +1,4 @@
-﻿using Silo.ViewModel;
+using Silo.ViewModel;
 
 namespace Silo.Connectors.Sql;
 
@@ -8,10 +8,10 @@ public class SqlDatabaseItem(SqlConnection connection, string name, Uri uri)
 public class SqlNamespaceItem(SqlDatabaseItem db, string name)
     : SqlItem(db.Connection, SqlItemKind.Namespace, name.Required(), db.Uri.Append("Schema", name), name);
 
-public class SqlTableItem(SqlItem parent, long object_id, string name, Uri uri)
+public class SqlTableItem(SqlItem parent, string name, Uri uri)
     : SqlItem(parent.Connection, SqlItemKind.Table, name.Required(), uri.Required(), parent.Database);
 
-public class SqlViewItem(SqlItem parent, long object_id, string name, Uri uri)
+public class SqlViewItem(SqlItem parent, string name, Uri uri)
     : SqlItem(parent.Connection, SqlItemKind.View, name.Required(), uri.Required(), parent.Database);
 
 public class SqlRoleItem(SqlDatabaseItem db, string name)

@@ -84,7 +84,7 @@ public class YamlDocument(YamlFormat provider, Uri uri) : DocumentBase<YamlDocNo
 
     public JToken? GetData()
     {
-        using var fs = new FileStream(uri.Required().LocalPath, FileMode.Open, FileAccess.Read);
+        using var fs = new FileStream(Uri.LocalPath, FileMode.Open, FileAccess.Read);
         var       d  = provider.Read(fs)?.ToList() ?? [];
         if (d.Count == 0) return new JArray();
 

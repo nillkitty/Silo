@@ -185,6 +185,8 @@ internal sealed class MarkdownTableDataSource : ITabularDataSource
     {
         _table = table.Required();
 
+        DataSourceUri = sourceUri!;
+
         Provider        = provider;
         NativeNamespace = CanonicalName = $"Table {ordinal}";
         LocalNamespace  = sourceUri?.ToString() ?? string.Empty;
@@ -261,6 +263,7 @@ internal sealed class MarkdownListDataSource : IListDataSource
     {
         list.Required();
 
+        DataSourceUri = sourceUri!;
         Provider        = provider;
         NativeNamespace = CanonicalName = $"List {ordinal}";
         LocalNamespace  = sourceUri?.ToString() ?? string.Empty;

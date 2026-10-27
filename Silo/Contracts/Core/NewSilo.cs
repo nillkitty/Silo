@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using System.Windows.Markup;
 using Silo.DbModel;
 using Silo.Providers.Data.Validation;
@@ -63,8 +63,8 @@ public interface ISiloLoader
 [ContentProperty(nameof(Items))]
 public class SiloTemplate
 {
-    public string       Description { get; set; }
+    public string       Description { get; set; } = string.Empty;
     public IconRef?     Icon        { get; set; }
     public List<object> Items       { get; set; } = [];
-    public string       Name        { get; set; }
+    public string       Name        { get; set; } = string.Empty;
 }

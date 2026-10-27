@@ -1,4 +1,4 @@
-﻿using Silo.Model;
+using Silo.Model;
 using Silo.ViewModel;
 using Telefrag.DI;
 
@@ -33,7 +33,7 @@ public abstract class ConnectionBase<TModel> : ModelBase<TModel>, IConnection
     public bool? ConnectionState =>
         Connector.IsConnectionless ? null : (State as IConnectionState)?.IsConnected;
 
-    public IConnector Connector { get; }
+    public new IConnector Connector { get; }
 
     /// <summary>
     ///     What to call this connection in lists (the name it was given when it was created); null to work one out
@@ -141,7 +141,7 @@ public abstract class ConnectionBase<TModel> : ModelBase<TModel>, IConnection
 
     string IConnection.GetHostname()
     {
-        return GetHostname();
+        return GetHostname()!;
     }
 
     /// <summary>

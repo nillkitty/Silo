@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using System.Security;
 using Microsoft.Win32;
 using Silo.Connectors.File;
@@ -71,7 +71,7 @@ public class RegistryModel : INodeProvider<RegistryKey>, INodeDetails, INodeView
         RegistryHive.Users, RegistryHive.CurrentConfig
     ];
 
-    public Exception Exception { get; set; }
+    public Exception? Exception { get; set; }
 
     /// <summary>True when the item can have things in it (the root, a hive, a key).</summary>
     public bool IsContainer => Exception is null && Kind != RegistryItemKind.Value;
@@ -319,7 +319,7 @@ public class RegistryConnection : RegistryModel, IConnection
     public SiloNode? Node { get; private set; }
 
     public string? PersistentConfig => null;
-    public object? State            { get; }
+    public new object? State        { get; }
     public string? TempConfig       => null;
 
     public Container Components { get; } = new(Guid.NewGuid().ToString());

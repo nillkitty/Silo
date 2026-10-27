@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using System.Windows.Input;
 
 namespace Silo.ViewModel;
@@ -22,5 +22,5 @@ public class DebuggerBreakCommand : ICommand
         Debugger.Break();
     }
 
-    public event EventHandler? CanExecuteChanged;
+    public event EventHandler? CanExecuteChanged { add { } remove { } }
 }

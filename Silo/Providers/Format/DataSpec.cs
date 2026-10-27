@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using Silo.Providers.Data;
 
 namespace Silo.Providers.Format;
@@ -22,7 +22,5 @@ public record CsvSpec(string Name) : IDataSpec
         {
             stream.Position = pos;
         }
-
-        return null;
     }
 }

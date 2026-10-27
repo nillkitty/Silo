@@ -1,4 +1,4 @@
-﻿using System.Reflection;
+using System.Reflection;
 using Assembly = Silo.DbModel.Global.Assembly;
 
 namespace Silo.Providers.Reflection;
@@ -91,7 +91,7 @@ public interface IReflectionProvider
     /// <summary>
     ///     Finds a type given the specified name and namespace context and type category filter
     /// </summary>
-    Type? FindType(string name, string defaultNamespace = null, TypeCategory category = TypeCategory.All);
+    Type? FindType(string name, string? defaultNamespace = null, TypeCategory category = TypeCategory.All);
 
     /// <summary>
     ///     Event which is raised when new types are loaded

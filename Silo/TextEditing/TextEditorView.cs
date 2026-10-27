@@ -1,4 +1,4 @@
-﻿using System.ComponentModel;
+using System.ComponentModel;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
@@ -377,7 +377,7 @@ public sealed class TextEditorView : UserControl, IDocumentContent, IEditContrib
 
         int comments = TextFormatting.CountYamlComments(_editor.Text);
         return comments == 0 ||
-               LabUi.Confirm($"The YAML has {comments} comment(s), and laying it out again removes them. Go ahead? (Edit → Undo puts them back.)",
+               LabUi.Confirm($"The YAML has {comments} comment(s), and laying it out again removes them. Go ahead? (Edit ? Undo puts them back.)",
                              "Format YAML");
     }
 
@@ -550,7 +550,7 @@ public sealed class TextEditorView : UserControl, IDocumentContent, IEditContrib
             string initial = Path.GetFileNameWithoutExtension(Resource.Title);
             if (PromptDialog.Ask("Save in the Silo", "Name of the document:", "Save", initial) is not { } name) return false;
 
-            var store = (IStoredStore)silo!.Data;
+            var store = (IStoredStore)silo!.Data!;
             if (store.GetStored(SiloTextDocument.KeyPrefix + name, StoredScope.Shared) is not null &&
                 !LabUi.Confirm($"The Silo already has a document called \"{name}\". Replace it?", "Save in the Silo"))
                 return false;
@@ -657,7 +657,7 @@ public sealed class TextEditorView : UserControl, IDocumentContent, IEditContrib
 
         int errors = _analysis.ErrorCount, warnings = _analysis.WarningCount;
         _problems.Text = EditorLanguage    == TextLanguage.PlainText ? string.Empty :
-                         errors + warnings == 0                      ? "✓ No problems" : $"{errors} error(s), {warnings} warning(s)";
+                         errors + warnings == 0                      ? "? No problems" : $"{errors} error(s), {warnings} warning(s)";
         _problems.Foreground = errors   > 0 ? LabUi.Red :
                                warnings > 0 ? LabUi.Amber : TryFindResource("Theme.TextMuted") as Brush ?? Brushes.Gray;
 
@@ -877,7 +877,7 @@ public sealed class TextEditorView : UserControl, IDocumentContent, IEditContrib
                                                     .ToArray());
         yield return EditEntry.Submenu("_Language",
                                        TextLanguages.All
-                                                    .Select(l => EditEntry.Item((l == EditorLanguage ? "✓ " : "    ") + l.DisplayName(),
+                                                    .Select(l => EditEntry.Item((l == EditorLanguage ? "? " : "    ") + l.DisplayName(),
                                                                                 () => SetLanguage(l)))
                                                     .ToArray());
         yield return EditEntry.Divider();

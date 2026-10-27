@@ -1,4 +1,4 @@
-﻿using System.Collections.ObjectModel;
+using System.Collections.ObjectModel;
 using System.IO;
 using Microsoft.Win32;
 using Telefrag.Collections;
@@ -36,7 +36,7 @@ public class LibraryTests
     {
         Assert.That(Container != null, "Container not null");
 
-        Assert.That(Container.Resolve<IObservable<RegistryKey>>() is ObservableCollection<RegistryKey>);
+        Assert.That(Container!.Resolve<IObservable<RegistryKey>>() is ObservableCollection<RegistryKey>);
         Assert.That(Container.Resolve<IList<RegistryKey>>() is FragList<RegistryKey>);
 
         Assert.Pass();
@@ -45,6 +45,6 @@ public class LibraryTests
     [Test]
     public void FileSystemTests()
     {
-        if (Directory.GetDirectoryRoot(Environment.ProcessPath) is { } rr) Console.WriteLine(rr);
+        if (Directory.GetDirectoryRoot(Environment.ProcessPath!) is { } rr) Console.WriteLine(rr);
     }
 }

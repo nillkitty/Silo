@@ -1,4 +1,4 @@
-﻿using Silo.ViewModel;
+using Silo.ViewModel;
 using Telefrag.DI;
 
 namespace Silo.Connectors.Virtual;
@@ -17,7 +17,7 @@ public abstract class VirtualRoot<TModel>(bool requireActiveSilo) : VirtualRoot<
 /// </summary>
 public abstract class VirtualRoot<TModel, TState> : ConnectorBase<TModel, TState>, IConnector, IConnection where TState : IConnectionState
 {
-    private IReceiver<Container> _recv;
+    private IReceiver<Container>? _recv;
     public  bool?                ConnectionState  => null;
     public  IConnector           Connector        => this;
     public  bool                 IsInTree         => Node is not null;
@@ -25,9 +25,9 @@ public abstract class VirtualRoot<TModel, TState> : ConnectorBase<TModel, TState
     public  string?              PersistentConfig { get; protected set; }
     public  object?              State            { get; protected set; }
     public  string?              TempConfig       => null;
-    public  ConnectorSetupFlags  Flags            { get; } = ConnectorSetupFlags.Connectionless;
-    public  Exception?           LastError        { get; protected set; }
-    public  List<object>         Metadata         { get; } = [];
+    public new ConnectorSetupFlags Flags           { get; } = ConnectorSetupFlags.Connectionless;
+    public new Exception?        LastError        { get; protected set; }
+    public new List<object>      Metadata         { get; } = [];
 
     public Container Components { get; }
 
@@ -76,7 +76,7 @@ public abstract class VirtualRoot<TModel, TState> : ConnectorBase<TModel, TState
         return Task.CompletedTask;
     }
 
-    public void InitProvider(IReceiver<Container> receiver)
+    public new void InitProvider(IReceiver<Container> receiver)
     {
         _recv = receiver;
     }

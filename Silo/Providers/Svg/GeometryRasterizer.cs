@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using Silo.Providers.Document;
@@ -12,8 +12,8 @@ public static class GeometryRasterizer
     ///     Renders a Geometry to an image file. If the path is an <see cref="IconFormat" /> file, produces a multi-size icon.
     ///     Otherwise, saves a single PNG at the specified dimensions.
     /// </summary>
-    public static void ExportToFile(Geometry geometry,      string outputPath,     Brush stroke, double strokeThickness, Brush fill = null,
-                                    int      pngWidth = 32, int    pngHeight = 32, IEnumerable<int> icoSizes = null)
+    public static void ExportToFile(Geometry geometry,      string outputPath,     Brush stroke, double strokeThickness, Brush? fill = null,
+                                    int      pngWidth = 32, int    pngHeight = 32, IEnumerable<int>? icoSizes = null)
     {
         if (Formats.Is<IconFormat>(outputPath))
         {
@@ -36,7 +36,7 @@ public static class GeometryRasterizer
     }
 
     public static byte[] RenderGeometryToPngBytes(Geometry geometry, int width, int height, Brush stroke, double strokeThickness,
-                                                  Brush    fill = null)
+                                                  Brush?   fill = null)
     {
         Rect bounds = geometry.GetRenderBounds(new Pen(stroke, strokeThickness));
         if (bounds.IsEmpty || bounds.Width <= 0 || bounds.Height <= 0)

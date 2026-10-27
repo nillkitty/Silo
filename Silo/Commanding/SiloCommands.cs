@@ -1,4 +1,4 @@
-﻿using Microsoft.Win32;
+using Microsoft.Win32;
 using Serilog;
 using Silo.Extensions;
 using Silo.Model;
@@ -104,7 +104,7 @@ public record ImportDataCommand(OpenSilo Silo) : SiloCommand("_Import Data...", 
         int ok  = 0;
         int ng  = 0;
         foreach (var fn in inFiles)
-            if (await s.Data.ImportFileAsync(fn))
+            if (await s.Data!.ImportFileAsync(fn))
                 ok++;
             else
                 ng++;

@@ -1,4 +1,4 @@
-﻿using System.Windows.Controls;
+using System.Windows.Controls;
 
 namespace Silo.Providers.Reflection;
 
@@ -9,7 +9,7 @@ public interface IEditorProvider
 
 public interface IEditor<in TType> : IEditorProvider
 {
-    new Control? GetEditor(TType o);
+    Control? GetEditor(TType o);
 
     Control? IEditorProvider.GetEditor(object o)
     {

@@ -1,4 +1,4 @@
-﻿using System.Collections.ObjectModel;
+using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using Microsoft.Win32;
 using Serilog;
@@ -55,7 +55,7 @@ public partial class OpenSilo : ModelBase
     /// <summary>The saved credentials of this Silo; null when its storage cannot keep secrets.</summary>
     public CredentialService? Credentials => Data is ISecretStore store ? _credentials ??= new CredentialService(store, Encryption) : null;
 
-    public IDatabaseProvider Data { get; private set; }
+    public IDatabaseProvider? Data { get; private set; }
 
     /// <summary>
     ///     How this Silo keeps its secrets: sealed with a data key that a pluggable protector (the Windows account by
@@ -105,7 +105,7 @@ public partial class OpenSilo : ModelBase
     /// </summary>
     public NodeHost Nodes { get; } = new();
 
-    public static OpenSilo                       OnlySilo  => OpenSilos is [OpenSilo os] ? os : null;
+    public static OpenSilo?                      OnlySilo  => OpenSilos is [OpenSilo os] ? os : null;
     public static ObservableCollection<OpenSilo> OpenSilos { get; } = [];
 
     [Toggle("Reconnect Connections", "silo.reconnectConnections", "Whether to reconnect persisted connections upon reopening a Silo", true)]
@@ -138,7 +138,7 @@ public partial class OpenSilo : ModelBase
     /// </summary>
     public List<Func<Task>> SaveHooks { get; } = [];
 
-    public ISiloUserContext UserContext { get; private set; }
+    public ISiloUserContext UserContext { get; private set; } = null!;
 
     /// <summary>The preferences of the Silo itself are kept in the Silo (its <c>Pref</c> table).</summary>
     protected override IPreferenceStore? PreferenceStore => Data as IPreferenceStore;
@@ -317,7 +317,7 @@ public partial class OpenSilo : ModelBase
         await RunSaveHooksAsync();
         try
         {
-            await Data.SaveAsync();
+            await Data!.SaveAsync();
         }
         catch (RemoteSyncException ex)
         {
@@ -397,7 +397,7 @@ public partial class OpenSilo : ModelBase
     {
         path.Required();
         await RunSaveHooksAsync();
-        await Data.MigrateToCopyAsync(path);
+        await Data!.MigrateToCopyAsync(path);
 
         File      = new SiloFile(Data is ISiloFile saved ? saved.FilePath : Path.GetFullPath(path));
         RemoteUri = null; // a copy saved under a new name no longer syncs with the URL

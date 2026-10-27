@@ -1,4 +1,4 @@
-﻿using System.Windows.Controls;
+using System.Windows.Controls;
 using System.Windows.Data;
 using Serilog;
 using Silo.Connectors;
@@ -122,7 +122,7 @@ public sealed class ConnectorsTab : ConnectTab
 
             if (connector is IAutoConnectable auto) return new AutoSetup(connector, auto);
 
-            return new AutoSetup(connector, null);
+            return new AutoSetup(connector, null!);
             //return new MessageSetup("This connector has no setup page yet, so it cannot make a connection from here.");
         }
         catch (Exception ex)

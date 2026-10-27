@@ -1,4 +1,4 @@
-﻿using Silo.Extensions;
+using Silo.Extensions;
 using Silo.Model;
 
 namespace Silo.Ui.Windows;
@@ -10,7 +10,7 @@ public partial class FormWindow : Window
 {
     public          bool   AddToSilo { get; init; }
     public required Type   ModelType { get; init; }
-    public          object Result    { get; private set; }
+    public          object? Result   { get; private set; }
 
     public required OpenSilo Silo       { get; init; }
     public required Type     TargetType { get; init; }

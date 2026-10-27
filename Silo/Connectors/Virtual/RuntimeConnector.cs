@@ -1,4 +1,4 @@
-﻿using System.Reflection;
+using System.Reflection;
 using Silo.Extensions;
 using Silo.Model;
 using Silo.Providers.Reflection;
@@ -86,7 +86,7 @@ public record AssemblyNode : SiloNode
     /// <summary>The node for the manifest resource called <paramref name="name" />.</summary>
     private AssemblyResourceNode MakeResourceNode(string name)
     {
-        return new AssemblyResourceNode(Assembly.GetManifestResourceInfo(name), name);
+        return new AssemblyResourceNode(Assembly.GetManifestResourceInfo(name)!, name);
     }
 
     /// <summary>

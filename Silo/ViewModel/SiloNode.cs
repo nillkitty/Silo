@@ -1,4 +1,4 @@
-﻿using System.Collections.ObjectModel;
+using System.Collections.ObjectModel;
 using Serilog;
 using Silo.DbModel.Global;
 
@@ -72,7 +72,7 @@ public record SiloNode
     public virtual object? Parent   { get; protected set; }
     public virtual string? Text     { get; protected init; }
     public virtual string? TypeName { get; protected init; }
-    public virtual Uri     Uri      { get; protected init; }
+    public virtual Uri?    Uri      { get; protected init; }
 
     /// <summary>
     ///     Runs the <see cref="ChildLoader" /> once and adds what it returns to <see cref="Children" />. Calling it again

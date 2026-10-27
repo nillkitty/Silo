@@ -1,4 +1,4 @@
-﻿using System.Data;
+using System.Data;
 using Serilog;
 using Silo.Connectors;
 using Silo.Connectors.Web;
@@ -10,7 +10,7 @@ namespace Silo.Providers;
 [Transient(typeof(IUriResolver))]
 public class PublicUriResolver : IUriResolver
 {
-    private PrivateUriResolver _priv;
+    private PrivateUriResolver? _priv;
 
     public object? Resolve(Uri uri, UriContext context)
     {
@@ -54,7 +54,7 @@ public class PublicUriResolver : IUriResolver
 
 public record AppDestination(Uri Url, string HandlerCommand) : IDestination
 {
-    public string Command { get; }
+    public string Command { get; } = string.Empty;
 
     public Uri Uri
     {

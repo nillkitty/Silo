@@ -1,4 +1,4 @@
-﻿namespace Silo.Model;
+namespace Silo.Model;
 
 /// <summary>
 ///     Marks a property of a <see cref="ModelBase" /> as a preference: the model registers it (see
@@ -35,7 +35,7 @@ public class PreferenceAttribute : Attribute
     public string? DisplayName { get; set; }
 
     /// <summary>The key of the preference's row in the Silo's <c>Pref</c> table (<c>silo.rememberConnections</c>).</summary>
-    public string PrefKey { get; set; }
+    public string PrefKey { get; set; } = null!;
 
     public PreferenceAttribute(string displayName)
     {

@@ -1,4 +1,4 @@
-﻿using System.Data;
+using System.Data;
 using System.Runtime.ExceptionServices;
 using Serilog;
 using Silo.Contracts.ConnectorServices;
@@ -12,8 +12,11 @@ namespace Silo.Connectors.Sql;
 
 public class SqlBase;
 
-public class SqlServerModel(Uri uri, ConnectionRequest rq) : SqlBase
+public class SqlServerModel : SqlBase
 {
+    public SqlServerModel(Uri uri, ConnectionRequest? rq)
+    {
+    }
 }
 
 /// <summary>

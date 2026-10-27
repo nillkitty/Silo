@@ -1,4 +1,4 @@
-﻿using Microsoft.Win32;
+using Microsoft.Win32;
 
 namespace Silo.Providers.Shell;
 
@@ -38,8 +38,7 @@ public class ShellTypeWriter : ContextBase
             throw new NotSupportedException($"The type '{progId}' must be either an extension ('.xlsx') or a scheme ('https:').");
         }
 
-        Key = ShellPaths.ClassesRoot.OpenOrCreate();
-        if (Key is null)
-            throw new InvalidOperationException("Could not obtain a writable handle to registry key the Classes root.");
+        Key = ShellPaths.ClassesRoot.OpenOrCreate() ??
+              throw new InvalidOperationException("Could not obtain a writable handle to registry key the Classes root.");
     }
 }

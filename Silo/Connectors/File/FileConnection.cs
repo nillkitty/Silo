@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using Silo.ViewModel;
 using Telefrag.DI;
 
@@ -66,7 +66,7 @@ public class FileModel : INodeProvider<FileSystemInfo>, INodeDetails, INodeViewP
     public string Name => Kind == FileKind.Volume ? Path : Data.Name;
 
     /// <summary>The path as a URI, or null if it has no valid URI form.</summary>
-    public Uri? Uri => Uri.TryCreate(Data.FullName, UriKind.Absolute, out var uri) ? uri : null;
+    public Uri Uri => (Uri.TryCreate(Data.FullName, UriKind.Absolute, out var uri) ? uri : null)!;
 
     string INodeDetails.TypeName => FileKinds.Describe(Info);
 
@@ -366,7 +366,7 @@ public class FileConnection : FileModel, IConnection
     /// <summary>
     ///     Gets a reference to the parent Connector
     /// </summary>
-    public IConnector Connector { get; private init; }
+    public IConnector Connector { get; private init; } = null!;
 
     /// <summary>What to call this connection in lists (the name it was given); null to use its path.</summary>
     public string? DisplayText { get; set; }
@@ -387,7 +387,7 @@ public class FileConnection : FileModel, IConnection
 
     public static string GetRootPath()
     {
-        if (Directory.GetDirectoryRoot(Environment.ProcessPath) is { } rr) return rr;
+        if (Directory.GetDirectoryRoot(Environment.ProcessPath!) is { } rr) return rr;
 
         return "/";
     }

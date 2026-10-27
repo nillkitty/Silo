@@ -1,4 +1,4 @@
-﻿using System.ComponentModel;
+using System.ComponentModel;
 using System.IO;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -83,7 +83,6 @@ public sealed class LabWindow : Window, IWindowLayout, ILabHost, ILabCreator
     private string?   _lastCompletion;
     private int       _completionIndex;
     private bool      _closed;
-    private bool      _restoredLayout;
     private bool      _lanes;
     private UIElement? _topBar;
 
@@ -908,7 +907,7 @@ public sealed class LabWindow : Window, IWindowLayout, ILabHost, ILabCreator
     {
         var row = new StackPanel { Orientation = Orientation.Horizontal };
         if (LabUi.Icon(icon, 15) is { } glyph) row.Children.Add(glyph);
-        if (dropdown) row.Children.Add(new TextBlock { Text = "▾", Margin = new Thickness(3, 0, 0, 0), FontSize = 9, VerticalAlignment = VerticalAlignment.Center });
+        if (dropdown) row.Children.Add(new TextBlock { Text = "?", Margin = new Thickness(3, 0, 0, 0), FontSize = 9, VerticalAlignment = VerticalAlignment.Center });
         return row;
     }
 
@@ -1083,7 +1082,7 @@ public sealed class LabWindow : Window, IWindowLayout, ILabHost, ILabCreator
         DockPanel.SetDock(_statusText, Dock.Right);
         DockPanel.SetDock(_outputText, Dock.Right);
 
-        var prompt = new TextBlock { Text = "›", FontSize = 16, Margin = new Thickness(0, 0, 6, 0), VerticalAlignment = VerticalAlignment.Center };
+        var prompt = new TextBlock { Text = "�", FontSize = 16, Margin = new Thickness(0, 0, 6, 0), VerticalAlignment = VerticalAlignment.Center };
         prompt.SetResourceReference(TextBlock.ForegroundProperty, "Theme.TextMuted");
         DockPanel.SetDock(prompt, Dock.Left);
 
@@ -1591,7 +1590,6 @@ public sealed class LabWindow : Window, IWindowLayout, ILabHost, ILabCreator
             HookPane(anchorable, _inspectors[id]);
         }
 
-        _restoredLayout = true;
         if (IsLoaded) SyncShown();
     }
 

@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using System.IO;
 using Microsoft.Win32;
 using Serilog;
@@ -120,7 +120,7 @@ public record NewSiloCommand() : SiloCommand("_New Silo...", Enabler.Always)
         }
 
         // Creating a Silo replaces whatever file is at the path, so a Silo that is open there must not be silently clobbered.
-        string full = Path.GetFullPath(r.FilePath);
+        string full = Path.GetFullPath(r.FilePath!);
         if (OpenSilo.OpenSilos.Any(o => string.Equals(o.FilePath, full, StringComparison.OrdinalIgnoreCase)))
         {
             MessageBox.Show("A Silo with that file name is already open. Close it first or choose another name.", AppIdentity.AppName,

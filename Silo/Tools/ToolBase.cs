@@ -20,8 +20,8 @@ public abstract class ToolBase : ITool, ICommand, INotifyPropertyChanged
     private bool              _isVisible = true;
     private LayoutAnchorable? _pane;
     private Window?           _window;
-    public  string            DisplayName { get; set; }
-    public  string            GroupName   { get; set; }
+    public  string?           DisplayName { get; set; }
+    public  string?           GroupName   { get; set; }
 
     /// <summary>
     ///     Display text for the tool's Tools-menu entry. Declared concretely (not just

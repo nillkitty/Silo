@@ -96,7 +96,7 @@ public class DefaultUiBuilder<TModel> : IUiBuilder<TModel>
 
     private static bool TryBuildFromAttributes(TModel model, out UIElement element)
     {
-        var modelType = model.GetType();
+        var modelType = model!.GetType();
 
         // UIHintAttribute support (e.g., [UIHint("MultilineText")], [UIHint("RadGridView")])
         var uiHint = modelType.GetCustomAttribute<UIHintAttribute>();

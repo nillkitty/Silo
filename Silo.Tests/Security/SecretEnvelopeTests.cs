@@ -1,4 +1,4 @@
-﻿using System.Text;
+using System.Text;
 using Silo.Crypto;
 using Silo.Providers.Crypto;
 
@@ -35,7 +35,8 @@ public class SecretEnvelopeTests
     {
         var key = SecretEnvelope.NewKey();
 
-        Assert.That(SecretEnvelope.Seal(key, 1, Bytes("same"), "c"), Is.Not.EqualTo(SecretEnvelope.Seal(key, 1, Bytes("same"), "c")));
+        var first = SecretEnvelope.Seal(key, 1, Bytes("same"), "c");
+        Assert.That(SecretEnvelope.Seal(key, 1, Bytes("same"), "c"), Is.Not.EqualTo(first));
     }
 
     [Test]

@@ -1,4 +1,4 @@
-﻿using System.Collections;
+using System.Collections;
 using System.Collections.Concurrent;
 using System.Data;
 using System.Dynamic;
@@ -53,7 +53,7 @@ public class RuntimeTypeProvider : ITypeProvider
         // a namespace that is not a clr-namespace says nothing about where to look
         string? currentNs = lookup.CurrentNamespace is null ? null : GetClrNamespace(lookup.CurrentNamespace, false);
 
-        var type = App.Require<IReflectionProvider>().FindType(lookup.Name.Trim(), currentNs);
+        var type = App.Require<IReflectionProvider>().FindType(lookup.Name.Trim(), currentNs!);
         return type is null ? null : new RuntimeType(type);
     }
 

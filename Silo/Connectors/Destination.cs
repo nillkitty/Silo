@@ -1,4 +1,4 @@
-﻿using System.Net;
+using System.Net;
 using System.Net.Sockets;
 
 namespace Silo.Connectors;
@@ -17,11 +17,11 @@ public class Destination : IDestination
     public IPAddress? Address
     {
         get => Uri is { IsAbsoluteUri: true } uri && IPAddress.TryParse(uri.Host, out var address) ? address : null;
-        set => Uri = value is null ? null : new Uri($"host://{HostText(value)}", UriKind.Absolute);
+        set => Uri = (value is null ? null : new Uri($"host://{HostText(value)}", UriKind.Absolute))!;
     }
 
     /// <inheritdoc />
-    public Uri? Uri { get; set; }
+    public Uri Uri { get; set; } = null!;
 
     private static string HostText(IPAddress address)
     {

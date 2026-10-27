@@ -1,4 +1,4 @@
-﻿namespace Silo.Tests.Analyzers;
+namespace Silo.Tests.Analyzers;
 
 /// <summary>SILO001: implementations of an interface marked <c>[RequireRegistration]</c> must declare their registration.</summary>
 public class RequireRegistrationAnalyzerTests
@@ -11,7 +11,7 @@ public class RequireRegistrationAnalyzerTests
         var found = await RequireRegistrationHarness.RunAsync(c);
 
         Assert.That(found.Select(RequireRegistrationHarness.NameAt), Is.EqualTo(c.Reported), c.Name);
-        Assert.That(found, Is.All.Matches<Microsoft.CodeAnalysis.Diagnostic>(d => d.Severity == Microsoft.CodeAnalysis.DiagnosticSeverity.Warning));
+        Assert.That(found, Is.All.Matches<Microsoft.CodeAnalysis.Diagnostic>(d => d?.Severity == Microsoft.CodeAnalysis.DiagnosticSeverity.Warning));
 
         if (c.MessageHas is not null)
             Assert.That(found[0].GetMessage(), Does.Contain(c.MessageHas));

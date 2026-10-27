@@ -1,4 +1,4 @@
-﻿namespace Silo.DbModel.Meta;
+namespace Silo.DbModel.Meta;
 
 /// <summary>
 ///     Represents a user-defined enumeration which ties known values to labels
@@ -103,7 +103,7 @@ public class MvEnumValue : Item
     /// <summary>
     ///     The parent Enum which owns this value
     /// </summary>
-    public MvEnum Enum { get; set; }
+    public MvEnum Enum { get; set; } = null!;
 
     /// <summary>
     ///     Primary key
@@ -113,7 +113,7 @@ public class MvEnumValue : Item
     /// <summary>
     ///     The label for this value
     /// </summary>
-    public string Name { get; set; }
+    public string Name { get; set; } = string.Empty;
 
     /// <summary>
     ///     The string representation of the value defined

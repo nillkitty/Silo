@@ -29,6 +29,8 @@ public interface IHasArity
 /// </remarks>
 public class DataDefinition : DefinitionBase<IDefPart>, IHasArity, IDataSpec
 {
+    string IDataSpec.Name => Name ?? string.Empty;
+
     public string? ContentType { get; set; }
     public Arity   Arity       { get; set; }
 

@@ -1,4 +1,4 @@
-﻿using Telefrag.DI;
+using Telefrag.DI;
 
 namespace Silo.Connectors;
 
@@ -9,7 +9,7 @@ public abstract class ConnectorBase<TModel, TState> : IConnector, IConnectorUi w
     /// </summary>
     public IReceiver<Container>? Receiver { get; protected set; }
 
-    protected IStateManager<TModel, TState> StateManager { get; set; }
+    protected IStateManager<TModel, TState> StateManager { get; set; } = null!;
 
     public ConnectorSetupFlags Flags { get; protected set; }
 

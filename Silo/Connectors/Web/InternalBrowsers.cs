@@ -1,4 +1,4 @@
-﻿using Serilog;
+using Serilog;
 using Silo.Labs;
 using Silo.Labs.Web;
 using Silo.Platform;
@@ -225,8 +225,6 @@ public readonly record struct SiloRoute(string Kind, string Id)
 /// <summary>Silo's own browsers, and the one to use for an address.</summary>
 public static class InternalBrowsers
 {
-    private static readonly IInternalBrowser[] Specific = [InWebLab, InSilo];
-
     /// <summary>Silo's browser as a whole.</summary>
     public static SiloInternalBrowser Auto { get; } = new();
 
@@ -235,6 +233,9 @@ public static class InternalBrowsers
 
     /// <summary>The Web Lab as a browser.</summary>
     public static WebLabBrowser InWebLab { get; } = new();
+
+    // declared after the browsers it lists: static initializers run in order
+    private static readonly IInternalBrowser[] Specific = [InWebLab, InSilo];
 
     /// <summary>The browsers listed among those to choose from.</summary>
     public static IReadOnlyList<IBrowser> Listed { get; } = [Auto, InWebLab];

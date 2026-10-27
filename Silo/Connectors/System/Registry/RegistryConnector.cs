@@ -35,7 +35,7 @@ public class RegistryConnector : IConnector, IUriConnector, IDestinationSource, 
         var urip = App.Require<IUriProvider<RegistryPath>>();
         var path = urip.ParseUri(uri, true);
 
-        return new RegistryConnection(this, crq?.Destination, crq?.ParentNode, path) { DisplayText = crq?.DisplayName };
+        return new RegistryConnection(this, crq?.Destination, crq?.ParentNode, path!) { DisplayText = crq?.DisplayName };
     }
 
     public Type GetStateType()

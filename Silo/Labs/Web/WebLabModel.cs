@@ -1,4 +1,4 @@
-﻿using Newtonsoft.Json;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Silo.Labs.Web;
 
@@ -144,7 +144,7 @@ public sealed partial class WebLabSession
                      {
                          IconKey     = "Nodes",
                          Description = "The page's elements, as a tree",
-                         Commands    = [ProvidedCommand.From("dom-refresh", "_Refresh DOM Tree", () => { if (_dom is not null) _ = RunAsync(_dom.RefreshAsync); }, "Refresh", () => _ready && _dom is not null, "Read the page's elements again")]
+                         Commands    = [ProvidedCommand.From("dom-refresh", "_Refresh DOM Tree", () => { if (_dom is not null) RunAsync(_dom.RefreshAsync); }, "Refresh", () => _ready && _dom is not null, "Read the page's elements again")]
                      };
         yield return new LabAspect("console", "Console", page) { IconKey = "Terminal", Description = "What the page says in its console, and a line to run JavaScript in it" };
         yield return new LabAspect("network", "Network", page) { IconKey = "Network", Description = "The requests the page makes, as a waterfall" };
@@ -155,7 +155,7 @@ public sealed partial class WebLabSession
                          Description = "The page itself",
                          Commands =
                          [
-                             ProvidedCommand.From("page-frames", "Read _Frames Again", () => _ = RunAsync(RefreshFramesAsync), "Refresh", () => _ready && _dev is not null, "Ask the browser which frames the page has"),
+                             ProvidedCommand.From("page-frames", "Read _Frames Again", () => RunAsync(RefreshFramesAsync), "Refresh", () => _ready && _dev is not null, "Ask the browser which frames the page has"),
                              ProvidedCommand.From("page-copy-title", "Copy _Title", () => CopyOf(_pageTitle, "title"), "TbCopy", () => !string.IsNullOrWhiteSpace(_pageTitle), "Put the page's title on the clipboard")
                          ]
                      };
@@ -177,9 +177,9 @@ public sealed partial class WebLabSession
                          Description = "The selected element: its style, and what can be done to it",
                          Commands =
                          [
-                             ProvidedCommand.From("node-copy-html", "Copy _HTML", () => _ = RunAsync(CopyNodeHtmlAsync), "TbCopy", () => _ready && ActiveNode is { NodeId: not 0 }, "Put the element, with what is in it, on the clipboard"),
-                             ProvidedCommand.From("node-scroll", "_Scroll Into View", () => _ = RunAsync(ScrollToNodeAsync), "Search", () => _ready && ActiveNode is { NodeId: not 0 }, "Show the element in the page"),
-                             ProvidedCommand.From("node-remove", "_Remove from Page", () => _ = RunAsync(RemoveNodeAsync), "TbDelete", () => _ready && ActiveNode is { NodeId: not 0 }, "Take the element out of the page (until it is loaded again)") with { IsDestructive = true }
+                             ProvidedCommand.From("node-copy-html", "Copy _HTML", () => RunAsync(CopyNodeHtmlAsync), "TbCopy", () => _ready && ActiveNode is { NodeId: not 0 }, "Put the element, with what is in it, on the clipboard"),
+                             ProvidedCommand.From("node-scroll", "_Scroll Into View", () => RunAsync(ScrollToNodeAsync), "Search", () => _ready && ActiveNode is { NodeId: not 0 }, "Show the element in the page"),
+                             ProvidedCommand.From("node-remove", "_Remove from Page", () => RunAsync(RemoveNodeAsync), "TbDelete", () => _ready && ActiveNode is { NodeId: not 0 }, "Take the element out of the page (until it is loaded again)") with { IsDestructive = true }
                          ]
                      };
     }
@@ -194,7 +194,7 @@ public sealed partial class WebLabSession
 
     private void OpenFrame()
     {
-        if (ActiveFrame is { } frame && Uri.TryCreate(frame.Url, UriKind.Absolute, out var uri)) _ = RunAsync(() => OpenValueAsync(uri));
+        if (ActiveFrame is { } frame && Uri.TryCreate(frame.Url, UriKind.Absolute, out var uri)) RunAsync(() => OpenValueAsync(uri));
     }
 
     private async Task CopyNodeHtmlAsync()
@@ -230,7 +230,7 @@ public sealed partial class WebLabSession
                          IconKey     = "Code",
                          Description = "Run JavaScript in the page and see what it gives",
                          Parameters  = LabParameterSet.For(LabOf.Id, "tool:script", "Script", [new LabParameter("code", "Code", LabParameterKind.Lines, null, "What to run in the page (the last expression is what it gives).", hint: "document.title")]),
-                         Commands    = [ProvidedCommand.From("script-run", "_Run in Page", () => _ = RunAsync(RunScriptAsync), "Play", () => _ready && _dev is not null && ToolText("script", "code").Length > 0, "Run the code in the page")]
+                         Commands    = [ProvidedCommand.From("script-run", "_Run in Page", () => RunAsync(RunScriptAsync), "Play", () => _ready && _dev is not null && ToolText("script", "code").Length > 0, "Run the code in the page")]
                      };
         yield return new LabTool("zoom", "_Zoom", page)
                      {

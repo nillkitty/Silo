@@ -1,4 +1,4 @@
-﻿using Silo.Providers.Data.Source;
+using Silo.Providers.Data.Source;
 
 namespace Silo.Providers.Document;
 
@@ -7,13 +7,13 @@ namespace Silo.Providers.Document;
 /// </summary>
 public class DocumentBase<TContent> : IDocument<TContent>, IDataSource
 {
-    public Uri     DataSourceUri { get; }
+    public Uri     DataSourceUri { get; } = null!;
     public Uri     Uri           { get; }
-    public string  CanonicalName { get; }
+    public string  CanonicalName { get; } = null!;
     public string? DefaultAlias  { get; }
 
-    public string         LocalNamespace  { get; }
-    public string         NativeNamespace { get; }
+    public string         LocalNamespace  { get; } = null!;
+    public string         NativeNamespace { get; } = null!;
     public IDataProvider? Provider        { get; }
 
     public DocumentBase(IDocumentProvider<TContent> provider, Uri uri)

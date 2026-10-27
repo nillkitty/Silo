@@ -14,7 +14,9 @@
 #>
 param(
     [Parameter(Mandatory = $true)][string]$OutDir,
-    [Parameter(Mandatory = $true)][string]$Name
+    [Parameter(Mandatory = $true)][string]$Name,
+    # Debug builds do not run Costura, so the assemblies are still files and the manifest must keep listing them.
+    [switch]$KeepDeps
 )
 
 $ErrorActionPreference = 'Stop'
@@ -49,7 +51,7 @@ if (Test-Path -LiteralPath $exe) {
 # ---- 2. Silo.deps.json -----------------------------------------------------------------------------------
 $depsPath = Join-Path $OutDir "$Name.deps.json"
 
-if (Test-Path -LiteralPath $depsPath) {
+if (-not $KeepDeps -and (Test-Path -LiteralPath $depsPath)) {
     $deps    = [System.IO.File]::ReadAllText($depsPath) | ConvertFrom-Json
     $changed = $false
 

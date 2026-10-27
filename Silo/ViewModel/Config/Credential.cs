@@ -1,4 +1,4 @@
-﻿using System.Security.Authentication;
+using System.Security.Authentication;
 using Microsoft.Data.SqlClient;
 using Silo.Connectors.File;
 using Silo.Connectors.Ldap;
@@ -11,7 +11,7 @@ namespace Silo.Model;
 
 public class SiloItem(OpenSilo parent)
 {
-    public IDatabaseProvider Data   { get; } = parent.Required().Data.Required();
+    public IDatabaseProvider Data   { get; } = parent.Required().Data.Required()!;
     public OpenSilo          Parent { get; } = parent.Required();
 }
 

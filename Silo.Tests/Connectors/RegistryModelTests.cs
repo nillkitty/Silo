@@ -1,4 +1,4 @@
-﻿using Microsoft.Win32;
+using Microsoft.Win32;
 using Silo.Connectors.File;
 using Silo.Connectors.System;
 using Silo.ViewModel;
@@ -159,7 +159,7 @@ public class RegistryModelTests
             Assert.That(root.Children.Select(c => c.Text), Is.EqualTo(new[] { "sub", "(Default)", "Alpha" }));
             Assert.That(root.Children.Select(c => c.Icon!.ToString()), Is.EqualTo(new[] { "RegKey", "RegValue", "RegValue" }));
             Assert.That(root.Children.All(c => !c.IsExpanded), Is.True);
-            Assert.That(root.Children[2].Uri.Query, Is.EqualTo("?Alpha"));
+            Assert.That(root.Children[2].Uri!.Query, Is.EqualTo("?Alpha"));
             Assert.That(((INodeDetails)root.Children[2].DataContext).GetDetails().ToDictionary(r => r.Name, r => r.Value)["Data"], Is.EqualTo("one"));
         }
         finally

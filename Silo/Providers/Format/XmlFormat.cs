@@ -57,7 +57,7 @@ public class XmlDocument(IDocumentProvider<XDocument> provider, Uri uri) : Docum
 
     public XDocument? ReadData()
     {
-        using var fs = new FileStream(uri.Required().LocalPath, FileMode.Open, FileAccess.Read);
+        using var fs = new FileStream(Uri.LocalPath, FileMode.Open, FileAccess.Read);
         return XDocument.Load(fs);
     }
 

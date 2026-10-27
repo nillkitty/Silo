@@ -1,4 +1,4 @@
-﻿using Newtonsoft.Json;
+using Newtonsoft.Json;
 using Silo.Unicode;
 
 namespace Silo.Tests.Unicode;
@@ -64,7 +64,7 @@ public class CodePointTests
     [Test]
     public void RefusesWhatIsNoCodePoint()
     {
-        foreach (string bad in new[] { "", "  ", "U+110000", "U+", "0x", "&#999999999;", "\\u{}", "abéz", "U+XYZ" })
+        foreach (string bad in new[] { "", "  ", "U+110000", "U+", "0x", "&#999999999;", "\\u{}", "ab�z", "U+XYZ" })
             Assert.That(CodePoint.TryParse(bad, out _), Is.False, bad);
 
         Assert.That(CodePoint.TryParse(null, out _), Is.False);
@@ -74,7 +74,7 @@ public class CodePointTests
     public void ParsesLists()
     {
         Assert.That(CodePoint.ParseList("U+1F7E2 U+1F7E1, U+1F7E0").Select(c => c.Value).ToList(), Is.EqualTo(new List<int> { 0x1F7E2, 0x1F7E1, 0x1F7E0 }));
-        Assert.That(CodePoint.ParseList("▶√").Select(c => c.Value).ToList(), Is.EqualTo(new List<int> { 0x25B6, 0x221A }));
+        Assert.That(CodePoint.ParseList("?v").Select(c => c.Value).ToList(), Is.EqualTo(new List<int> { 0x25B6, 0x221A }));
         Assert.That(CodePoint.ParseList("U+41 b").Select(c => c.Value).ToList(), Is.EqualTo(new List<int> { 0x55, 0x2B, 0x34, 0x31, 0x20, 0x62 }));
         Assert.That(CodePoint.ParseList("").Count, Is.EqualTo(0));
     }
@@ -101,6 +101,7 @@ public class CodePointTests
         Assert.That(new CodePoint(1) < new CodePoint(2), Is.True);
         Assert.That(new CodePoint(2) >= new CodePoint(2), Is.True);
         Assert.That(new CodePoint(3).CompareTo(new CodePoint(2)), Is.GreaterThan(0));
-        Assert.That(new CodePoint(5), Is.EqualTo(new CodePoint(5)));
+        var five = new CodePoint(5);
+        Assert.That(new CodePoint(5), Is.EqualTo(five));
     }
 }

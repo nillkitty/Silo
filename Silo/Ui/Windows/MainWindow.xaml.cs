@@ -1081,7 +1081,7 @@ public partial class MainWindow : Window, IWindowLayout
         var extras   = tools.Values.SelectMany(t => t.ExtraPaneKeys.Select(k => (Tool: t, Key: k))).ToDictionary(x => x.Tool.ExtraPaneId(x.Key));
 
         // the tabs are made again by nobody: take them out of the old layout and put them in the new one
-        var tabs = DockHost.Layout.Descendents().OfType<LayoutDocument>().Select(d => (Doc: d, d.Content, Selected: d.IsSelected)).ToList();
+        var tabs = DockHost.Layout.Descendents().OfType<LayoutDocument>().Select(d => (Doc: d, Content: (object?)d.Content, Selected: d.IsSelected)).ToList();
         foreach (var tab in tabs) tab.Doc.Content = null;
 
         var placed      = new Dictionary<string, LayoutAnchorable>();

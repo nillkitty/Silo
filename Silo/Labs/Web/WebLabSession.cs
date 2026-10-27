@@ -1,4 +1,4 @@
-﻿using System.Collections.Concurrent;
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Text.RegularExpressions;
 using System.Windows.Input;
@@ -226,7 +226,7 @@ public sealed partial class WebLabSession : LabSession<Uri>
         if (dialog.ShowDialog() != true) return;
 
         var uri = new Uri(dialog.FileName);
-        if (WebLab.IsOpenable(uri)) _ = RunAsync(() => OpenValueAsync(uri));
+        if (WebLab.IsOpenable(uri)) RunAsync(() => OpenValueAsync(uri));
         else Say("The Web Lab shows HTML, SVG and PDF files.");
     }
 
@@ -530,7 +530,7 @@ public sealed partial class WebLabSession : LabSession<Uri>
         Say(e.IsSuccess ? "Loaded" : "Failed: " + e.WebErrorStatus);
         ReportNavigation(e);
         foreach (var inspector in _webInspectors) inspector.OnNavigated(CurrentValue);
-        _ = RunAsync(ReadFramesAfterLoadAsync);
+        RunAsync(ReadFramesAfterLoadAsync);
         RaiseActionsChanged();
     }
 
@@ -835,7 +835,8 @@ public sealed partial class WebLabSession : LabSession<Uri>
         else Status = text;
     }
 
-    private async Task RunAsync(Func<Task> work)
+    // fire and forget: every failure is caught and shown, so nothing can go unobserved
+    private async void RunAsync(Func<Task> work)
     {
         try
         {

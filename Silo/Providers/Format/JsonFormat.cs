@@ -67,7 +67,7 @@ public class JsonDocument(JsonFormat provider, Uri uri) : DocumentBase<JToken>(p
 
     public IEnumerable<JToken> ReadData()
     {
-        using var fs = new FileStream(uri.LocalPath, FileMode.Open, FileAccess.Read);
+        using var fs = new FileStream(Uri.LocalPath, FileMode.Open, FileAccess.Read);
         return provider.Read(fs);
     }
 

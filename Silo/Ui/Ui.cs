@@ -44,7 +44,7 @@ public static class Ui
                     };
         var w = new Window
                 {
-                    Title   = title ?? m.GetType().FullName,
+                    Title   = title ?? m?.GetType().FullName,
                     Content = stack
                 };
 

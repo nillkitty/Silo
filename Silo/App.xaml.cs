@@ -1,4 +1,4 @@
-﻿using System.Collections.ObjectModel;
+using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Media;
 using System.Reflection;
@@ -75,7 +75,7 @@ public partial class App : Application, IContainerHost
     /// <summary>
     ///     File -> Exit
     /// </summary>
-    public new static AppCommand ExitCommand => new AppExitCommand();
+    public static AppCommand ExitCommand => new AppExitCommand();
 
     /// <summary>
     ///     The app instance representing this process
@@ -160,7 +160,7 @@ public partial class App : Application, IContainerHost
     /// </summary>
     protected ILogger Logger { get; } = Log.ForContext<App>();
 
-    private IDatabaseProvider _db => ActiveSilo?.Data;
+    private IDatabaseProvider _db => ActiveSilo?.Data ?? throw new InvalidOperationException("No silo is open");
 
     /// <summary>
     ///     Application-level components container. The registrations the app's attributes declare are discovered by reflection
@@ -207,7 +207,7 @@ public partial class App : Application, IContainerHost
             var file = new SiloFile(s.FileName);
             if (OpenSilo.CreateFile(file) is OpenSilo c)
             {
-                Logger.Information("Created new silo at '{path}'", c.File.FilePath);
+                Logger.Information("Created new silo at '{path}'", c.FilePath);
                 return c;
             }
         }
@@ -622,7 +622,7 @@ public partial class App : Application, IContainerHost
 
     private void DiscoverRegistrationsCore(Assembly a, bool critical)
     {
-        List<Type> tt = null;
+        List<Type>? tt = null;
         try
         {
             tt = a.GetExportedTypes().ToList();

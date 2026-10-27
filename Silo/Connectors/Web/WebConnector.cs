@@ -1,4 +1,4 @@
-﻿using System.Net.Http;
+using System.Net.Http;
 using Silo.Model;
 using Silo.Providers;
 using Silo.Ui.Windows.Connecting;
@@ -15,9 +15,9 @@ namespace Silo.Connectors.Web;
 [Singleton(typeof(IConnector))]
 public class WebConnector : ConnectorBase<object, ConnectionlessState>, IUriProvider, IUriConnector, IConnectorUi
 {
-    public ConnectorSetupFlags Flags     { get; } = ConnectorSetupFlags.AlwaysRequiresConfig | ConnectorSetupFlags.IgnoreIcmpVisibility;
-    public Exception?          LastError { get; protected set; }
-    public List<object>        Metadata  { get; } = [];
+    public new ConnectorSetupFlags Flags     { get; } = ConnectorSetupFlags.AlwaysRequiresConfig | ConnectorSetupFlags.IgnoreIcmpVisibility;
+    public new Exception?      LastError { get; protected set; }
+    public new List<object>    Metadata  { get; } = [];
 
     public string? Description => "Web sites and web services (http and https)";
 

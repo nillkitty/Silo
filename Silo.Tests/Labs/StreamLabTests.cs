@@ -1,4 +1,4 @@
-ï»¿using System.IO;
+using System.IO;
 using System.Net;
 using System.Net.Security;
 using System.Net.Sockets;
@@ -86,10 +86,10 @@ public class StreamLabTests
     [Test]
     public void Typed_bytes_are_read_as_text_hex_or_base64()
     {
-        Assert.That(StreamPayload.Unescape(@"a\nb\tc\\d\x41Ã©\q"), Is.EqualTo("a\nb\tc\\dAÃ©\\q"));
+        Assert.That(StreamPayload.Unescape(@"a\nb\tc\\d\x41é\q"), Is.EqualTo("a\nb\tc\\dAé\\q"));
         Assert.That(StreamPayload.ToBytes("48 65-6C,6c 0x6F", StreamPayload.Format.Hex), Is.EqualTo(Text("Hello")));
         Assert.That(StreamPayload.ToBytes("SGVsbG8=", StreamPayload.Format.Base64), Is.EqualTo(Text("Hello")));
-        Assert.That(StreamPayload.ToBytes("Ã©\\n", StreamPayload.Format.Text), Is.EqualTo(new byte[] { 0xC3, 0xA9, 0x0A }));
+        Assert.That(StreamPayload.ToBytes("é\\n", StreamPayload.Format.Text), Is.EqualTo(new byte[] { 0xC3, 0xA9, 0x0A }));
 
         var bad = Assert.Throws<FormatException>(() => StreamPayload.ToBytes("4G", StreamPayload.Format.Hex));
         Assert.That(bad.Message, Does.Contain("not hex"));
@@ -236,7 +236,7 @@ public class StreamLabTests
     [Test]
     public async Task Text_is_changed_between_encodings_without_breaking_characters()
     {
-        string text = "hÃ©llo â‚¬ ðŸ˜€";
+        string text = "héllo € ??";
 
         var utf16 = await WriteThrough(Encoding.UTF8.GetBytes(text), Adapter("transcode", "utf-8>utf-16"));
         Assert.That(utf16, Is.EqualTo(Encoding.Unicode.GetBytes(text)));
@@ -453,7 +453,7 @@ public class StreamLabTests
         try
         {
             await Reel.OpenAsync(StreamSource.ForFile("/nonexistent/silo/none.bin"), TimeSpan.FromSeconds(1));
-            Assert.That(false, Is.True, "it opened");
+            Assert.Fail("it opened");
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -463,7 +463,7 @@ public class StreamLabTests
         try
         {
             await Reel.OpenAsync(new StreamSource { Kind = StreamKind.Tcp }, TimeSpan.FromSeconds(1));
-            Assert.That(false, Is.True, "it opened");
+            Assert.Fail("it opened");
         }
         catch (InvalidOperationException ex)
         {
@@ -513,7 +513,7 @@ public class StreamLabTests
                                   int n      = await stream.ReadAsync(buffer);
                                   await stream.WriteAsync(Text("you said: " + Encoding.UTF8.GetString(buffer, 0, n)));
                                   client.Client.Shutdown(SocketShutdown.Send);
-                                  await stream.ReadAsync(buffer);
+                                  _ = await stream.ReadAsync(buffer);
                               });
         try
         {
@@ -555,7 +555,7 @@ public class StreamLabTests
         try
         {
             await Reel.OpenAsync(StreamSource.ForTcp("127.0.0.1", port), TimeSpan.FromSeconds(5));
-            Assert.That(false, Is.True, "it connected");
+            Assert.Fail("it connected");
         }
         catch (SocketException ex)
         {
@@ -569,7 +569,7 @@ public class StreamLabTests
         using var rsa = RSA.Create(2048);
         var request = new CertificateRequest("CN=silo-test", rsa, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
         using var made = request.CreateSelfSigned(DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddDays(1));
-        using var cert = new X509Certificate2(made.Export(X509ContentType.Pfx));
+        using var cert = X509CertificateLoader.LoadPkcs12(made.Export(X509ContentType.Pfx), null);
 
         var listener = new TcpListener(IPAddress.Loopback, 0);
         listener.Start();
@@ -586,7 +586,7 @@ public class StreamLabTests
                                           await ssl.WriteAsync(Text("secure hello"));
                                           await ssl.FlushAsync();
                                           var buffer = new byte[16];
-                                          await ssl.ReadAsync(buffer);
+                                          _ = await ssl.ReadAsync(buffer);
                                       }
                                       catch (Exception ex) when (ex is AuthenticationException or IOException)
                                       {
@@ -599,7 +599,7 @@ public class StreamLabTests
             try
             {
                 await Reel.OpenAsync(StreamSource.ForTcp("127.0.0.1", port, true), TimeSpan.FromSeconds(10));
-                Assert.That(false, Is.True, "an untrusted certificate was accepted");
+                Assert.Fail("an untrusted certificate was accepted");
             }
             catch (AuthenticationException ex)
             {

@@ -1,4 +1,4 @@
-﻿namespace Silo.DbModel.Universal;
+namespace Silo.DbModel.Universal;
 
 /// <summary>
 ///     Defines a type of universal data which is installed or present.
@@ -40,8 +40,8 @@ public class UniversalType
 public class IncludeUniversal
 {
     public bool   Critical  { get; set; }
-    public string Id        { get; set; }
-    public string LocalName { get; set; }
+    public string Id        { get; set; } = string.Empty;
+    public string LocalName { get; set; } = string.Empty;
 }
 
 /// <summary>

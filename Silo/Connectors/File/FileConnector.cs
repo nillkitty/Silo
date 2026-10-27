@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using Microsoft.Win32;
 using Silo.Extensions;
 using Silo.Providers;
@@ -16,7 +16,7 @@ public class FileConnector : ConnectorBase<FileModel, FileState>, IUriConnector,
 {
     public string? Description => "Folders and files on this computer, and shares on the network";
 
-    public IConnectorSetup CreateSetup(ConnectorSetupContext context)
+    public new IConnectorSetup CreateSetup(ConnectorSetupContext context)
     {
         return new UriFieldSetup(this, text => UriRules.Check(text, [this], UriRules.AnyScope), "Folder or file",
                                  "Examples:  C:\\Data    D:\\Reports\\2026.xlsx    \\\\server\\share\\folder", pickers:

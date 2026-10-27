@@ -1,4 +1,4 @@
-﻿using System.DirectoryServices;
+using System.DirectoryServices;
 using System.Runtime.ExceptionServices;
 using Silo.ViewModel;
 using Telefrag.DI;
@@ -63,7 +63,7 @@ public class LdapConnection : LdapModel, IConnection, ICommandProvider
     protected override bool IsLoaded => _bound;
 
     public bool?        ConnectionState  => State is LdapState.Connected or LdapState.Busy or LdapState.Aborting;
-    public IConnector   Connector        { get; }
+    public new IConnector Connector      { get; }
     public bool         IsInTree         => Node?.IsVisible ?? false;
     public List<object> Metadata         { get; }
     public string?      PersistentConfig { get; }
@@ -145,7 +145,7 @@ public class LdapConnection : LdapModel, IConnection, ICommandProvider
         var connector = (LdapConnector)Connector;
 
         // touching the options binds the entry, so it has to know who it is by now
-        entry.Options.PageSize         = connector.PageSize ?? 10_000;
+        entry.Options!.PageSize        = connector.PageSize ?? 10_000;
         entry.Options.Referral         = connector.Referral;
         entry.Options.PasswordEncoding = connector.PasswordEncoding;
     }

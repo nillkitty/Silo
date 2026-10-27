@@ -135,7 +135,7 @@ public class EnumRulesTests
         try
         {
             EnumRules.Require(e, []);
-            Assert.That(false, Is.True, "should have thrown");
+            Assert.Fail("should have thrown");
         }
         catch (DefinitionException ex)
         {

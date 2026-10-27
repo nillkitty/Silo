@@ -1,4 +1,4 @@
-﻿using Silo.Model;
+using Silo.Model;
 
 namespace Silo.Commanding;
 
@@ -17,7 +17,7 @@ public static class Enabler
     /// <summary>
     ///     Enabled if the Silo is authorable
     /// </summary>
-    public static EnablerFunc IsSiloAuthorable => _ => _active.IsAuthorable;
+    public static EnablerFunc IsSiloAuthorable => _ => _active?.IsAuthorable ?? false;
 
     /// <summary>
     ///     Enabled if the Active SIlo has been loaded.
