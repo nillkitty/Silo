@@ -17,6 +17,9 @@ public class SiloCommands(OpenSilo silo)
     /// <summary>Silo -> Convert to Archive Format</summary>
     public SiloCommand ConvertToArchive => new ConvertToArchiveCommand(Silo);
 
+    /// <summary>Silo -> Add Address Space -> ... (the command parameter picks the family: 4, 6 or both)</summary>
+    public SiloCommand AddAddressSpace => new AddAddressSpaceCommand(Silo);
+
     /// <summary>Silo -> Export All</summary>
     public SiloCommand ExportAll => new ExportAllCommand(Silo);
 

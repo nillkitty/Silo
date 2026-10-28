@@ -62,6 +62,49 @@ public sealed class ExplorerView : UserControl, IClipboardSurface
     /// <summary>The node selected in the tree now, or null.</summary>
     public ExplorerNode? SelectedNode => _tree.SelectedItem as ExplorerNode;
 
+    /// <summary>
+    ///     Shows the node whose model is <paramref name="model" /> (the object a <see cref="Silo.ViewModel.SiloNode" /> was made
+    ///     with): the tree is brought up to date, the nodes above it are expanded, and it is selected and scrolled into view.
+    ///     The node has to be in the tree already (read the nodes above it first).
+    /// </summary>
+    /// <returns>False when the Explorer has no such node.</returns>
+    public bool Reveal(object model)
+    {
+        Refresh(true);
+
+        var target = _roots.SelectMany(r => r.Descendants()).FirstOrDefault(n => ReferenceEquals(n.Model, model));
+        if (target is null) return false;
+
+        for (var parent = target.Parent; parent is not null; parent = parent.Parent) parent.IsExpanded = true;
+
+        _userChoseSelection = true;
+        target.IsSelected   = true;
+
+        // the rows of what was just expanded exist a moment later
+        Dispatcher.BeginInvoke(new Action(() =>
+                                          {
+                                              _tree.UpdateLayout();
+                                              ContainerOf(target)?.BringIntoView();
+                                          }), DispatcherPriority.Loaded);
+        return true;
+    }
+
+    private TreeViewItem? ContainerOf(ExplorerNode node)
+    {
+        var path = new Stack<ExplorerNode>();
+        for (var n = node; n is not null; n = n.Parent) path.Push(n);
+
+        ItemsControl host = _tree;
+        foreach (var step in path)
+        {
+            if (host.ItemContainerGenerator.ContainerFromItem(step) is not TreeViewItem item) return null;
+
+            host = item;
+        }
+
+        return host as TreeViewItem;
+    }
+
     /// <summary>A document tab was opened, closed or kept: the remembered state is out of date.</summary>
     public void DocumentsChanged()
     {

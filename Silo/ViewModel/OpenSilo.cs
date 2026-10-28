@@ -1,4 +1,4 @@
-using System.Collections.ObjectModel;
+﻿using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using Microsoft.Win32;
 using Serilog;
@@ -11,6 +11,7 @@ using Silo.Hosting;
 using Silo.Providers.Crypto;
 using Silo.Providers.Data.Validation;
 using Silo.Providers.Format;
+using Silo.Providers.Tree;
 using Silo.Remote;
 using Silo.Settings;
 using Silo.Ui.Windows;
@@ -114,6 +115,38 @@ public partial class OpenSilo : ModelBase
     [Toggle("Remember Connections", "silo.rememberConnections", "Whether connections created are persisted if not explicitly removed",
             true)]
     public bool RememberConnections { get; set; } = true;
+
+    private bool _showIpv4;
+    private bool _showIpv6;
+    private bool _showDns;
+
+    [Toggle("IPv4 Address Space in Explorer", "silo.addressSpace.ipv4", "Whether the IPv4 address space is shown in the Explorer as a tree of subnets", false)]
+    public bool ShowIpv4AddressSpace
+    {
+        get => _showIpv4;
+        set => ShowAddressSpace(ref _showIpv4, value, AddressSpace.Ipv4);
+    }
+
+    [Toggle("IPv6 Address Space in Explorer", "silo.addressSpace.ipv6", "Whether the IPv6 address space is shown in the Explorer as a tree of subnets", false)]
+    public bool ShowIpv6AddressSpace
+    {
+        get => _showIpv6;
+        set => ShowAddressSpace(ref _showIpv6, value, AddressSpace.Ipv6);
+    }
+
+    [Toggle("Domain Names in Explorer", "silo.addressSpace.dns", "Whether the domain name space is shown in the Explorer as a tree of names", false)]
+    public bool ShowDnsNames
+    {
+        get => _showDns;
+        set => ShowAddressSpace(ref _showDns, value, AddressSpace.Dns);
+    }
+
+    // setting the preference (by hand, or read from the Silo as it is opened) puts the tree in the Explorer or takes it out
+    private void ShowAddressSpace(ref bool field, bool value, AddressSpace space)
+    {
+        field = value;
+        AddressSpaces.Sync(Nodes, space, value);
+    }
 
     [Toggle("Remember Explorer Tree", "silo.rememberExplorerTree", "Whether the state of the explorer pane is persisted", true)]
     public bool RememberExplorerTree { get; set; } = true;

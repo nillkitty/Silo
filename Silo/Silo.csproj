@@ -98,6 +98,7 @@
     <Folder Include="Connectors\Ssh\" />
     <Folder Include="Connectors\System\SysObj\" />
     <Folder Include="Authoring\" />
+    <Folder Include="Connectors\Web\OpenApi\" />
     <Folder Include="Subconnectors\" />
     <Folder Include="ViewModel\Features\" />
   </ItemGroup>

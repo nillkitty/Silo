@@ -1,4 +1,4 @@
-<Menu x:Class="Silo.Ui.MenuBar"
+﻿<Menu x:Class="Silo.Ui.MenuBar"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -110,6 +110,18 @@
                 <MenuItem Header="From _Clipboard..." CommandTarget="{Binding .}" Command="{Binding Commands.NewTable}" CommandParameter="clipboard"
                           ToolTip="A table made of the table or text on the clipboard (Excel, a web page, CSV...)" />
             </MenuItem>
+        </MenuItem>
+        <!-- The address space as a tree of subnets in the Explorer (Providers/Tree/NetworkTree.cs); the parameter picks the family. -->
+        <MenuItem Header="Add _Address Space">
+            <MenuItem Header="_IPv4" CommandTarget="{Binding .}" Command="{Binding Commands.AddAddressSpace}" CommandParameter="4"
+                      ToolTip="0.0.0.0/0 and everything below it: registries, reserved blocks, reverse DNS, WHOIS" />
+            <MenuItem Header="IPv_6" CommandTarget="{Binding .}" Command="{Binding Commands.AddAddressSpace}" CommandParameter="6"
+                      ToolTip="::/0 and everything below it: registries, reserved blocks, reverse DNS, WHOIS" />
+            <Separator />
+            <MenuItem Header="IPv4 and IPv6 _Both" CommandTarget="{Binding .}" Command="{Binding Commands.AddAddressSpace}" CommandParameter="both" />
+            <Separator />
+            <MenuItem Header="_Domain Names" CommandTarget="{Binding .}" Command="{Binding Commands.AddAddressSpace}" CommandParameter="dns"
+                      ToolTip="The root zone, top-level domains and the names you go to, with their records (A, MX, NS, TXT, DNSSEC...)" />
         </MenuItem>
         <Separator />
         <MenuItem Header="_Export/Backup" >

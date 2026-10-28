@@ -361,6 +361,9 @@ public partial class App : Application, IContainerHost
         // Data bindings ({bind:Name} in diagrams): sampled while their Silo is open.
         DataBindingService.Current.Start();
 
+        // Silo's own MCP server, when it was left on (Tools > MCP Server).
+        Silo.Connectors.Web.Mcp.McpHost.Current.StartIfEnabled();
+
         // Working folders left behind by a crashed Silo process (those still in use are locked and skipped).
         _ = Task.Run(SiloArchive.SweepOrphans);
 
@@ -436,6 +439,7 @@ public partial class App : Application, IContainerHost
     {
         GlobalHotkeyService.Current.Stop();
         DataBindingService.Current.Stop();
+        Silo.Connectors.Web.Mcp.McpHost.Current.Stop(false);
         SingleInstance.StopServer();
         base.OnExit(e);
     }

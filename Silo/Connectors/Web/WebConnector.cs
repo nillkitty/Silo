@@ -69,7 +69,12 @@ public class WebConnection : ConnectionBase<HttpClient>, ICredentialSink
     public    bool               UseDefaultNetworkCredentials { get; private set; }
     protected IHttpClientFactory ClientFactory                { get; }
 
-    public WebConnection(WebConnector connector, Uri target, ConnectionRequest? crq = null) : base(connector)
+    public WebConnection(WebConnector connector, Uri target, ConnectionRequest? crq = null) : this((IConnector)connector, target, crq)
+    {
+    }
+
+    /// <summary>For connections built on the web one (MCP, OpenAPI...) whose connector is not the web connector.</summary>
+    protected WebConnection(IConnector connector, Uri target, ConnectionRequest? crq) : base(connector)
     {
         Destination       = new Destination(target.Required());
         ConnectionRequest = crq;

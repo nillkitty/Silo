@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using Silo.Connectors.Web.Mcp;
 
 namespace Silo.Cli;
 
@@ -19,7 +20,8 @@ internal static class SiloCli
         new(StringComparer.OrdinalIgnoreCase)
         {
             ["help"]    = ("Show this help.", _ => Help()),
-            ["version"] = ("Show the Silo version.", _ => Version())
+            ["version"] = ("Show the Silo version.", _ => Version()),
+            ["mcp"]     = ("Relay an AI tool's MCP session (standard input/output) to the running Silo.", McpBridge.Run)
         };
 
     public static int Run(string[] args)

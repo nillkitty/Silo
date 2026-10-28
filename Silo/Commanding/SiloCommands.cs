@@ -1,9 +1,10 @@
-using Microsoft.Win32;
+﻿using Microsoft.Win32;
 using Serilog;
 using Silo.Extensions;
 using Silo.Model;
 using Silo.Providers.Data;
 using Silo.Providers.Format;
+using Silo.Providers.Tree;
 using Silo.Tabular;
 using Silo.Ui;
 
@@ -33,6 +34,42 @@ public record CloseSiloCommand(OpenSilo Silo) : SiloCommand("_Close Silo", Enabl
     }
 }
 
+/// <summary>
+///     Silo -> Add Address Space -> ...: puts the IPv4 and/or the IPv6 address space in the Explorer, each a tree of subnets
+///     (see <see cref="NetworkTree" />). The command parameter says which: <c>4</c>, <c>6</c> or <c>both</c>.
+/// </summary>
+public record AddAddressSpaceCommand(OpenSilo Silo)
+    : SiloCommand("Add Address _Space", Enabler.IsSiloLoaded, ToolTip: "Browse the IPv4 and IPv6 address space, or the domain names, as a tree")
+{
+    protected override Task OnExecute(object? parameter)
+    {
+        AddressSpace[] spaces = (parameter as string) switch
+                                {
+                                    "4"   => [AddressSpace.Ipv4],
+                                    "6"   => [AddressSpace.Ipv6],
+                                    "dns" => [AddressSpace.Dns],
+                                    _     => [AddressSpace.Ipv4, AddressSpace.Ipv6]
+                                };
+
+        // the choice is kept in the Silo (a preference), so the tree is there again when the Silo is next opened
+        var  silo  = Silo.Required();
+        var  added = spaces.Where(s => !AddressSpaces.IsShown(silo, s)).ToList();
+        foreach (var space in added) AddressSpaces.Show(silo, space, true);
+
+        if (spaces.Length == 1 && AddressSpaces.RootOf(spaces[0]) is NetTreeNode or DnsNode)
+            AddressSpaces.Reveal(AddressSpaces.RootOf(spaces[0]));
+
+        App.Status(added.Count == 0
+                       ? "That is already in the Explorer"
+                       : "Added " + string.Join(" and ", added.Select(s => s switch
+                                                                           {
+                                                                               AddressSpace.Ipv4 => "the IPv4 address space",
+                                                                               AddressSpace.Ipv6 => "the IPv6 address space",
+                                                                               _                 => "the domain names"
+                                                                           })) + " to the Explorer");
+        return Task.CompletedTask;
+    }
+}
 /// <summary>
 ///     Silo -> Add Data -> Tabular -> ...: makes a new hand-authored table in the Silo and opens the editor on it. The
 ///     command parameter says which kind: <c>rich</c> (every column rich text), <c>plain</c> or <c>typed</c>.

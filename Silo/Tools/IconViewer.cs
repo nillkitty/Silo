@@ -34,10 +34,24 @@ public class IconViewer : ToolBase
     protected override UIElement OnBuildContent()
     {
         var rootGrid = new Grid();
+        rootGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         rootGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
         rootGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
-        var items = DiscoverIcons(ResourceIndex.Instance);
+        // the size and the light/dark choice are shared by every tile: the tiles bind to / draw with these
+        var view = new ViewSettings();
+        var items = DiscoverIcons(ResourceIndex.Instance, view.Icon);
+
+        var size = new Slider { Minimum = 16, Maximum = 160, Value = view.TileSize, Width = 200, VerticalAlignment = VerticalAlignment.Center, IsSnapToTickEnabled = true, TickFrequency = 4 };
+        size.ValueChanged += (_, e) => view.TileSize = e.NewValue;
+        var dark = new CheckBox { Content = "Dark", Margin = new Thickness(16, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center, ToolTip = "Shows the icons on a dark background" };
+        dark.Click += (_, _) => view.IsDark = dark.IsChecked == true;
+        var bar = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(8, 8, 8, 0) };
+        bar.Children.Add(new TextBlock { Text = "Size: ", VerticalAlignment = VerticalAlignment.Center });
+        bar.Children.Add(size);
+        bar.Children.Add(dark);
+        Grid.SetRow(bar, 0);
+        rootGrid.Children.Add(bar);
 
         var listBox = new ListBox
                       {
@@ -53,15 +67,16 @@ public class IconViewer : ToolBase
         var panelFactory = new FrameworkElementFactory(typeof(WrapPanel));
         listBox.ItemsPanel = new ItemsPanelTemplate(panelFactory);
 
-        var dt            = new DataTemplate(typeof(IconItem));
+        var dt           = new DataTemplate(typeof(IconItem));
         var borderFactory = new FrameworkElementFactory(typeof(Border));
         borderFactory.SetValue(Border.BorderThicknessProperty,  new Thickness(1));
-        borderFactory.SetValue(Border.BorderBrushProperty,      Brushes.LightGray);
-        borderFactory.SetValue(Border.BackgroundProperty,       Brushes.White);
+        // bound, not set: a template freezes a brush it is given, and these change with the light/dark switch
+        borderFactory.SetBinding(Border.BorderBrushProperty, new Binding(nameof(ViewSettings.Edge)) { Source = view });
+        borderFactory.SetBinding(Border.BackgroundProperty,  new Binding(nameof(ViewSettings.Tile)) { Source = view });
         borderFactory.SetValue(Border.MarginProperty,           new Thickness(2));
         borderFactory.SetValue(Border.PaddingProperty,          new Thickness(4));
-        borderFactory.SetValue(FrameworkElement.WidthProperty,  48.0);
-        borderFactory.SetValue(FrameworkElement.HeightProperty, 48.0);
+        borderFactory.SetBinding(FrameworkElement.WidthProperty,  new Binding(nameof(ViewSettings.TileSize)) { Source = view });
+        borderFactory.SetBinding(FrameworkElement.HeightProperty, new Binding(nameof(ViewSettings.TileSize)) { Source = view });
         borderFactory.SetBinding(FrameworkElement.ToolTipProperty, new Binding("Name"));
 
         var contentPresenter = new FrameworkElementFactory(typeof(ContentPresenter));
@@ -70,7 +85,7 @@ public class IconViewer : ToolBase
         dt.VisualTree        = borderFactory;
         listBox.ItemTemplate = dt;
 
-        Grid.SetRow(listBox, 0);
+        Grid.SetRow(listBox, 1);
         rootGrid.Children.Add(listBox);
 
         var bottomPanel = new Grid { Margin = new Thickness(8, 0, 8, 8) };
@@ -125,7 +140,7 @@ public class IconViewer : ToolBase
                                 if (!string.IsNullOrEmpty(copyBox.Text)) Clipboard.SetText(copyBox.Text);
                             };
 
-        Grid.SetRow(bottomPanel, 1);
+        Grid.SetRow(bottomPanel, 2);
         rootGrid.Children.Add(bottomPanel);
 
         return rootGrid;
@@ -135,7 +150,7 @@ public class IconViewer : ToolBase
     ///     Turns the index's icon-like resources into things to draw: dictionary
     ///     <c>StreamGeometry</c> entries first, then every PNG and SVG.
     /// </summary>
-    private static List<IconItem> DiscoverIcons(IResourceIndex index)
+    private static List<IconItem> DiscoverIcons(IResourceIndex index, Brush fill)
     {
         var list = new List<IconItem>();
 
@@ -145,7 +160,7 @@ public class IconViewer : ToolBase
                          {
                              Name          = entry.Name,
                              SourceType    = "StreamGeometry",
-                             VisualElement = CreatePathViewbox(geometry),
+                             VisualElement = CreatePathViewbox(geometry, fill),
                              CopyValue     = entry.Reference
                          });
 
@@ -167,9 +182,7 @@ public class IconViewer : ToolBase
                              VisualElement = new Image
                                              {
                                                  Source    = bitmap,
-                                                 Stretch   = Stretch.Uniform,
-                                                 MaxWidth  = 40,
-                                                 MaxHeight = 40
+                                                 Stretch   = Stretch.Uniform
                                              },
                              CopyValue = entry.Reference
                          });
@@ -183,7 +196,7 @@ public class IconViewer : ToolBase
                          {
                              Name          = entry.Name,
                              SourceType    = compiled ? "SVG Stream" : "Embedded SVG",
-                             VisualElement = CreatePathViewbox(geometry),
+                             VisualElement = CreatePathViewbox(geometry, fill),
                              CopyValue     = entry.Reference
                          });
             }
@@ -231,21 +244,61 @@ public class IconViewer : ToolBase
         }
     }
 
-    private static Viewbox CreatePathViewbox(Geometry geometry)
+    private static Viewbox CreatePathViewbox(Geometry geometry, Brush fill)
     {
         var path = new System.Windows.Shapes.Path
                    {
                        Data    = geometry,
-                       Fill    = Brushes.Black,
+                       Fill    = fill, // shared: the light/dark switch changes its colour for every icon at once
                        Stretch = Stretch.Uniform
                    };
 
-        return new Viewbox
-               {
-                   Width  = 24,
-                   Height = 24,
-                   Child  = path
-               };
+        return new Viewbox { Child = path }; // fills its tile, so it follows the tile's size
+    }
+
+    /// <summary>What the tiles share: how big they are and whether they are drawn light-on-dark.</summary>
+    private sealed class ViewSettings : System.ComponentModel.INotifyPropertyChanged
+    {
+        private bool   _dark;
+        private double _tileSize = 48;
+
+        public Brush Edge { get; private set; } = Brushes.LightGray;
+
+        /// <summary>The colour the icons are drawn in.</summary>
+        public SolidColorBrush Icon { get; } = new(Colors.Black);
+
+        public bool IsDark
+        {
+            get => _dark;
+            set
+            {
+                _dark      = value;
+                Icon.Color = value ? Colors.White : Colors.Black;
+                Tile       = value ? new SolidColorBrush(Color.FromRgb(0x20, 0x20, 0x20)) : Brushes.White;
+                Edge       = value ? new SolidColorBrush(Color.FromRgb(0x50, 0x50, 0x50)) : Brushes.LightGray;
+                Changed(nameof(Tile));
+                Changed(nameof(Edge));
+            }
+        }
+
+        public Brush Tile { get; private set; } = Brushes.White;
+
+        private void Changed(string name)
+        {
+            PropertyChanged?.Invoke(this, new System.ComponentModel.PropertyChangedEventArgs(name));
+        }
+
+        public double TileSize
+        {
+            get => _tileSize;
+            set
+            {
+                _tileSize = value;
+                PropertyChanged?.Invoke(this, new System.ComponentModel.PropertyChangedEventArgs(nameof(TileSize)));
+            }
+        }
+
+        public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged;
     }
 
     private static Geometry? ExtractGeometryFromSvg(string svgContent)
