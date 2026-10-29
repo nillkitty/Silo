@@ -44,12 +44,20 @@
     <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
     <!-- Parser Lab (Labs/Parser/*.cs): the rules of a data spec are made into Superpower text parsers -->
     <PackageReference Include="Superpower" Version="3.2.1" />
+    <PackageReference Include="Terminal.Gui" Version="2.5.0" />
+    <PackageReference Include="Terminal.Gui.Editor" Version="2.5.7" />
     <!-- YamlFormat (Providers/Format/YamlFormat.cs) -->
     <PackageReference Include="YamlDotNet" Version="18.1.0" />
     <!-- MarkdownFormat / MarkdownDataProvider (Providers/Format/MarkdownFormat.cs, MarkdownDataProvider.cs) -->
     <PackageReference Include="Markdig" Version="1.4.1" />
     <!-- Text editor (TextEditing/*.cs): editing, syntax colouring, folding and search -->
     <PackageReference Include="AvalonEdit" Version="6.3.1.120" />
+    <!-- In-process script hosts (Providers/Script/CSharp.cs, FSharp.cs, PowerShell.cs) -->
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Scripting" Version="5.9.0" />
+    <PackageReference Include="FSharp.Compiler.Service" Version="43.12.403" />
+    <PackageReference Include="Microsoft.PowerShell.SDK" Version="7.6.9" />
+    <!-- Microsoft.PowerShell.SDK drags in Markdig.Signed, which clashes with Markdig: keep it off the compile path. -->
+    <PackageReference Include="Markdig.Signed" Version="0.44.0" ExcludeAssets="compile" />
     <!-- Data bindings: perf:// sources (Bindings/BindingSources.cs) -->
     <!-- LDAP / Active Directory connector (Connectors/Ldap/*.cs) -->
     <!-- Embedded draw.io (Drawio/*.cs): hosts the draw.io editor in a WebView2 pane -->
@@ -99,6 +107,7 @@
     <Folder Include="Connectors\System\SysObj\" />
     <Folder Include="Authoring\" />
     <Folder Include="Connectors\Web\OpenApi\" />
+    <Folder Include="Adapters\" />
     <Folder Include="Subconnectors\" />
     <Folder Include="ViewModel\Features\" />
   </ItemGroup>

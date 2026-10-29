@@ -93,6 +93,7 @@ public static class Formats
         }
 
         Take(Resolve<IFileFormat>());
+        Take(Resolve<IScriptProvider>()); // registered as script providers only
         Take(Resolve<IImageFormat>());
         Take(Resolve<IDocumentWriter<CharacterCollection>>());
         Take(BuiltIn());
@@ -171,6 +172,11 @@ public static class Formats
         yield return new XpsFormat();
         yield return new AssemblyFormat();
         yield return new ExecutableFormat();
+        yield return new Script.CSharp();
+        yield return new Script.FSharp();
+        yield return new Script.PowerShell();
+        yield return new Script.Python();
+        yield return new Script.Cmd();
     }
 
     // ---- asking --------------------------------------------------------------------------------------------------

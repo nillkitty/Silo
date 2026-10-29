@@ -361,6 +361,9 @@ public partial class App : Application, IContainerHost
         // Data bindings ({bind:Name} in diagrams): sampled while their Silo is open.
         DataBindingService.Current.Start();
 
+        // Auto-add rules (Explorer > Auto-Add Items): started again as each Silo opens.
+        Silo.Roles.AutoAddService.ResumeOnOpen();
+
         // Silo's own MCP server, when it was left on (Tools > MCP Server).
         Silo.Connectors.Web.Mcp.McpHost.Current.StartIfEnabled();
 

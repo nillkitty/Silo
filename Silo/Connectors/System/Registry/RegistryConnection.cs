@@ -1,3 +1,5 @@
+using Silo.Providers.Monitoring;
+using Silo.Providers.Reflection;
 using System.IO;
 using System.Security;
 using Microsoft.Win32;
@@ -62,7 +64,7 @@ public record KeyNode : SiloNode
 ///     <see cref="Path" /> is the key's full name as <see cref="RegistryKey.Name" /> spells it
 ///     (<c>HKEY_CURRENT_USER\Software\Silo</c>), empty for the root; a value is its key plus a <see cref="ValueName" />.
 /// </summary>
-public class RegistryModel : INodeProvider<RegistryKey>, INodeDetails, INodeViewProvider
+public partial class RegistryModel : INodeProvider<RegistryKey>, INodeDetails, INodeViewProvider, IChangeMonitorable, IItemContainer
 {
     /// <summary>The hives that make up the local registry's root.</summary>
     private static readonly RegistryHive[] LocalHives =

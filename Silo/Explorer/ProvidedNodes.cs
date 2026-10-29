@@ -22,6 +22,7 @@ public static class ProvidedNodes
     public static IEnumerable<ExplorerNode> For(OpenSilo silo)
     {
         var seen = new HashSet<string>(StringComparer.Ordinal);
+        NodeUriCheck.Reset(); // the tree is being built again: every node is checked afresh
 
         foreach (var (host, scope) in Hosts(silo))
         {
@@ -41,6 +42,7 @@ public static class ProvidedNodes
     {
         string key  = KeyOf(source, parentKey, index, seen);
         string kind = KindOf(source.DataContext);
+        NodeUriCheck.Queue(key, source);
 
         // children that are read when the node is first expanded: until then it shows a "Loading..." entry, which makes it expandable
         bool lazy = source.ChildLoader is not null && !source.ChildrenLoaded;

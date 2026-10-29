@@ -63,6 +63,12 @@
             <MenuItem Header="_JSON" Tag="Json" Click="NewTextDocument_Click" />
             <MenuItem Header="_XML" Tag="Xml" Click="NewTextDocument_Click" />
             <MenuItem Header="_YAML" Tag="Yaml" Click="NewTextDocument_Click" />
+            <Separator />
+            <MenuItem Header="_C# Script" Tag="CSharp" Click="NewTextDocument_Click" />
+            <MenuItem Header="_F# Script" Tag="FSharp" Click="NewTextDocument_Click" />
+            <MenuItem Header="Po_werShell Script" Tag="PowerShell" Click="NewTextDocument_Click" />
+            <MenuItem Header="P_ython Script" Tag="Python" Click="NewTextDocument_Click" />
+            <MenuItem Header="_Batch Script" Tag="Batch" Click="NewTextDocument_Click" />
         </MenuItem>
         <MenuItem Header="Open Te_xt File..." Click="OpenTextFile_Click"
                   ToolTip="Open a file in the text editor (JSON, XML and YAML are coloured, checked and can be formatted)" />

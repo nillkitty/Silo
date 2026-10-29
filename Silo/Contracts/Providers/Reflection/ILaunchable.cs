@@ -2,7 +2,19 @@
 
 public interface ILaunchable
 {
-    string? ArgTemplate     { get; }
-    string? FilePath        { get; }
-    bool    UseShellExecute { get; }
+    /// <summary>
+    ///     Gets the template used for arguments;  if null, arguments are
+    ///     sent in normal form
+    /// </summary>
+    string? ArgTemplate { get; }
+
+    /// <summary>
+    ///     The path of the executable to launch
+    /// </summary>
+    string? FilePath { get; }
+
+    /// <summary>
+    ///     Whether to run the processes using the shell
+    /// </summary>
+    bool UseShellExecute { get; }
 }

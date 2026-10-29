@@ -1,4 +1,6 @@
 using System.IO;
+using Silo.Providers.Monitoring;
+using Silo.Providers.Reflection;
 using Silo.ViewModel;
 using Telefrag.DI;
 
@@ -13,7 +15,7 @@ namespace Silo.Connectors.File;
 ///     children
 ///     as it is expanded and in turn holds a <see cref="FileModel" /> for each of them).
 /// </summary>
-public class FileModel : INodeProvider<FileSystemInfo>, INodeDetails, INodeViewProvider
+public partial class FileModel : INodeProvider<FileSystemInfo>, INodeDetails, INodeViewProvider, IChangeMonitorable, IItemContainer
 {
     /// <summary>The most entries read from one folder; a folder with more shows the first ones and says so.</summary>
     public const int EntryLimit = 20000;

@@ -1,3 +1,4 @@
+using System.Security;
 using Microsoft.Win32;
 using Silo.Connectors.File;
 using Silo.Contracts.ConnectorServices;
@@ -75,12 +76,21 @@ public class RegistryConnector : IConnector, IUriConnector, IDestinationSource, 
     {
         try
         {
-            Uris.ParseUri(uri, true);
-            return null;
+            var path = Uris.ParseUri(uri, true);
+            if (path is null || path.IsLocalRoot || path.Path is "*" || string.IsNullOrWhiteSpace(path.Path)) return null;
+
+            // the key must still be there (a missing one is what a stale, remembered node looks like)
+            using var hive = RegistryKey.OpenBaseKey(path.Hive, RegistryView.Default);
+            using var key  = hive.OpenSubKey(path.Path.Trim('\\'));
+            return key is null ? $"\"{path.FullName}\" does not exist." : null;
         }
         catch (Exception ex) when (ex is NotSupportedException or UriFormatException)
         {
             return ex.Message;
+        }
+        catch (Exception ex) when (ex is SecurityException or UnauthorizedAccessException or IOException)
+        {
+            return null; // present but not readable: not the URI's fault
         }
     }
 }

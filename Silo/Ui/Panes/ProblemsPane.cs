@@ -26,6 +26,16 @@ public enum ProblemSeverity
     Error
 }
 
+/// <summary>Who a <see cref="Problem" /> is shown to.</summary>
+public enum ProblemVisibility
+{
+    /// <summary>Everyone.</summary>
+    User,
+
+    /// <summary>Only when the design level is Developer or higher (see <c>AppDesignLevel</c>): about the program's own state, not the user's documents.</summary>
+    Dev
+}
+
 /// <summary>One line of the Problems pane.</summary>
 /// <param name="Severity">How bad it is.</param>
 /// <param name="Message">What is wrong.</param>
@@ -37,14 +47,16 @@ public enum ProblemSeverity
 ///     Shows the place (brings the document forward and puts the caret there); null when there is nowhere to
 ///     go.
 /// </param>
+/// <param name="Visibility">Who sees it; <see cref="ProblemVisibility.Dev" /> problems are hidden below the Developer design level.</param>
 public sealed record Problem(
-    ProblemSeverity Severity,
-    string          Message,
-    string          Document,
-    int?            Line,
-    int?            Column,
-    string          Source,
-    Action?         Go = null);
+    ProblemSeverity   Severity,
+    string            Message,
+    string            Document,
+    int?              Line,
+    int?              Column,
+    string            Source,
+    Action?           Go         = null,
+    ProblemVisibility Visibility = ProblemVisibility.User);
 
 /// <summary>
 ///     What the Problems pane lists: each owner (an open text editor, say) publishes its problems, replacing the ones it
@@ -58,8 +70,14 @@ public static class ProblemList
     /// <summary>The owners in the order they first published (so the list does not jump around).</summary>
     private static readonly List<object> Order = [];
 
-    /// <summary>Every problem, owner by owner.</summary>
-    public static IReadOnlyList<Problem> All => Order.SelectMany(o => ByOwner[o]).ToList();
+    /// <summary>Every problem the current design level shows, owner by owner.</summary>
+    public static IReadOnlyList<Problem> All => Order.SelectMany(o => ByOwner[o]).Where(IsVisible).ToList();
+
+    /// <summary>Whether the current design level shows the problem.</summary>
+    public static bool IsVisible(Problem problem)
+    {
+        return problem.Visibility == ProblemVisibility.User || Design.AppDesignLevel.Instance.IsAtLeast(Design.DesignLevel.Developer);
+    }
 
     /// <summary>The owners that have problems right now.</summary>
     public static IReadOnlyList<object> Owners => Order.Where(o => ByOwner[o].Count > 0).ToList();
@@ -70,7 +88,7 @@ public static class ProblemList
     /// <summary>The problems of one owner (none when it has published none).</summary>
     public static IReadOnlyList<Problem> Of(object owner)
     {
-        return ByOwner.TryGetValue(owner, out var list) ? list : [];
+        return ByOwner.TryGetValue(owner, out var list) ? list.Where(IsVisible).ToList() : [];
     }
 
     /// <summary>Replaces <paramref name="owner" />'s problems with <paramref name="problems" />.</summary>
@@ -379,6 +397,7 @@ internal sealed class ProblemsView : UserControl
 
         // the list follows the published problems, and "current document only" follows the selected tab
         ProblemList.Changed += OnProblemsChanged;
+        Design.AppDesignLevel.Instance.PropertyChanged += (_, _) => Dispatcher.BeginInvoke(new Action(Refresh)); // Dev problems come and go with the design level
         Loaded              += (_, _) => Hook(true);
         Unloaded            += (_, _) => Hook(false);
         Refresh();

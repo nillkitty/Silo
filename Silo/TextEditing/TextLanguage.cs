@@ -1,4 +1,5 @@
-﻿using Silo.Providers.Format;
+﻿using Silo.Contracts.Core;
+using Silo.Providers.Format;
 using Silo.Providers.Reflection;
 
 namespace Silo.TextEditing;
@@ -13,14 +14,42 @@ public enum TextLanguage
 
     Xml,
 
-    Yaml
+    Yaml,
+
+    /// <summary>C# (source and <c>.csx</c> scripts).</summary>
+    CSharp,
+
+    /// <summary>F# (source and <c>.fsx</c> scripts).</summary>
+    FSharp,
+
+    /// <summary>PowerShell scripts and modules.</summary>
+    PowerShell,
+
+    Python,
+
+    /// <summary>Windows command scripts (<c>.bat</c>, <c>.cmd</c>).</summary>
+    Batch
 }
 
 /// <summary>Names, file types and detection for <see cref="TextLanguage" />.</summary>
 public static class TextLanguages
 {
     /// <summary>Every language, in the order menus list them.</summary>
-    public static IReadOnlyList<TextLanguage> All { get; } = [TextLanguage.PlainText, TextLanguage.Json, TextLanguage.Xml, TextLanguage.Yaml];
+    public static IReadOnlyList<TextLanguage> All { get; } =
+    [
+        TextLanguage.PlainText, TextLanguage.Json, TextLanguage.Xml, TextLanguage.Yaml,
+        TextLanguage.CSharp, TextLanguage.FSharp, TextLanguage.PowerShell, TextLanguage.Python, TextLanguage.Batch
+    ];
+
+    /// <summary>The languages that are code: highlighted, but not restructured or converted.</summary>
+    public static IReadOnlyList<TextLanguage> Scripts { get; } =
+        [TextLanguage.CSharp, TextLanguage.FSharp, TextLanguage.PowerShell, TextLanguage.Python, TextLanguage.Batch];
+
+    /// <summary>Whether the language is code (see <see cref="Scripts" />).</summary>
+    public static bool IsScript(this TextLanguage language) => Scripts.Contains(language);
+
+    /// <summary>Whether the language has a data structure that can be checked, formatted and converted (JSON, XML, YAML).</summary>
+    public static bool IsStructured(this TextLanguage language) => Structured.Contains(language);
 
     /// <summary>The languages that have a structure (they can be checked, formatted and converted).</summary>
     public static IReadOnlyList<TextLanguage> Structured { get; } = [TextLanguage.Json, TextLanguage.Xml, TextLanguage.Yaml];
@@ -31,6 +60,11 @@ public static class TextLanguages
                                                                         TextLanguage.Json => "JSON",
                                                                         TextLanguage.Xml  => "XML",
                                                                         TextLanguage.Yaml => "YAML",
+                                                                        TextLanguage.CSharp     => "C#",
+                                                                        TextLanguage.FSharp     => "F#",
+                                                                        TextLanguage.PowerShell => "PowerShell",
+                                                                        TextLanguage.Python     => "Python",
+                                                                        TextLanguage.Batch      => "Batch",
                                                                         _                 => "Plain Text"
                                                                     };
 
@@ -40,6 +74,10 @@ public static class TextLanguages
                                                                         TextLanguage.Json => Formats.Of<JsonFormat>(),
                                                                         TextLanguage.Xml  => Formats.Of<XmlFormat>(),
                                                                         TextLanguage.Yaml => Formats.Of<YamlFormat>(),
+                                                                        TextLanguage.CSharp => Formats.Of<CSharpFormat>(),
+                                                                        TextLanguage.FSharp or TextLanguage.PowerShell or TextLanguage.Python or TextLanguage.Batch
+                                                                            => (IFileFormat?)Formats.All.OfType<IScriptProvider>().FirstOrDefault(p => FromFormat(p) == language) ??
+                                                                               Formats.Of<PlainTextFormat>(),
                                                                         _                 => Formats.Of<PlainTextFormat>()
                                                                     };
 
@@ -59,8 +97,8 @@ public static class TextLanguages
                 Formats.Of<PlainTextFormat>(), Formats.Of<JsonFormat>(), Formats.Of<XmlFormat>(), Formats.Of<YamlFormat>(), Formats.Of<LogFormat>(),
                 Formats.Of<MarkdownFormat>(), Formats.Of<CsvFormat>(), Formats.Of<IniFormat>(), Formats.Of<ConfigFormat>()
             ];
-            string all = string.Join(';', text.Select(f => f.Pattern()));
-            return $"Text files ({all})|{all}|" + string.Join('|', Structured.Select(l => l.Format().Filter())) + "|" + Formats.AllFiles;
+            string all = string.Join(';', text.Concat(Scripts.Select(l => l.Format())).Select(f => f.Pattern()));
+            return $"Text files ({all})|{all}|" + string.Join('|', Structured.Concat(Scripts).Select(l => l.Format().Filter())) + "|" + Formats.AllFiles;
         }
     }
 
@@ -79,13 +117,38 @@ public static class TextLanguages
     }
 
     /// <summary>The language files of <paramref name="format" /> are written in (a dialect's base syntax); null when it is none of them.</summary>
-    public static TextLanguage? FromFormat(IFileFormat format) => Formats.SyntaxOf(format) switch
-                                                                  {
-                                                                      JsonFormat => TextLanguage.Json,
-                                                                      XmlFormat  => TextLanguage.Xml,
-                                                                      YamlFormat => TextLanguage.Yaml,
-                                                                      _          => null
-                                                                  };
+    public static TextLanguage? FromFormat(IFileFormat format) =>
+        format is IScriptProvider { EditorLanguage: { } name } && Enum.TryParse<TextLanguage>(name, true, out var script)
+            ? script
+            : Formats.SyntaxOf(format) switch
+              {
+                  JsonFormat   => TextLanguage.Json,
+                  XmlFormat    => TextLanguage.Xml,
+                  YamlFormat   => TextLanguage.Yaml,
+                  CSharpFormat => TextLanguage.CSharp,
+                  _            => null
+              };
+
+    /// <summary>
+    ///     The script language a stored item's type or format name picks out (a script provider's language name, display
+    ///     name, content type or extension: "powershell", "PowerShell", "text/x-python", "ps1"); null when it names none.
+    /// </summary>
+    public static TextLanguage? FromTypeName(string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return null;
+
+        string wanted = name.Trim().TrimStart('.');
+        foreach (var provider in Formats.All.OfType<IScriptProvider>())
+        {
+            bool match = string.Equals(provider.EditorLanguage, wanted, StringComparison.OrdinalIgnoreCase) ||
+                         string.Equals(provider.DisplayName,    wanted, StringComparison.OrdinalIgnoreCase) ||
+                         string.Equals(provider.ContentType,    wanted, StringComparison.OrdinalIgnoreCase) ||
+                         provider.FileExtensions.Any(e => e.Trim().Equals(wanted, StringComparison.OrdinalIgnoreCase));
+            if (match && FromFormat(provider) is { } language) return language;
+        }
+
+        return null;
+    }
 
     /// <summary>The language an HTTP <c>Content-Type</c> names; null when it names none of them.</summary>
     public static TextLanguage? FromContentType(string? contentType)

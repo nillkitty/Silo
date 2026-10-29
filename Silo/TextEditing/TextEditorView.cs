@@ -357,7 +357,7 @@ public sealed class TextEditorView : UserControl, IDocumentContent, IEditContrib
     /// </summary>
     private bool ReadyToTransform(string what)
     {
-        if (EditorLanguage == TextLanguage.PlainText)
+        if (!EditorLanguage.IsStructured())
         {
             App.Status($"Choose JSON, XML or YAML to {what}: plain text has no structure");
             return false;
@@ -450,7 +450,7 @@ public sealed class TextEditorView : UserControl, IDocumentContent, IEditContrib
             var item = new MenuItem
                        {
                            Header    = "To " + t.DisplayName(),
-                           IsEnabled = EditorLanguage != TextLanguage.PlainText && t != EditorLanguage
+                           IsEnabled = EditorLanguage.IsStructured() && t != EditorLanguage
                        };
             item.Click += (_, _) => ConvertTo(t);
             menu.Items.Add(item);
@@ -656,7 +656,7 @@ public sealed class TextEditorView : UserControl, IDocumentContent, IEditContrib
         UpdatePosition();
 
         int errors = _analysis.ErrorCount, warnings = _analysis.WarningCount;
-        _problems.Text = EditorLanguage    == TextLanguage.PlainText ? string.Empty :
+        _problems.Text = !EditorLanguage.IsStructured() ? string.Empty :
                          errors + warnings == 0                      ? "? No problems" : $"{errors} error(s), {warnings} warning(s)";
         _problems.Foreground = errors   > 0 ? LabUi.Red :
                                warnings > 0 ? LabUi.Amber : TryFindResource("Theme.TextMuted") as Brush ?? Brushes.Gray;
@@ -862,7 +862,7 @@ public sealed class TextEditorView : UserControl, IDocumentContent, IEditContrib
 
     public IEnumerable<EditEntry> EditEntries()
     {
-        bool structured = EditorLanguage != TextLanguage.PlainText;
+        bool structured = EditorLanguage.IsStructured();
         bool writable   = !_editor.IsReadOnly && _loaded;
 
         yield return EditEntry.Item("_Find...",       OpenFind, gesture: "Ctrl+F");

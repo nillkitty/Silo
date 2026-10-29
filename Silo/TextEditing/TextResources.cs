@@ -272,10 +272,13 @@ public sealed class StoredTextResource(IStoredStore store, string key, StoredSco
             return Task.FromResult(TextContent.Of(_document.Text ?? string.Empty, TextLanguageNames.Parse(_document.Language)));
         }
 
-        if (IsString(record))
-            return Task.FromResult(TextContent.Of(StoredCodec.Deserialize<string>(record.Data) ?? string.Empty));
+        // a snippet kept with a scripting type (its format or type names the script language) opens highlighted as that script
+        var script =TextLanguages.FromTypeName(record.Format) ?? TextLanguages.FromTypeName(record.TypeName) ?? (TextLanguages.FromFileName(key) is { } byName && byName.IsScript() ? byName : null);
 
-        return Task.FromResult(TextContent.Of(record.Data, record.Format == StoredCodec.Json ? TextLanguage.Json : null));
+        if (IsString(record))
+            return Task.FromResult(TextContent.Of(StoredCodec.Deserialize<string>(record.Data) ?? string.Empty, script));
+
+        return Task.FromResult(TextContent.Of(record.Data, script ?? (record.Format == StoredCodec.Json ? TextLanguage.Json : null)));
     }
 
     public override void Save(TextContent content)
