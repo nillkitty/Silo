@@ -1,5 +1,6 @@
 ﻿using System.Text;
 using Newtonsoft.Json;
+using Silo.Labs.Parser;
 using Silo.Providers.Data;
 using SyntaxKind = Silo.DbModel.Meta.SyntaxKind;
 
@@ -23,6 +24,8 @@ public sealed partial class RegexLabSession : LabSession<RegexDoc>
         [
             new RegexMatchesInspector(this).OwnedBy(LabOwner.OfAspect("matches")),
             new RegexReplaceInspector(this).OwnedBy(LabOwner.OfAspect("matches")),
+            new RegexTestsInspector(this).OwnedBy(LabOwner.OfAspect("tests")),
+            new RegexSamplesInspector(this).OwnedBy(LabOwner.OfAspect("tests")),
             new RegexExplainInspector(this).OwnedBy(LabOwner.OfAspect("explain")),
             new RegexReferenceInspector(this).OwnedBy(LabOwner.OfAspect("explain")),
             new RegexCodeInspector(this).OwnedBy(LabOwner.OfAspect("code")),
@@ -59,7 +62,7 @@ public sealed partial class RegexLabSession : LabSession<RegexDoc>
     private RegexLab Lab_ => (RegexLab)LabOf;
 
     /// <summary>3: the panes belong to aspects, and there is a pane for the active group; windows saved with the old arrangement start afresh.</summary>
-    public override int LayoutVersion => 3;
+    public override int LayoutVersion => 4;
 
     public override IReadOnlyList<LabInspector> Inspectors => _inspectors;
 
@@ -148,8 +151,42 @@ public sealed partial class RegexLabSession : LabSession<RegexDoc>
         _rerun.Cancel();
         _run = RegexEngine.Run(_doc, Lab_.Timeout, Lab_.MaxMatches);
         Status = _run.Summary;
+        RunTests();
         Changed?.Invoke(this, EventArgs.Empty);
         RaiseProblemsChanged();
+    }
+
+    /// <summary>How each test went with the regex as it is (they are run again with every change: a regex is quick).</summary>
+    public IReadOnlyDictionary<string, TestResult> Results => _results;
+
+    private Dictionary<string, TestResult> _results = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>A name for a test that no other test has.</summary>
+    public string UniqueTestName(string wanted)
+    {
+        if (!_doc.Tests.Any(t => string.Equals(t.Name, wanted, StringComparison.OrdinalIgnoreCase))) return wanted;
+
+        for (int i = 2;; i++)
+            if (!_doc.Tests.Any(t => string.Equals(t.Name, wanted + " " + i, StringComparison.OrdinalIgnoreCase)))
+                return wanted + " " + i;
+    }
+
+    /// <summary>Adds a test (run at once, as every test is with each change) and returns it.</summary>
+    public TestCase AddTest(string name, IEnumerable<string> sets, Expectation expect, IEnumerable<string>? extra = null)
+    {
+        var test = new TestCase { Name = UniqueTestName(string.IsNullOrWhiteSpace(name) ? "Test" : name.Trim()), Samples = sets.ToList(), Expect = expect, Extra = extra?.ToList() ?? [] };
+        EditNow(d => d.Tests.Add(test));
+        return test;
+    }
+
+    private void RunTests()
+    {
+        var results = new Dictionary<string, TestResult>(StringComparer.OrdinalIgnoreCase);
+        if (_run.IsValid)
+            foreach (var test in _doc.Tests)
+                results[test.Name] = RegexTestRunner.Run(_doc, test, Lab_.Timeout);
+
+        _results = results;
     }
 
     // ---- library, recent and problems (the panes every Lab window has) -------------------------------

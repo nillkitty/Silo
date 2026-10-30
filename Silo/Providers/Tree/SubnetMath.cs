@@ -87,6 +87,27 @@ public static class SubnetMath
             yield return new IPSubnet(FromNumber(start + step * i, family), newPrefix);
     }
 
+    /// <summary>
+    ///     The fewest subnets that together are exactly the addresses from <paramref name="first" /> to <paramref name="last" />
+    ///     (numbers), in address order.
+    /// </summary>
+    public static IEnumerable<IPSubnet> CoverRange(BigInteger first, BigInteger last, AddressFamily family)
+    {
+        int bits = family == AddressFamily.InterNetwork ? 32 : 128;
+        while (first <= last)
+        {
+            // the largest block that starts at first (aligned) and ends no later than last
+            int align = 0;
+            while (align < bits && (first & ((BigInteger.One << (align + 1)) - 1)) == 0) align++;
+
+            int fit = 0;
+            while (fit < bits && (BigInteger.One << (fit + 1)) <= last - first + 1) fit++;
+
+            int size = Math.Min(align, fit);
+            yield return new IPSubnet(FromNumber(first, family), bits - size);
+            first += BigInteger.One << size;
+        }
+    }
     /// <summary>The CIDR text: <c>10.0.0.0/8</c>, <c>2001:db8::/32</c> (the network address, whatever address the subnet was made with).</summary>
     public static string Cidr(this IPSubnet subnet) => $"{subnet.Network}/{subnet.PrefixLength}";
 

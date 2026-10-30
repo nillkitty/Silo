@@ -1,5 +1,7 @@
 ﻿using System.Text;
 using System.Text.RegularExpressions;
+using Newtonsoft.Json;
+using Silo.Labs.Parser;
 
 namespace Silo.Labs.Regexes;
 
@@ -24,9 +26,20 @@ public sealed class RegexDoc
     /// <summary>What a match is replaced with (<c>$1</c>, <c>${name}</c>, <c>$&amp;</c>).</summary>
     public string Replacement { get; set; } = string.Empty;
 
+    /// <summary>Sets of strings to try the regex on (a sample is only found or not found; <see cref="Tests" /> say what is expected of them).</summary>
+    public List<SampleSet> Samples { get; set; } = [];
+
+    /// <summary>What is expected of the samples: each test passes or fails.</summary>
+    public List<TestCase> Tests { get; set; } = [];
+
     public RegexDoc Clone()
     {
-        return new RegexDoc { Name = Name, Pattern = Pattern, Flags = Flags, Description = Description, TestText = TestText, Replacement = Replacement };
+        return new RegexDoc
+               {
+                   Name = Name, Pattern = Pattern, Flags = Flags, Description = Description, TestText = TestText, Replacement = Replacement,
+                   Samples = JsonConvert.DeserializeObject<List<SampleSet>>(JsonConvert.SerializeObject(Samples)) ?? [],
+                   Tests   = JsonConvert.DeserializeObject<List<TestCase>>(JsonConvert.SerializeObject(Tests)) ?? []
+               };
     }
 
     public override string ToString()

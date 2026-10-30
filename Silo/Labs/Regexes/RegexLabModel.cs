@@ -180,6 +180,7 @@ public sealed partial class RegexLabSession
     {
         var regex = LabOwner.OfSubjectType(SubjectId);
         yield return new LabAspect("matches", "Matches", regex) { IconKey = "Checklist", Description = "What the regex matched in the text, and what a replacement makes of it" };
+        yield return new LabAspect("tests", "Tests", regex) { IconKey = "Flask", Description = "Sets of sample strings, and tests that say what the regex should and should not match" };
         yield return new LabAspect("explain", "Explain", regex) { IconKey = "TbHelp", Description = "The pattern piece by piece, and a reference of the syntax" };
         yield return new LabAspect("code", "Code", regex) { IconKey = "Coding", Description = "The regex as code in other languages" };
         yield return new LabAspect("group", "Group", LabOwner.OfPartType(GroupType.Id))

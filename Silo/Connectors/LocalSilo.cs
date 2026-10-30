@@ -97,16 +97,6 @@ public class LocalSilo : VirtualRoot<OpenSilo>, INodeProvider<OpenSilo>
                };
     }
 
-    /// <summary>
-    ///     A leaf that says a folder has nothing in it yet and what will show up there, so an empty folder is not
-    ///     mistaken for a broken one.
-    /// </summary>
-    private static SiloNode Nothing(string text, Uri parent)
-    {
-        return new SiloNode(new FolderModel(text, "Note", parent.Append("none"), Icon("Document")), text, parent.Append("none"),
-                            Icon("Document"), null);
-    }
-
     private IEnumerable<SiloNode> MakeTopFolders()
     {
         var level = AppDesignLevel.Instance;
@@ -150,20 +140,14 @@ public class LocalSilo : VirtualRoot<OpenSilo>, INodeProvider<OpenSilo>
     private IEnumerable<SiloNode> MakeObjectShapeFolders()
     {
         var  items = GetSavedItems();
-        bool any   = false;
         foreach (var shape in SavedItems.ObjectShapes)
         {
             var ofShape = items.Where(i => i.Shape == shape).ToList();
             if (ofShape.Count == 0) continue;
-
-            any = true;
             string name = shape.ToString();
             yield return Folder($"{name} ({ofShape.Count})",                         Under("saved-objects", name), "DataStructure",
                                 () => MakeTypeFolders(shape, "saved-objects", name), expanded: true);
         }
-
-        if (!any)
-            yield return Nothing("(nothing saved yet: keyboard shortcuts and other saved objects appear here)", Under("saved-objects"));
     }
 
     private IEnumerable<SiloNode> MakeTypeFolders(DataShape shape, string root = "saved-scalars", string? shapeFolder = null)
@@ -172,18 +156,12 @@ public class LocalSilo : VirtualRoot<OpenSilo>, INodeProvider<OpenSilo>
                     .Where(i => i.Shape == shape)
                     .GroupBy(i => i.TypeLabel, StringComparer.Ordinal)
                     .OrderBy(g => g.Key, StringComparer.OrdinalIgnoreCase);
-
-        bool any = false;
         foreach (var group in groups)
         {
-            any = true;
             string label = group.Key;
             var    path  = shapeFolder is null ? new[] { root, label } : new[] { root, shapeFolder, label };
             yield return Folder($"{label} ({group.Count()})", Under(path), "Cube", () => group.Select(MakeItemNode).ToList(), "Type", true);
         }
-
-        if (!any && shapeFolder is null)
-            yield return Nothing("(nothing saved yet: characters and strings saved from the Unicode Explorer appear here)", Under(root));
     }
 
     private static SiloNode MakeItemNode(SavedItem item)
@@ -201,44 +179,41 @@ public class LocalSilo : VirtualRoot<OpenSilo>, INodeProvider<OpenSilo>
     /// <summary>The Silo's secrets by name, kind and provider. What a secret holds is never shown.</summary>
     private IEnumerable<SiloNode> MakeSecrets()
     {
-        const string none = "(no secrets stored yet: credentials and keys saved by connections will be listed here, by name only)";
-        if (Data?.Data is not ISecretStore store) return [Nothing(none, Under("security", "secrets"))];
+        if (Data?.Data is not ISecretStore store) return [];
 
         var items = store.GetSecrets()
                          .OrderBy(s => s.Key, StringComparer.OrdinalIgnoreCase)
                          .Select(s => new SiloNode(new SecretDetails(s), s.Key, Under("security", "secrets", s.Id.ToString()), Icon("Key"),
                                                    null))
                          .ToList();
-        return items.Count > 0 ? items : [Nothing(none, Under("security", "secrets"))];
+        return items;
     }
 
     private IEnumerable<SiloNode> MakePreferences()
     {
-        if (Data?.Data is not IPreferenceStore store) return [Nothing("(no preferences are stored yet)", Under("prefs", "preferences"))];
+        if (Data?.Data is not IPreferenceStore store) return [];
 
         var items = store.GetPreferences()
                          .OrderBy(p => p.Key, StringComparer.OrdinalIgnoreCase)
                          .Select(p => new SiloNode(new PreferenceDetails(p, store), p.Key, Under("prefs", "preferences", p.Key),
                                                    Icon("Settings"), null))
                          .ToList();
-        return items.Count > 0 ? items : [Nothing("(no preferences are stored yet)", Under("prefs", "preferences"))];
+        return items;
     }
-
-    // These folders have nothing to list yet: each says so, so it opens like any other folder instead of looking broken.
 
     private static IEnumerable<SiloNode> MakeCertificates()
     {
-        return [Nothing("(no certificates yet: the certificates Silo trusts or signs with will be listed here)", Under("security", "certificates"))];
+        return [];
     }
 
     private static IEnumerable<SiloNode> MakeWindowPrefs()
     {
-        return [Nothing("(no window preferences yet)", Under("prefs", "window-prefs"))];
+        return [];
     }
 
     private static IEnumerable<SiloNode> MakeAuditLog()
     {
-        return [Nothing("(the audit log is empty: changes to the Silo will be listed here)", Under("audit-log"))];
+        return [];
     }
 
     // ----- keeping up with changes ----------------------------------------------------------------------------------------

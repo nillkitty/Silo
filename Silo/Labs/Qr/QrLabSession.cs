@@ -497,8 +497,8 @@ public sealed partial class QrLabSession : LabSession<QrDoc>, ILabLive
         get
         {
             yield return ProvidedCommand.From("save", "_Save Code", SaveCode, "TbSave", () => Saved.IsAvailable, "Keep the code, as it is set up, in the Silo") with { Gesture = "Ctrl+S" };
-            yield return ProvidedCommand.From("save-png", "Save as _PNG...", SavePng, "TbExport", () => _build.IsBuilt, "Write the code to a PNG file");
-            yield return ProvidedCommand.From("save-svg", "Save as S_VG...", SaveSvg, "TbExport", () => _build.IsBuilt, "Write the code to an SVG file");
+            yield return ProvidedCommand.From("save-png", "Save as _PNG...", SavePng, Silo.Design.FileTypeIcons.For("png"), () => _build.IsBuilt, "Write the code to a PNG file");
+            yield return ProvidedCommand.From("save-svg", "Save as S_VG...", SaveSvg, Silo.Design.FileTypeIcons.For("svg"), () => _build.IsBuilt, "Write the code to an SVG file");
             yield return ProvidedCommand.From("copy-image", "Copy _Picture", CopyImage, "TbCopy", () => _build.IsBuilt, "Put the picture of the code on the clipboard");
             yield return ProvidedCommand.From("copy-payload", "Copy What It _Says", () => CopyText(_build.Payload, "text"), "TbCopy", () => _build.IsBuilt, "Put the text the code says on the clipboard");
             yield return ProvidedCommand.From("copy-svg", "Copy S_VG Text", () => CopyText(Svg(), "SVG"), "TbCopy", () => _build.IsBuilt, "Put the SVG of the code on the clipboard as text");

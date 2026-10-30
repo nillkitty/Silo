@@ -198,6 +198,8 @@ public abstract class LabSession<TValue> : ILabSession, ILabModel, ILabReporter,
 
     public virtual IEnumerable<LabMenu> Menus => [];
 
+    public virtual bool UseRibbon => false;
+
     public virtual UIElement? BuildTopBar() => null;
 
     public virtual int LayoutVersion => 1;

@@ -654,8 +654,8 @@ public sealed partial class SchemaLabSession : LabSession<SchemaDraft>, ILabLive
             yield return ProvidedCommand.From("copy-json", "Copy _JSON", () => Copy(Json, "JSON"), "TbCopy", null, "Put the draft on the clipboard as JSON");
             yield return ProvidedCommand.From("copy-outline", "Copy _Outline", () => Copy(Outline, "outline"), "TbCopy", null, "Put the draft on the clipboard as an outline");
             yield return ProvidedCommand.From("copy-cs", "Copy _C# Sketch", () => Copy(CSharp, "C# sketch"), "TbCopy", null, "Put the draft's enums and classes on the clipboard as C#");
-            yield return ProvidedCommand.From("save-json", "Save as JS_ON File...", () => SaveFile(Formats.Of<JsonFormat>(), Json), "TbExport", null, "Write the draft to a JSON file");
-            yield return ProvidedCommand.From("save-cs", "Save as C# _File...", () => SaveFile(Formats.Of<CSharpFormat>(), CSharp), "TbExport", null, "Write the C# sketch to a file");
+            yield return ProvidedCommand.From("save-json", "Save as JS_ON File...", () => SaveFile(Formats.Of<JsonFormat>(), Json), Silo.Design.FileTypeIcons.For("json", "TbExport"), null, "Write the draft to a JSON file");
+            yield return ProvidedCommand.From("save-cs", "Save as C# _File...", () => SaveFile(Formats.Of<CSharpFormat>(), CSharp), Silo.Design.FileTypeIcons.For("cs", "TbExport"), null, "Write the C# sketch to a file");
             yield return ProvidedCommand.From("delete", "Delete Kept Dra_ft", DeleteSaved, "TbDelete", () => Saved.IsAvailable && !string.IsNullOrWhiteSpace(_draft.Name) && Saved.Exists(_draft.Name), "Remove the draft from the Silo");
         }
     }

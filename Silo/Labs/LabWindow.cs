@@ -1,4 +1,4 @@
-using System.ComponentModel;
+﻿using System.ComponentModel;
 using System.IO;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -62,6 +62,7 @@ public sealed class LabWindow : Window, IWindowLayout, ILabHost, ILabCreator
 
     private readonly ILabModel?                          _model;
     private readonly WrapPanel                           _commandBar   = new() { VerticalAlignment = VerticalAlignment.Center };
+    private readonly TabControl                          _ribbon       = new() { VerticalAlignment = VerticalAlignment.Top };
     private readonly StackPanel                          _selectors    = new() { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
     private readonly ComboBox                            _partCombo    = new() { MinWidth = 150, MaxWidth = 280, Margin = new Thickness(4, 0, 10, 0), ToolTip = "The active part of the subject: what part menu and part parameters are about" };
     private readonly ComboBox                            _toolCombo    = new() { MinWidth = 120, MaxWidth = 220, Margin = new Thickness(4, 0, 0, 0), ToolTip = "The active tool" };
@@ -272,6 +273,7 @@ public sealed class LabWindow : Window, IWindowLayout, ILabHost, ILabCreator
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
         var menu = BuildMenu();
+        if (_session.UseRibbon) menu.Visibility = Visibility.Collapsed; // the ribbon's tabs are the menus
         Grid.SetRow(menu, 0);
         root.Children.Add(menu);
 
@@ -852,7 +854,8 @@ public sealed class LabWindow : Window, IWindowLayout, ILabHost, ILabCreator
                                            };
         }
 
-        panel.Children.Add(_commandBar);
+        if (_session.UseRibbon) panel.Children.Add(_ribbon);
+        else panel.Children.Add(_commandBar);
         return panel;
     }
 
@@ -863,24 +866,37 @@ public sealed class LabWindow : Window, IWindowLayout, ILabHost, ILabCreator
 
         _commandBar.Children.Clear();
 
-        var groups = new List<List<ProvidedCommand?>> { FileItems() };
-        if (OwnMenu("edit") is not null || Sorted(LabMenuPlace.Edit).Count > 0) groups.Add(EditItems());
+        var named = new List<(string Title, List<ProvidedCommand?> Items)> { ("File", FileItems()) };
+        if (OwnMenu("edit") is not null || Sorted(LabMenuPlace.Edit).Count > 0) named.Add(("Edit", EditItems()));
         foreach (var own in LabMenus.SafeMenus(_session).Where(m => !IsMenu(m, "file") && !IsMenu(m, "edit")))
-            groups.Add(own.Items.Select(c => c is null ? null : Wrap(c)).ToList());
+            named.Add((LabTerminal.Strip(own.Header), own.Items.Select(c => c is null ? null : Wrap(c)).ToList()));
 
+        // a ribbon shows the active aspects together on one Options tab (a group each), not a tab apiece
+        var aspectGroups = new List<(string Caption, List<ProvidedCommand?> Items)>();
         if (_model is not null)
             foreach (var aspect in LabModelRules.ActiveAspects(_model).Where(a => a.Commands.Count > 0))
-                groups.Add(aspect.Commands.Select(c => (ProvidedCommand?)Wrap(c)).ToList());
+            {
+                string caption = aspect.Title.Replace("_", string.Empty);
+                var    items   = aspect.Commands.Select(c => (ProvidedCommand?)Wrap(c)).ToList();
+                if (_session.UseRibbon) aspectGroups.Add((caption, items));
+                else named.Add((caption, items));
+            }
 
-        groups.Add(LabItems());
-        groups.Add(SubjectItems());
+        named.Add(("Lab", LabItems()));
+        named.Add(("Subject", SubjectItems()));
         if (_model is not null)
         {
-            if (_model.PartTypes.Count > 0 || _model.Parts.Count > 0) groups.Add(PartItems());
-            if (_model.Tools.Count > 0) groups.Add(ToolItems());
+            if (_model.PartTypes.Count > 0 || _model.Parts.Count > 0) named.Add(("Part", PartItems()));
+            if (_model.Tools.Count > 0) named.Add(("Tool", ToolItems()));
         }
 
-        foreach (var group in groups)
+        if (_session.UseRibbon)
+        {
+            RebuildRibbon(named, aspectGroups);
+            return;
+        }
+
+        foreach (var group in named.Select(n => n.Items))
         {
             bool any = false;
             foreach (var command in group)
@@ -903,6 +919,92 @@ public sealed class LabWindow : Window, IWindowLayout, ILabHost, ILabCreator
         _commandBar.Children.Add(panes);
     }
 
+    /// <summary>The command bar as a ribbon: a tab for each menu, and in it big buttons (icon over text) in groups the menu's separators make.</summary>
+    private void RebuildRibbon(List<(string Title, List<ProvidedCommand?> Items)> tabs, List<(string Caption, List<ProvidedCommand?> Items)> aspectGroups)
+    {
+        string? selected = (_ribbon.SelectedItem as TabItem)?.Header as string;
+        _ribbon.Items.Clear();
+
+        // the tabs after File and Edit; the aspects' Options tab goes in front of Lab
+        int optionsAt = tabs.FindIndex(t => t.Title == "Lab");
+        if (aspectGroups.Count > 0) tabs.Insert(optionsAt < 0 ? tabs.Count : optionsAt, ("Options", []));
+
+        foreach (var (title, items) in tabs)
+        {
+            if (title == "Options" && items.Count == 0 && aspectGroups.Count > 0)
+            {
+                _ribbon.Items.Add(new TabItem { Header = title, Content = new ScrollViewer { HorizontalScrollBarVisibility = ScrollBarVisibility.Auto, VerticalScrollBarVisibility = ScrollBarVisibility.Disabled, Content = AspectStrip(aspectGroups) } });
+                continue;
+            }
+
+            var strip = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(2, 4, 2, 4) };
+            var group = new WrapPanel { Orientation = Orientation.Vertical, MaxHeight = 140 };
+            void Flush()
+            {
+                if (group.Children.Count == 0) return;
+
+                strip.Children.Add(group);
+                strip.Children.Add(new Border { Width = 1, Margin = new Thickness(5, 2, 7, 2), Opacity = 0.5 }.Also(b => b.SetResourceReference(Border.BackgroundProperty, "Theme.TextMuted")));
+                group = new WrapPanel { Orientation = Orientation.Vertical, MaxHeight = 140 };
+            }
+
+            foreach (var command in items)
+            {
+                if (command is null) Flush();
+                else group.Children.Add(CommandButton(command, true));
+            }
+
+            Flush();
+            if (strip.Children.Count > 0) strip.Children.RemoveAt(strip.Children.Count - 1);
+            if (strip.Children.Count == 0) continue;
+
+            _ribbon.Items.Add(new TabItem { Header = title, Content = new ScrollViewer { HorizontalScrollBarVisibility = ScrollBarVisibility.Auto, VerticalScrollBarVisibility = ScrollBarVisibility.Disabled, Content = strip } });
+        }
+
+        var view = new TabItem { Header = "View", Content = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(2, 4, 2, 4) } };
+        var panes = new Button { Padding = new Thickness(8, 4, 8, 4), Margin = new Thickness(0, 0, 3, 3), MinWidth = 56, ToolTip = "Panes: show or hide the Lab's panes", Content = LabelledContent("Layers", "Panes ▾") };
+        panes.Click += (_, _) => DropDown(panes, FillViewMenu);
+        ((StackPanel)view.Content).Children.Add(panes);
+        _ribbon.Items.Add(view);
+
+        _ribbon.SelectedItem = _ribbon.Items.OfType<TabItem>().FirstOrDefault(t => t.Header as string == selected) ?? _ribbon.Items.OfType<TabItem>().FirstOrDefault();
+    }
+
+    /// <summary>The Options tab: each active aspect a group of buttons with its title under it, side by side.</summary>
+    private StackPanel AspectStrip(List<(string Caption, List<ProvidedCommand?> Items)> groups)
+    {
+        var strip = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(2, 4, 2, 4) };
+        foreach (var (caption, items) in groups)
+        {
+            if (strip.Children.Count > 0) strip.Children.Add(new Border { Width = 1, Margin = new Thickness(5, 2, 7, 2), Opacity = 0.5 }.Also(b => b.SetResourceReference(Border.BackgroundProperty, "Theme.TextMuted")));
+
+            var buttons = new WrapPanel { Orientation = Orientation.Vertical, MaxHeight = 140 };
+            foreach (var command in items.Where(c => c is not null)) buttons.Children.Add(CommandButton(command!, true));
+
+            var label = new TextBlock { Text = caption, FontSize = 10, TextAlignment = TextAlignment.Center, Opacity = 0.7, Margin = new Thickness(0, 0, 0, 1) };
+            var group = new StackPanel { VerticalAlignment = VerticalAlignment.Top };
+            group.Children.Add(buttons);
+            group.Children.Add(label);
+            strip.Children.Add(group);
+        }
+
+        return strip;
+    }
+
+    /// <summary>A ribbon button's face: the icon with its text under it.</summary>
+    private static UIElement LabelledContent(string? icon, string text)
+    {
+        var face = new StackPanel { Orientation = Orientation.Vertical, HorizontalAlignment = HorizontalAlignment.Center };
+        if (LabUi.Icon(icon, 22) is { } glyph)
+        {
+            glyph.HorizontalAlignment = HorizontalAlignment.Center;
+            face.Children.Add(glyph);
+        }
+
+        face.Children.Add(new TextBlock { Text = text, FontSize = 11, MaxWidth = 76, TextAlignment = TextAlignment.Center, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 2, 0, 0) });
+        return face;
+    }
+
     private static UIElement IconContent(string? icon, bool dropdown = false)
     {
         var row = new StackPanel { Orientation = Orientation.Horizontal };
@@ -911,15 +1013,18 @@ public sealed class LabWindow : Window, IWindowLayout, ILabHost, ILabCreator
         return row;
     }
 
-    private UIElement CommandButton(ProvidedCommand command)
+    private UIElement CommandButton(ProvidedCommand command, bool labelled = false)
     {
         string header = LabTerminal.Strip(command.Header);
         string tip    = string.IsNullOrEmpty(command.ToolTip) ? header : $"{header}: {command.ToolTip}";
         if (!string.IsNullOrWhiteSpace(command.Gesture)) tip += $" ({command.Gesture})";
 
+        var pad = labelled ? new Thickness(6, 4, 6, 4) : new Thickness(6, 3, 6, 3);
+        UIElement Face(bool dropdown) => labelled ? LabelledContent(LabMenus.IconFor(command), dropdown ? header + " ▾" : header) : IconContent(LabMenus.IconFor(command), dropdown);
+
         if (command.Children is { Count: > 0 } children)
         {
-            var drop = new Button { Padding = new Thickness(6, 3, 6, 3), Margin = new Thickness(0, 0, 3, 3), ToolTip = tip, Content = IconContent(LabMenus.IconFor(command), true) };
+            var drop = new Button { Padding = pad, Margin = new Thickness(0, 0, 3, 3), MinWidth = labelled ? 56 : 0, ToolTip = tip, Content = Face(true) };
             drop.Click += (_, _) => DropDown(drop, menu => FillMenu(menu, [.. children]));
             return drop;
         }
@@ -928,10 +1033,11 @@ public sealed class LabWindow : Window, IWindowLayout, ILabHost, ILabCreator
         {
             var toggle = new System.Windows.Controls.Primitives.ToggleButton
                          {
-                             Padding   = new Thickness(6, 3, 6, 3),
+                             Padding   = pad,
                              Margin    = new Thickness(0, 0, 3, 3),
+                             MinWidth  = labelled ? 56 : 0,
                              ToolTip   = tip,
-                             Content   = IconContent(LabMenus.IconFor(command)),
+                             Content   = Face(false),
                              IsChecked = SafeChecked(command)
                          };
             toggle.Click += (_, _) =>
@@ -947,10 +1053,11 @@ public sealed class LabWindow : Window, IWindowLayout, ILabHost, ILabCreator
                {
                    Command          = command.Command,
                    CommandParameter = command.Parameter,
-                   Padding          = new Thickness(6, 3, 6, 3),
+                   Padding          = pad,
                    Margin           = new Thickness(0, 0, 3, 3),
+                   MinWidth         = labelled ? 56 : 0,
                    ToolTip          = tip,
-                   Content          = IconContent(LabMenus.IconFor(command))
+                   Content          = Face(false)
                };
     }
 
@@ -1082,7 +1189,7 @@ public sealed class LabWindow : Window, IWindowLayout, ILabHost, ILabCreator
         DockPanel.SetDock(_statusText, Dock.Right);
         DockPanel.SetDock(_outputText, Dock.Right);
 
-        var prompt = new TextBlock { Text = "�", FontSize = 16, Margin = new Thickness(0, 0, 6, 0), VerticalAlignment = VerticalAlignment.Center };
+        var prompt = new TextBlock { Text = "�", FontSize = 16, Margin = new Thickness(0, 0, 6, 0), VerticalAlignment = VerticalAlignment.Center };
         prompt.SetResourceReference(TextBlock.ForegroundProperty, "Theme.TextMuted");
         DockPanel.SetDock(prompt, Dock.Left);
 

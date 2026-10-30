@@ -263,7 +263,7 @@ public sealed partial class MenuLabSession
                          Commands =
                          [
                              ProvidedCommand.From("copy-json", "Copy _JSON", () => Copy(Json, "JSON"), "TbCopy", null, "Put the menu on the clipboard as JSON"),
-                             ProvidedCommand.From("save-json", "Save as JS_ON File...", () => SaveFile(Formats.Of<JsonFormat>(), Json), "TbExport", null, "Write the JSON to a file")
+                             ProvidedCommand.From("save-json", "Save as JS_ON File...", () => SaveFile(Formats.Of<JsonFormat>(), Json), Silo.Design.FileTypeIcons.For("json", "TbExport"), null, "Write the JSON to a file")
                          ]
                      };
         yield return new LabAspect("xaml", "XAML", menu)
@@ -273,7 +273,7 @@ public sealed partial class MenuLabSession
                          Commands =
                          [
                              ProvidedCommand.From("copy-xaml", "Copy _XAML", () => Copy(Xaml, "XAML"), "TbCopy", null, "Put the menu on the clipboard as XAML: one resource"),
-                             ProvidedCommand.From("save-xaml", "Save as X_AML File...", () => SaveFile(Formats.Of<XamlFormat>(), Xaml), "TbExport", null, "Write the XAML to a file")
+                             ProvidedCommand.From("save-xaml", "Save as X_AML File...", () => SaveFile(Formats.Of<XamlFormat>(), Xaml), Silo.Design.FileTypeIcons.For("xaml"), null, "Write the XAML to a file")
                          ]
                      };
         yield return new LabAspect("entry", "Entry", LabOwner.Part)

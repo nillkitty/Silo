@@ -87,6 +87,8 @@ public sealed partial class ImageLabSession : LabSession<ImageData>, ILabLive
 
     public override bool LibraryOpensWithWindow => true;
 
+    public override bool UseRibbon => true;
+
     public void Say(string text) => Status = text;
 
     internal void RaiseOverlay() => OverlayChanged?.Invoke(this, EventArgs.Empty);
@@ -541,11 +543,22 @@ public sealed partial class ImageLabSession : LabSession<ImageData>, ILabLive
             return;
         }
 
+        if (IsUntouchedDefault() && (picture.Width != _doc.Width || picture.Height != _doc.Height)) _doc.ResizeCanvas(picture.Width, picture.Height);
+
         AddPicture(picture, "Pasted");
         var pasted = _doc.ActiveLayer!.Pixels.ContentBounds();
         if (!pasted.IsEmpty) _doc.SetSelection(Mask.Rectangle(_doc.Width, _doc.Height, pasted.X, pasted.Y, pasted.Right, pasted.Bottom), "Select pasted");
 
         if (Tools.FirstOrDefault(t => t.Id == "selection") is { } move) ActivateTool(move);
+    }
+
+    /// <summary>True for a new image nothing has been done to yet, still at the Lab's default size: a pasted picture sets its canvas size.</summary>
+    private bool IsUntouchedDefault()
+    {
+        if (IsDirty || _doc.CanUndo || _doc.Layers.Count != 1 || _doc.Selection is not null || !string.IsNullOrWhiteSpace(_doc.Name)) return false;
+
+        var blank = Lab_.Blank();
+        return blank.Width == _doc.Width && blank.Height == _doc.Height;
     }
 
     private void PasteAsNewImage()
@@ -631,7 +644,7 @@ public sealed partial class ImageLabSession : LabSession<ImageData>, ILabLive
             foreach (var format in ImageFormat.All)
             {
                 var f = format;
-                yield return ProvidedCommand.From("export-" + f.Name.ToLowerInvariant(), $"Export {f.Name}...", () => ExportAs(f), "TbExport", null,
+                yield return ProvidedCommand.From("export-" + f.Name.ToLowerInvariant(), $"Export {f.Name}...", () => ExportAs(f), Silo.Design.FileTypeIcons.For(f.Extension), null,
                                                   $"Write the image, all layers together, to a {f.Name} file" + (f.HasAlpha ? string.Empty : " (transparency is laid over the color in the Lab's settings)"));
             }
 

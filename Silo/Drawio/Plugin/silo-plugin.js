@@ -690,10 +690,18 @@
     }
 
     function menuColors(anchor) {
-        var host = anchor.closest('.geFormatContainer') || document.body;
-        var style = getComputedStyle(host);
-        var bg = style.backgroundColor && style.backgroundColor !== 'rgba(0, 0, 0, 0)' ? style.backgroundColor : '#ffffff';
-        return { bg: bg, fg: style.color || '#000', dark: document.body.classList.contains('geDarkMode') || /\bgeDark/.test(document.documentElement.className) };
+        var dark = document.body.classList.contains('geDarkMode') || /\bgeDark/.test(document.documentElement.className) ||
+            document.documentElement.getAttribute('data-bs-theme') === 'dark' ||
+            (typeof Editor !== 'undefined' && typeof Editor.isDarkMode === 'function' && !!Editor.isDarkMode());
+        // the nearest ancestor with an opaque background (the format panel itself is often transparent)
+        var bg = null;
+        for (var el = anchor; el && !bg; el = el.parentElement) {
+            var c = getComputedStyle(el).backgroundColor;
+            if (c && c !== 'transparent' && !/rgba\(.*,\s*0\)$/.test(c)) bg = c;
+        }
+        var fg = getComputedStyle(anchor).color || (dark ? '#e0e0e0' : '#000');
+        if (!bg) bg = dark ? '#2a2a2a' : '#ffffff';
+        return { bg: bg, fg: fg, dark: dark };
     }
 
     /** The token's menu: how Copy Style and Paste Style treat it, and its sources (each with its value here). */

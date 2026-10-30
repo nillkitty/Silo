@@ -374,3 +374,21 @@ public static class SqliteTypeConvert
         return clrValue; // int/long/double/float/string/byte[] pass straight through
     }
 }
+public static class SqliteTypeConvertFrom
+{
+    /// <summary>The CLR value for a value read back from SQLite (the reverse of <see cref="SqliteTypeConvert.ToSqlValue" />).</summary>
+    public static object? FromSqlValue(object? sqlValue, Type propType)
+    {
+        if (sqlValue is null or DBNull) return null;
+
+        var t = Nullable.GetUnderlyingType(propType) ?? propType;
+        if (t.IsEnum) return Enum.ToObject(t, Convert.ToInt64(sqlValue, System.Globalization.CultureInfo.InvariantCulture));
+        if (t == typeof(DateTime)) return DateTime.Parse((string)sqlValue, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind);
+        if (t == typeof(TimeSpan)) return TimeSpan.FromTicks(Convert.ToInt64(sqlValue, System.Globalization.CultureInfo.InvariantCulture));
+        if (t == typeof(Guid)) return Guid.Parse((string)sqlValue);
+        if (t == typeof(Uri)) return new Uri((string)sqlValue, UriKind.RelativeOrAbsolute);
+        if (t == typeof(bool)) return Convert.ToInt64(sqlValue, System.Globalization.CultureInfo.InvariantCulture) != 0;
+        if (t == typeof(byte[])) return sqlValue;
+        return Convert.ChangeType(sqlValue, t, System.Globalization.CultureInfo.InvariantCulture);
+    }
+}

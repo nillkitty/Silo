@@ -22,7 +22,112 @@ public class NetworkTreeTests
         return found!;
     }
 
-    [TestCase("10.0.0.0/8",    "10.in-addr.arpa",          true)]
+    private static NetTreeNode All(NetTreeNode root)
+    {
+        root.ShowAll = true;
+        return root;
+    }
+
+    [TearDown]
+    public void Back_to_known_networks()
+    {
+        NetworkTree.CanonicalIpv4.Root.ShowAll = false;
+        NetworkTree.CanonicalIpv6.Root.ShowAll = false;
+        KnownNetworks.RemoveSource("test");
+    }
+
+    // the children of a node, as address ranges: they follow each other with no hole and no overlap
+    private static void AssertTiles(NetTreeNode node)
+    {
+        var next = node.Subnet.Network.ToNumber();
+        foreach (var child in node.Children)
+        {
+            var first = child.IsUnexplored ? child.Range!.Value.First : child.Subnet.Network.ToNumber();
+            var last  = child.IsUnexplored ? child.Range!.Value.Last : first + child.Subnet.Size() - 1;
+            Assert.That(first, Is.EqualTo(next), $"{child.Name} starts where the one before ended");
+            next = last + 1;
+        }
+
+        Assert.That(next, Is.EqualTo(node.Subnet.Network.ToNumber() + node.Subnet.Size()), "up to the end of the block");
+    }
+
+    [Test]
+    public void Only_known_networks_are_shown_and_the_space_between_them_is_unexplored()
+    {
+        KnownNetworks.Add(Net("10.134.0.0/16"),    "test");
+        KnownNetworks.Add(Net("10.134.232.0/24"),  "test");
+        KnownNetworks.Add(Net("10.134.232.77/32"), "test");
+
+        var ten = Child(NetworkTree.CanonicalIpv4.Root, "10.0.0.0/8");
+        AssertTiles(ten);
+
+        var kinds = ten.Children.Select(c => c.IsUnexplored ? "gap" : c.Subnet.Cidr()).ToList();
+        Assert.That(kinds, Is.EqualTo(new[] { "gap", "10.134.0.0/16", "gap" }), "nothing but what is known, and the space either side of it");
+
+        var gap = ten.Children[0];
+        Assert.That(gap.Name,      Does.StartWith("Unexplored address space"));
+        Assert.That(gap.Kind,      Is.EqualTo(NetBlockKind.Unexplored));
+        Assert.That(gap.HasChildren, Is.True);
+        AssertTiles(gap.Parent!);
+
+        // a known network sits under the smallest known network that holds it, skipping the steps in between
+        var sixteen = Child(ten, "10.134.0.0/16");
+        Assert.That(sixteen.Children.Select(c => c.IsUnexplored ? "gap" : c.Subnet.Cidr()), Is.EqualTo(new[] { "gap", "10.134.232.0/24", "gap" }));
+        AssertTiles(sixteen);
+
+        var net = Child(sixteen, "10.134.232.0/24");
+        Assert.That(net.Children.Select(c => c.IsUnexplored ? "gap" : c.Subnet.Cidr()), Is.EqualTo(new[] { "gap", "10.134.232.77/32", "gap" }));
+        Assert.That(Child(net, "10.134.232.77/32").Kind, Is.EqualTo(NetBlockKind.Host));
+        Assert.That(Child(net, "10.134.232.77/32").HasChildren, Is.False);
+    }
+
+    [Test]
+    public void A_network_with_nothing_known_inside_is_one_unexplored_stretch_that_opens_to_its_subnets()
+    {
+        var net = Child(NetworkTree.CanonicalIpv4.Root, "10.0.0.0/8");
+        var lone = net.Children.Single(c => c.IsUnexplored);
+        Assert.That(lone.Range!.Value.Last - lone.Range!.Value.First + 1, Is.EqualTo(net.Subnet.Size()), "all of it");
+
+        Assert.That(lone.Children.Count, Is.EqualTo(256), "the /16s, as the whole of the block is open");
+        Assert.That(lone.Children.All(c => !c.IsUnexplored && c.ShowAll));
+    }
+
+    [Test]
+    public void An_unexplored_stretch_opens_to_the_fewest_blocks_that_make_it_up()
+    {
+        KnownNetworks.Add(Net("10.0.0.0/16"), "test");
+        var ten = Child(NetworkTree.CanonicalIpv4.Root, "10.0.0.0/8");
+        var gap = ten.Children.Single(c => c.IsUnexplored);
+
+        // 10.1.0.0 - 10.255.255.255 is /16 aligned at 10.1.0.0: 10.1/16, 10.2/15, 10.4/14, 10.8/13 ... 10.128/9
+        Assert.That(gap.Children.Select(c => c.Subnet.Cidr()),
+                    Is.EqualTo(new[] { "10.1.0.0/16", "10.2.0.0/15", "10.4.0.0/14", "10.8.0.0/13", "10.16.0.0/12", "10.32.0.0/11", "10.64.0.0/10", "10.128.0.0/9" }));
+    }
+
+    [Test]
+    public void Show_all_possible_networks_lists_every_step_below_a_node_and_can_be_turned_off()
+    {
+        var ten = Child(NetworkTree.CanonicalIpv4.Root, "10.0.0.0/8");
+        Assert.That(ten.GetCommands().Select(c => c.Id), Does.Contain("net.showall"));
+
+        ten.ShowAll = true;
+        Assert.That(ten.Children.Count,                                  Is.EqualTo(256));
+        Assert.That(ten.Children.All(c => !c.IsUnexplored && c.ShowAll), Is.True);
+
+        ten.ShowAll = false;
+        Assert.That(ten.Children.Any(c => c.IsUnexplored), Is.True);
+    }
+
+    [Test]
+    public void An_address_in_unexplored_space_is_held_by_the_stretch_and_found_by_walking_down()
+    {
+        var target = Net("10.200.3.4/32");
+        var node   = Child(NetworkTree.CanonicalIpv4.Root, "10.0.0.0/8");
+        Assert.That(node.Children.Single(c => c.Holds(target)).IsUnexplored, Is.True);
+
+        while (!node.Subnet.SameAs(target))
+            node = node.Children.First(c => c.Holds(target));
+    }
     [TestCase("10.0.0.0/10",   "10.in-addr.arpa",          false)]
     [TestCase("192.0.2.1/32",  "1.2.0.192.in-addr.arpa",   true)]
     [TestCase("0.0.0.0/0",     "in-addr.arpa",             true)]
@@ -80,7 +185,7 @@ public class NetworkTreeTests
     [Test]
     public void The_Ipv4_root_has_a_block_per_slash_8_and_the_larger_reserved_blocks_stand_for_themselves()
     {
-        var root = NetworkTree.CanonicalIpv4.Root;
+        var root = All(NetworkTree.CanonicalIpv4.Root);
 
         // 256 /8s, less the 16 each that 224.0.0.0/4 (multicast) and 240.0.0.0/4 (reserved) take up, plus those two
         Assert.That(root.Children.Count, Is.EqualTo(256 - 32 + 2));
@@ -95,7 +200,7 @@ public class NetworkTreeTests
     [Test]
     public void A_block_the_size_of_no_step_appears_where_it_starts()
     {
-        var root = NetworkTree.CanonicalIpv4.Root;
+        var root = All(NetworkTree.CanonicalIpv4.Root);
 
         Assert.That(Child(Child(root, "100.0.0.0/8"), "100.64.0.0/10").Kind, Is.EqualTo(NetBlockKind.WellKnown));
         Assert.That(Child(root, "100.0.0.0/8").Children.Count, Is.EqualTo(256 - 64 + 1), "the 64 /16s of the shared space are one block");
@@ -106,7 +211,7 @@ public class NetworkTreeTests
     [Test]
     public void The_tree_goes_down_to_single_addresses()
     {
-        var node = NetworkTree.CanonicalIpv4.Root;
+        var node = All(NetworkTree.CanonicalIpv4.Root);
         foreach (string cidr in new[] { "192.0.0.0/8", "192.168.0.0/16", "192.168.1.0/24", "192.168.1.0/28", "192.168.1.5/32" })
             node = Child(node, cidr);
 
@@ -119,7 +224,7 @@ public class NetworkTreeTests
     [Test]
     public void The_Ipv6_root_has_a_block_per_slash_8_with_unique_local_space_as_one_slash_7()
     {
-        var root = NetworkTree.CanonicalIpv6.Root;
+        var root = All(NetworkTree.CanonicalIpv6.Root);
 
         Assert.That(root.Subnet.Cidr(), Is.EqualTo("::/0"));
         Assert.That(root.Children.Select(c => c.Subnet.Cidr()),
@@ -131,7 +236,7 @@ public class NetworkTreeTests
     [Test]
     public void Ipv6_goes_down_a_nibble_at_a_time_below_a_slash_32_and_stops_at_a_slash_64()
     {
-        var node = NetworkTree.CanonicalIpv6.Root;
+        var node = All(NetworkTree.CanonicalIpv6.Root);
         foreach (string cidr in new[] { "2000::/8", "2001::/16", "2001:d00::/24", "2001:db8::/32", "2001:db8::/36", "2001:db8::/40" })
             node = Child(node, cidr);
 
@@ -151,7 +256,7 @@ public class NetworkTreeTests
     [Test]
     public void Nodes_say_what_they_are()
     {
-        var v4 = NetworkTree.CanonicalIpv4.Root;
+        var v4 = All(NetworkTree.CanonicalIpv4.Root);
         Assert.That(v4.Kind,      Is.EqualTo(NetBlockKind.Internet));
         Assert.That(v4.Icon!.Key, Is.EqualTo(NetworkIcons.Internet));
 
@@ -170,7 +275,7 @@ public class NetworkTreeTests
     [Test]
     public void The_Explorer_node_belongs_to_the_model()
     {
-        var node  = NetworkTree.CanonicalIpv4.Root;
+        var node  = All(NetworkTree.CanonicalIpv4.Root);
         var shown = node.GetNode();
 
         Assert.That(shown,             Is.SameAs(node.GetNode()), "made once");
@@ -189,7 +294,7 @@ public class NetworkTreeTests
         var root = NetworkTree.CanonicalIpv4.Root.GetCommands().Select(c => c.Id).ToList();
         Assert.That(root, Does.Contain("net.rdap").And.Contain("net.whois").And.Contain("net.goto").And.Contain("net.remove"));
 
-        var ten = Child(NetworkTree.CanonicalIpv4.Root, "10.0.0.0/8").GetCommands().Select(c => c.Id).ToList();
+        var ten = Child(All(NetworkTree.CanonicalIpv4.Root), "10.0.0.0/8").GetCommands().Select(c => c.Id).ToList();
         Assert.That(ten, Does.Contain("net.rdap")
                              .And.Contain("net.zone.ns")
                              .And.Contain("net.rfc")

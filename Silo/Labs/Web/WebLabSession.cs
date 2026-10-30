@@ -143,7 +143,7 @@ public sealed partial class WebLabSession : LabSession<Uri>
             ProvidedCommand.From("save-html", "Save Page as _HTML...", () => RunAsync(SaveHtmlAsync), "TbSave", () => _ready && _dev is not null, "Save the page as it is now (the DOM, after scripts ran)"),
             ProvidedCommand.From("save-mhtml", "Save Page as _MHTML...", () => RunAsync(SaveMhtmlAsync), "TbSave", () => _ready && _dev is not null, "Save the page with its images and styles in one file"),
             ProvidedCommand.From("save-pdf", "Save Page as _PDF...", () => RunAsync(SavePdfAsync), "TbSave", () => _ready, "Print the page to a PDF file"),
-            ProvidedCommand.From("save-screenshot", "Save _Screenshot...", () => RunAsync(SaveScreenshotAsync), "TbExport", () => _ready, "Save what the page shows as a PNG image"),
+            ProvidedCommand.From("save-screenshot", "Save _Screenshot...", () => RunAsync(SaveScreenshotAsync), Silo.Design.FileTypeIcons.For("png"), () => _ready, "Save what the page shows as a PNG image"),
             ProvidedCommand.From("save-har", "Export Network as HA_R...", () => RunAsync(() => _network.SaveHarAsync(false)), "Network", () => _network.Entries.Count > 0, "Save the requests the Network pane shows as a HAR file"),
             null,
             ProvidedCommand.From("print", "_Print...", Print, "Print", () => _ready, "Print the page") with { Gesture = "Ctrl+P" },

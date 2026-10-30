@@ -16,9 +16,12 @@ namespace Silo.Providers.Tree;
 ///         <item>Each node represents a subnet (CIDR) of the IP space</item>
 ///         <item>The root node represents the entire network (/0)</item>
 ///         <item>
-///             Intermediary nodes are created lazily/on-demand: a node's children are the subnets of the next step down
-///             (IPv4: /8, /16, /24, /28, /32; IPv6: /8, /16, /24, /32, then every nibble down to /64), except that a block
-///             the
+///             Nodes are created lazily/on-demand. A node's children are the networks known to exist inside it (the IANA
+///             registries, the special-purpose list, this computer's interfaces, whatever was registered with
+///             <see cref="KnownNetworks" />), each under the smallest known network that holds it; every stretch of address
+///             space between them is one "Unexplored address space" node, which opens to the CIDR blocks that make it up.
+///             <see cref="NetTreeNode.ShowAll" /> (Show All Possible Networks) shows instead every subnet of the next step down
+///             (IPv4: /8, /16, /24, /28, /32; IPv6: /8, /16, /24, /32, then every nibble down to /64), except that a block the
 ///             registries name which is larger than that step stands for itself (100.64.0.0/10, 224.0.0.0/4, 2000::/3...)
 ///         </item>
 ///         <item>
@@ -67,11 +70,11 @@ public class NetworkTree : ITreeProvider<NetTreeNode>
             var shown = node.GetNode();
             await shown.LoadChildrenAsync(cancel);
 
-            var next = node.Children.FirstOrDefault(c => c.Subnet.Covers(target));
+            var next = node.Children.FirstOrDefault(c => c.Holds(target));
             if (next is null) break;
 
             node = next;
-            if (node.Subnet.PrefixLength >= target.PrefixLength) break;
+            if (!node.IsUnexplored && node.Subnet.PrefixLength >= target.PrefixLength) break;
         }
 
         AddressSpaces.Reveal(node);
@@ -98,6 +101,7 @@ public class NetworkTree : ITreeProvider<NetTreeNode>
     /// </summary>
     public Task ReloadAsync()
     {
+        KnownNetworks.Refresh();
         Root.ResetChildren();
         return Root.GetNode().ReloadChildrenAsync();
     }
@@ -166,7 +170,10 @@ public enum NetBlockKind
     Subnet,
 
     /// <summary>A single address.</summary>
-    Host
+    Host,
+
+    /// <summary>A stretch of address space nothing is known about (it opens to the blocks that make it up).</summary>
+    Unexplored
 }
 
 /// <summary>
@@ -182,6 +189,7 @@ public static class NetworkIcons
     public const string Subnet    = "Icon077Network1";
     public const string Host      = "Cube";
     public const string Address   = "IconIpAddress";
+    public const string Unexplored = "DataSearching";
 
     public static string For(NetBlockKind kind)
     {
@@ -192,6 +200,7 @@ public static class NetworkIcons
                    NetBlockKind.Rir       => Rir,
                    NetBlockKind.Legacy    => Legacy,
                    NetBlockKind.Host      => Host,
+                   NetBlockKind.Unexplored => Unexplored,
                    _                      => Subnet
                };
     }
@@ -210,6 +219,12 @@ public abstract class NetTreeNode : INodeProvider, INodeDetails, ICommandProvide
 
     private List<NetTreeNode>? _children;
     private NetSiloNode?       _node;
+    private RegistryEntry?     _registry;
+    private object?            _registryFrom;
+    private SpecialBlock?      _special;
+    private bool               _specialLooked;
+    private bool               _showAll;
+    private int                _childrenVersion;
 
     /// <summary>The subnets one step down (see <see cref="NetworkTree" />), in address order; worked out on first use.</summary>
     public IReadOnlyList<NetTreeNode> Children
@@ -218,13 +233,50 @@ public abstract class NetTreeNode : INodeProvider, INodeDetails, ICommandProvide
         {
             lock (_gate)
             {
-                return _children ??= BuildChildren();
+                if (_children is null || _childrenVersion != KnownNetworks.Version)
+                {
+                    _childrenVersion = KnownNetworks.Version;
+                    _children        = BuildChildren();
+                }
+
+                return _children;
             }
         }
     }
 
     /// <summary>True when the node has children (a single address, or an IPv6 /64, has none).</summary>
-    public bool HasChildren => NextStride(Subnet) != 0;
+    public bool HasChildren => IsUnexplored || NextStride(Subnet) != 0;
+
+    /// <summary>The first and last address (numbers) of an unexplored stretch of address space; null for a network.</summary>
+    public (BigInteger First, BigInteger Last)? Range { get; }
+
+    /// <summary>True for a node that stands for address space nothing is known about.</summary>
+    public bool IsUnexplored => Range is not null;
+
+    /// <summary>
+    ///     Show every subnet of the next step down, not only the networks known to exist. The children of the node (and theirs) are read
+    ///     again when it is set.
+    /// </summary>
+    public bool ShowAll
+    {
+        get => _showAll;
+        set
+        {
+            if (_showAll == value) return;
+
+            _showAll = value;
+            ResetChildren();
+        }
+    }
+
+    /// <summary>Whether the node is, or holds, <paramref name="target" /> (an unexplored stretch holds what lies in its range).</summary>
+    public bool Holds(IPSubnet target)
+    {
+        if (Range is not { } range) return Subnet.Covers(target);
+
+        var first = target.Network.ToNumber();
+        return first >= range.First && first + target.Size() - 1 <= range.Last;
+    }
 
     public int IPVersion { get; }
 
@@ -233,6 +285,7 @@ public abstract class NetTreeNode : INodeProvider, INodeDetails, ICommandProvide
     {
         get
         {
+            if (IsUnexplored) return NetBlockKind.Unexplored;
             if (Subnet.PrefixLength == 0) return NetBlockKind.Internet;
             if (Special is { } special && special.Subnet.PrefixLength == Subnet.PrefixLength) return NetBlockKind.WellKnown;
 
@@ -254,6 +307,7 @@ public abstract class NetTreeNode : INodeProvider, INodeDetails, ICommandProvide
     {
         get
         {
+            if (IsUnexplored) return null;
             if (Subnet.PrefixLength == 0) return Subnet.IsV6() ? "The Internet (IPv6)" : "The Internet (IPv4)";
             if (Special is { } special && special.Subnet.PrefixLength == Subnet.PrefixLength) return special.Name;
             if (Registry is { } entry && entry.Subnet.PrefixLength == Subnet.PrefixLength && entry.Designation.Length > 0)
@@ -269,10 +323,26 @@ public abstract class NetTreeNode : INodeProvider, INodeDetails, ICommandProvide
     ///     The most specific IANA registry line that holds the subnet (or is it), or null; null as well until the
     ///     registries are read.
     /// </summary>
-    public RegistryEntry? Registry => AddressRegistry.EntryFor(Subnet);
+    public RegistryEntry? Registry
+    {
+        get
+        {
+            if (IsUnexplored) return null;
+
+            // looked up once per registry read: a row asks for it several times (kind, label, name, icon), and it scans every entry
+            var entries = AddressRegistry.Entries;
+            if (!ReferenceEquals(entries, _registryFrom))
+            {
+                _registry     = AddressRegistry.EntryFor(Subnet);
+                _registryFrom = entries;
+            }
+
+            return _registry;
+        }
+    }
 
     /// <summary>The most specific special-purpose block that holds the subnet (or is it), or null.</summary>
-    public SpecialBlock? Special => AddressRegistry.SpecialFor(Subnet);
+    public SpecialBlock? Special => IsUnexplored ? null : _specialLooked ? _special : (_specialLooked = true) ? _special = AddressRegistry.SpecialFor(Subnet) : null;
 
     public IPSubnet Subnet { get; }
 
@@ -284,7 +354,11 @@ public abstract class NetTreeNode : INodeProvider, INodeDetails, ICommandProvide
     public IconRef? Icon => IconRef.FromKey(NetworkIcons.For(Kind));
 
     /// <summary>The node's text in the Explorer: the CIDR, and what the block is when that is known.</summary>
-    public string Name => Label is { } label ? $"{Subnet.Cidr()}  {label}" : Subnet.Cidr();
+    public string Name => IsUnexplored ? $"Unexplored address space  ({FirstAddress()} - {LastAddress()})" : Label is { } label ? $"{Subnet.Cidr()}  {label}" : Subnet.Cidr();
+
+    private IPAddress FirstAddress() => SubnetMath.FromNumber(Range!.Value.First, Subnet.NetworkAddress.AddressFamily);
+
+    private IPAddress LastAddress() => SubnetMath.FromNumber(Range!.Value.Last, Subnet.NetworkAddress.AddressFamily);
 
     /// <summary>What the block is, in words.</summary>
     public string TypeName
@@ -293,6 +367,8 @@ public abstract class NetTreeNode : INodeProvider, INodeDetails, ICommandProvide
         {
             switch (Kind)
             {
+                case NetBlockKind.Unexplored:
+                    return "Unexplored address space";
                 case NetBlockKind.Internet:
                     return "Address space";
                 case NetBlockKind.WellKnown:
@@ -310,7 +386,7 @@ public abstract class NetTreeNode : INodeProvider, INodeDetails, ICommandProvide
     }
 
     /// <inheritdoc />
-    public Uri Uri => Subnet.ToUri();
+    public Uri Uri => IsUnexplored ? new Uri($"{Subnet.ToUri().AbsoluteUri}/unexplored/{FirstAddress()}-{LastAddress()}".Replace("[", string.Empty).Replace("]", string.Empty), UriKind.Absolute) : Subnet.ToUri();
 
     /// <inheritdoc />
     public object? Data => Subnet;
@@ -340,17 +416,71 @@ public abstract class NetTreeNode : INodeProvider, INodeDetails, ICommandProvide
         return await Task.Run(() => (IReadOnlyList<SiloNode>)Children.Select(c => c.GetNode()).ToList(), cancel);
     }
 
-    protected abstract NetTreeNode CreateChild(IPSubnet subnet);
+    /// <summary>Makes a node under <paramref name="parent" />: a network, or (with <paramref name="range" />) a stretch of unexplored space inside it.</summary>
+    protected abstract NetTreeNode CreateChild(NetTreeNode parent, IPSubnet subnet, (BigInteger First, BigInteger Last)? range = null);
 
-    // the subnets of the next step down, where a block the registries name that is larger than the step stands for itself
+    private NetTreeNode Make(NetTreeNode parent, IPSubnet subnet, (BigInteger First, BigInteger Last)? range, bool showAll)
+    {
+        var child = CreateChild(parent, subnet, range);
+        child._showAll = showAll;
+        return child;
+    }
+
     private List<NetTreeNode> BuildChildren()
     {
+        // an unexplored stretch opens to the blocks that make it up (all of them possible ones: nothing is known there)
+        if (Range is { } range)
+        {
+            var owner = Parent!;
+            if (range.First == owner.Subnet.Network.ToNumber() && range.Last == owner.Subnet.Network.ToNumber() + owner.Subnet.Size() - 1)
+                return StrideChildren(owner.Subnet, owner, true);
+
+            return SubnetMath.CoverRange(range.First, range.Last, Subnet.NetworkAddress.AddressFamily).Select(c => Make(owner, c, null, true)).ToList();
+        }
+
+        return _showAll ? StrideChildren(Subnet, this, true) : KnownChildren();
+    }
+
+    // the networks known inside this one, each under the smallest known network that holds it, with the stretches between them as unexplored space
+    private List<NetTreeNode> KnownChildren()
+    {
+        var list = new List<NetTreeNode>();
+        if (NextStride(Subnet) == 0) return list;
+
+        var maximal = new List<IPSubnet>();
+        foreach (var known in KnownNetworks.Within(Subnet).OrderBy(k => k.Network.ToNumber()).ThenBy(k => k.PrefixLength))
+            if (maximal.Count == 0 || !maximal[^1].Covers(known))
+                maximal.Add(known);
+
+        var cursor = Subnet.Network.ToNumber();
+        var end    = cursor + Subnet.Size() - 1;
+
+        void Gap(BigInteger first, BigInteger last)
+        {
+            if (first <= last) list.Add(Make(this, Subnet, (first, last), false));
+        }
+
+        foreach (var block in maximal)
+        {
+            var first = block.Network.ToNumber();
+            Gap(cursor, first - 1);
+            list.Add(Make(this, block, null, false));
+            cursor = first + block.Size();
+        }
+
+        Gap(cursor, end);
+        return list;
+    }
+
+    // the subnets of the next step down, where a block the registries name that is larger than the step stands for itself
+    private List<NetTreeNode> StrideChildren(IPSubnet block, NetTreeNode owner, bool showAll)
+    {
         var list   = new List<NetTreeNode>();
-        int stride = NextStride(Subnet);
+        int stride = NextStride(block);
         if (stride == 0) return list;
 
         var larger = new List<IPSubnet>();
-        foreach (var known in AddressRegistry.KnownWithin(Subnet)
+        foreach (var known in AddressRegistry.KnownWithin(block)
                                              .Where(k => k.PrefixLength < stride)
                                              .OrderBy(k => k.PrefixLength)
                                              .ThenBy(k => k.Network.ToNumber()))
@@ -358,23 +488,22 @@ public abstract class NetTreeNode : INodeProvider, INodeDetails, ICommandProvide
                 larger.Add(known);
 
         IPSubnet? added = null;
-        foreach (var cell in Subnet.Subdivide(stride))
+        foreach (var cell in block.Subdivide(stride))
         {
             var cover = larger.FirstOrDefault(l => l.Covers(cell));
             if (cover is null)
             {
-                list.Add(CreateChild(cell));
+                list.Add(Make(owner, cell, null, showAll));
             }
             else if (!cover.SameAs(added))
             {
-                list.Add(CreateChild(cover));
+                list.Add(Make(owner, cover, null, showAll));
                 added = cover;
             }
         }
 
         return list;
     }
-
     private static int NextStride(IPSubnet subnet)
     {
         int prefix = subnet.PrefixLength;
@@ -384,7 +513,7 @@ public abstract class NetTreeNode : INodeProvider, INodeDetails, ICommandProvide
         return (prefix / 4 + 1) * 4;
     }
 
-    protected NetTreeNode(NetworkTree tree, NetTreeNode? parent, IPSubnet subnet, int ipVersion)
+    protected NetTreeNode(NetworkTree tree, NetTreeNode? parent, IPSubnet subnet, int ipVersion, (BigInteger First, BigInteger Last)? range = null)
     {
         if (ipVersion is not (4 or 6))
             throw new NotSupportedException("Invalid IPVersion value");
@@ -397,6 +526,7 @@ public abstract class NetTreeNode : INodeProvider, INodeDetails, ICommandProvide
         Parent    = parent;
         Subnet    = subnet.Normalized();
         IPVersion = ipVersion;
+        Range     = range;
     }
 
     SiloNode? INodeProvider.GetNode()
@@ -410,6 +540,18 @@ public abstract class NetTreeNode : INodeProvider, INodeDetails, ICommandProvide
     public IEnumerable<(string Name, string Value)> GetDetails()
     {
         bool v6 = Subnet.IsV6();
+        if (Range is { } range)
+        {
+            yield return ("Kind", TypeName);
+            yield return ("First address", FirstAddress().ToString());
+            yield return ("Last address", LastAddress().ToString());
+            yield return ("Addresses", Count(range.Last - range.First + 1));
+            yield return ("Inside", Parent!.Subnet.Cidr());
+            yield return ("Blocks", SubnetMath.CoverRange(range.First, range.Last, Subnet.NetworkAddress.AddressFamily).Count().ToString("N0") + "  (expand to see them)");
+            yield return ("Note", "Nothing is known about this space: no registry, route, interface or lookup has named a network in it.");
+            yield break;
+        }
+
         yield return ("Network", Subnet.Cidr());
         yield return ("Address family", v6 ? "IPv6" : "IPv4");
         yield return ("Kind", TypeName);
@@ -424,6 +566,7 @@ public abstract class NetTreeNode : INodeProvider, INodeDetails, ICommandProvide
 
         yield return ("Share of the address space", Share());
         if (Parent is not null) yield return ("Parent block", Parent.Subnet.Cidr());
+        if (KnownNetworks.SourcesOf(Subnet) is { Count: > 0 } sources) yield return ("Known from", string.Join(", ", sources));
 
         if (!v6 && Subnet.PrefixLength > 0)
             yield return ("Classful range (historic)", Classful(Subnet.Network.GetAddressBytes()[0]));
@@ -554,6 +697,12 @@ public abstract class NetTreeNode : INodeProvider, INodeDetails, ICommandProvide
 
         string cidr = Subnet.Cidr();
 
+        if (IsUnexplored)
+        {
+            yield return ProvidedCommand.From("net.copy.range", "Copy _Range", () => Clipboard.SetText($"{FirstAddress()} - {LastAddress()}"), "TbCopy", group: CopyGroup);
+            yield break;
+        }
+
         // the whole space: where to go in it, and the data behind it
         if (Parent is null)
         {
@@ -567,6 +716,11 @@ public abstract class NetTreeNode : INodeProvider, INodeDetails, ICommandProvide
             yield return ProvidedCommand.From("net.remove", "Remove from E_xplorer", RemoveFromExplorer,
                                               toolTip: "Take the address space out of the Explorer", group: SpaceGroup);
         }
+
+        if (NextStride(Subnet) != 0)
+            yield return ProvidedCommand.From("net.showall", "Show _All Possible Networks", ToggleShowAll, NetworkIcons.Subnet,
+                                              toolTip: "List every subnet of the next step down, not only the networks known to exist (registries, routes, interfaces, lookups)",
+                                              group: SpaceGroup) with { IsChecked = () => ShowAll };
 
         // who holds it
         yield return ProvidedCommand.From("net.rdap", "_RDAP Lookup", () => Run(RdapAsync, "RDAP lookup"), "Search",
@@ -609,6 +763,13 @@ public abstract class NetTreeNode : INodeProvider, INodeDetails, ICommandProvide
                                           "TbCopy", group: CopyGroup);
         yield return ProvidedCommand.From("net.copy.zone", "Copy Reverse _Zone Name", () => Clipboard.SetText(zone), "TbCopy",
                                           group: CopyGroup);
+    }
+
+    private void ToggleShowAll()
+    {
+        ShowAll = !ShowAll;
+        _ = GetNode().ReloadChildrenAsync();
+        App.Status(ShowAll ? $"Showing every subnet of {Subnet.Cidr()}" : $"Showing only the known networks of {Subnet.Cidr()}");
     }
 
     private IPAddress TraceTarget()
@@ -752,12 +913,12 @@ public sealed class Net4Node : NetTreeNode
         return new Net4Node(tree, null, new IPSubnet(IPAddress.Any, 0));
     }
 
-    protected override NetTreeNode CreateChild(IPSubnet subnet)
+    protected override NetTreeNode CreateChild(NetTreeNode parent, IPSubnet subnet, (BigInteger First, BigInteger Last)? range = null)
     {
-        return new Net4Node(Tree, this, subnet);
+        return new Net4Node(Tree, parent, subnet, range);
     }
 
-    public Net4Node(NetworkTree tree, NetTreeNode? parent, IPSubnet subnet) : base(tree, parent, subnet, 4)
+    public Net4Node(NetworkTree tree, NetTreeNode? parent, IPSubnet subnet, (BigInteger First, BigInteger Last)? range = null) : base(tree, parent, subnet, 4, range)
     {
     }
 }
@@ -772,12 +933,12 @@ public sealed class Net6Node : NetTreeNode
         return new Net6Node(tree, null, new IPSubnet(IPAddress.IPv6Any, 0));
     }
 
-    protected override NetTreeNode CreateChild(IPSubnet subnet)
+    protected override NetTreeNode CreateChild(NetTreeNode parent, IPSubnet subnet, (BigInteger First, BigInteger Last)? range = null)
     {
-        return new Net6Node(Tree, this, subnet);
+        return new Net6Node(Tree, parent, subnet, range);
     }
 
-    public Net6Node(NetworkTree tree, NetTreeNode? parent, IPSubnet subnet) : base(tree, parent, subnet, 6)
+    public Net6Node(NetworkTree tree, NetTreeNode? parent, IPSubnet subnet, (BigInteger First, BigInteger Last)? range = null) : base(tree, parent, subnet, 6, range)
     {
     }
 }

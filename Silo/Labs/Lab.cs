@@ -146,6 +146,9 @@ public interface ILabSession : INotifyPropertyChanged, IDisposable
     /// </summary>
     IEnumerable<LabMenu> Menus => [];
 
+    /// <summary>True to show the menus as a ribbon (a tab for each, with labelled buttons) in place of the menu bar and the row of icon buttons.</summary>
+    bool UseRibbon => false;
+
     /// <summary>
     ///     A bar shown between the menu bar and the toolbar (the Menu Lab puts the menu it is making there); null for none. Called once,
     ///     after <see cref="BuildMainView" />.
