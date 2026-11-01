@@ -31,7 +31,7 @@ public static class TypeIcons
         ("Regex", "Rule"), ("Parser", "Rule"), ("Rule", "Rule"), ("Token", "Token"), ("Syntax", "Code"),
         ("Qr", "QrCode"), ("Terminal", "Terminal"), ("Console", "Terminal"),
         ("Column", "SqlColumn"), ("Sql", "Database6"), ("Table", "TbTable"), ("Sheet", "TbTable"), ("Grid", "TbTable"),
-        ("Database", "Database5"), ("Db", "Database5"), ("Silo", "Database5"), ("Store", "Database6"),
+        ("Database", "Database5"), ("Db", "Database5"), ("Silo", "SiloCube"), ("Store", "Database6"),
         ("Connection", "Plug"), ("Connector", "Network"), ("Destination", "Destination"), ("Remote", "Server"), ("Server", "Server"),
         ("Folder", "Folder17"), ("Directory", "Folder17"), ("Drive", "FsDrive"),
         ("Document", "Document"), ("File", "Document"), ("Template", "Template"),

@@ -1,6 +1,7 @@
 using System.Windows.Controls;
 using Serilog;
 using Silo.Clipboarding;
+using Silo.Commanding;
 using Silo.Converters;
 using Silo.Labs;
 using Silo.Tabular;
@@ -19,26 +20,95 @@ public partial class MenuBar : Menu
     /// <summary>The longest a window's name is in a menu; a page's title can be a whole sentence.</summary>
     private const int WindowNameLimit = 40;
 
-    /// <summary>The items added to the Edit menu for the active document (removed again each time the menu opens).</summary>
-    private readonly List<Control> _editItems = [];
-
     /// <summary>The items listing the pop-out windows in the View menu.</summary>
     private readonly List<Control> _windowItems = [];
 
     private MainWindow? Main => Window.GetWindow(this) as MainWindow;
 
-    // ---- Edit ----------------------------------------------------------------------------------
+    // ---- the menus made from the layout -------------------------------------------------------------
 
-    /// <summary>Adds the active document's own editing entries below the standard ones.</summary>
-    private void EditMenu_SubmenuOpened(object sender, RoutedEventArgs e)
+    /// <summary>The menus made from the layout (<see cref="MenuSettings" />), by id.</summary>
+    private readonly Dictionary<string, MenuItem> _menus = [];
+
+    /// <summary>
+    ///     Makes the menu bar's menus from the layout: each is filled in from the groups it lists each time it opens, so what components add
+    ///     (<see cref="MenuCommands" />) and what the selection and the open Silo make available is always current. The View menu is the one made in XAML.
+    /// </summary>
+    private void BuildMenus()
     {
-        // nested submenus (Column type...) raise this too, and it bubbles up here
-        if (!ReferenceEquals(e.OriginalSource, sender))
-            return;
+        var native = Items.OfType<MenuItem>().ToDictionary(m => m.Name, m => m);
+        Items.Clear();
+        _menus.Clear();
 
-        foreach (var item in _editItems) EditMenu.Items.Remove(item);
-        _editItems.Clear();
+        foreach (var def in MenuSettings.Layout.Menus)
+        {
+            if (def.Native)
+            {
+                if (native.TryGetValue(def.Id + "Menu", out var existing)) Items.Add(existing);
+                continue;
+            }
 
+            var menu = new MenuItem { Header = def.Header, Tag = def };
+
+            // an empty menu item cannot open, so SubmenuOpened would never come: this stand-in is replaced each time the menu opens
+            menu.Items.Add(new MenuItem { Header = "(loading)", IsEnabled = false });
+            menu.SubmenuOpened += GroupMenu_SubmenuOpened;
+            _menus[def.Id]     =  menu;
+            Items.Add(menu);
+        }
+    }
+
+    private void GroupMenu_SubmenuOpened(object sender, RoutedEventArgs e)
+    {
+        // nested submenus raise this too, and it bubbles up here
+        if (!ReferenceEquals(e.OriginalSource, sender) || sender is not MenuItem { Tag: MenuDef def } menu) return;
+
+        var ctx = new MenuContext(Main, NodeCommandHub.Current);
+        menu.Items.Clear();
+        try
+        {
+            FillMenu(menu, def, ctx);
+
+            // the active document's own editing entries, below the standard ones
+            if (def.Id == MenuGroups.EditMenu) AddDocumentEditEntries(menu);
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Building the {menu} menu failed", def.Id);
+        }
+
+        // never leave it empty: a menu item with no items cannot open again
+        if (menu.Items.Count == 0)
+            menu.Items.Add(new MenuItem { Header = def.EmptyText ?? "(nothing here)", IsEnabled = false });
+    }
+
+    /// <summary>Puts the layout's groups in the menu: each block, a separator between blocks that have entries, a block that is a submenu as one.</summary>
+    internal static void FillMenu(MenuItem menu, MenuDef def, MenuContext ctx)
+    {
+        foreach (var section in def.Sections)
+        {
+            var entries = MenuCommands.Entries(section.Group == MenuGroups.Default ? def.Id : section.Group, ctx);
+            if (entries.Count == 0) continue;
+
+            if (menu.Items.Count > 0 && menu.Items[^1] is not Separator) menu.Items.Add(new Separator());
+
+            if (section.Submenu is { Length: > 0 } header)
+            {
+                var sub = new MenuItem { Header = header };
+                foreach (var entry in entries) sub.Items.Add(entry);
+                menu.Items.Add(sub);
+            }
+            else
+            {
+                foreach (var entry in entries) menu.Items.Add(entry);
+            }
+        }
+
+        while (menu.Items.Count > 0 && menu.Items[^1] is Separator) menu.Items.RemoveAt(menu.Items.Count - 1);
+    }
+
+    private void AddDocumentEditEntries(MenuItem editMenu)
+    {
         var entries = new List<EditEntry>();
         try
         {
@@ -49,145 +119,9 @@ public partial class MenuBar : Menu
             Log.Warning(ex, "Building the document's Edit entries failed");
         }
 
-        EditDynamicSeparator.Visibility = entries.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
-        foreach (var entry in entries)
-        {
-            var element = entry.ToMenuElement();
-            EditMenu.Items.Add(element);
-            _editItems.Add(element);
-        }
+        if (entries.Count > 0 && editMenu.Items.Count > 0) editMenu.Items.Add(new Separator());
+        foreach (var entry in entries) editMenu.Items.Add(entry.ToMenuElement());
     }
-
-    private void PasteNewTable_Click(object sender, RoutedEventArgs e)
-    {
-        TablePaste.AsNewTable(App.Instance?.ActiveSilo);
-    }
-
-    // ---- File: the text editor ----------------------------------------------------------------
-
-    private void NewTextDocument_Click(object sender, RoutedEventArgs e)
-    {
-        var language = sender is MenuItem { Tag: string name } && Enum.TryParse<TextLanguage>(name, out var parsed) ? parsed : TextLanguage.PlainText;
-        TextEditors.OpenNew(language);
-    }
-
-    private void OpenTextFile_Click(object sender, RoutedEventArgs e)
-    {
-        TextEditors.OpenFileDialog();
-    }
-
-    // ---- Node ----------------------------------------------------------------------------------
-
-    /// <summary>Lists the selected Explorer node's commands.</summary>
-    private void NodeMenu_SubmenuOpened(object sender, RoutedEventArgs e)
-    {
-        if (!ReferenceEquals(e.OriginalSource, sender)) return;
-
-        NodeMenu.Items.Clear();
-
-        var node = NodeCommandHub.Current;
-        try
-        {
-            // opening the node's view (what a click and a double-click do)
-            if (node is { Opener: { } open, DocKey: not null })
-            {
-                NodeMenu.Items.Add(Item("_Open (preview tab)",   () => open(false)));
-                NodeMenu.Items.Add(Item("Open (_keep as a tab)", () => open(true)));
-                NodeMenu.Items.Add(new Separator());
-            }
-
-            // the node's commands: exactly what its right-click menu lists (see ContextCommands), Refresh (F5) among them
-            foreach (var entry in CommandMenu.Items(NodeCommandHub.CommandsFor(node)))
-                NodeMenu.Items.Add(entry);
-
-            // then Cut / Copy / Paste, as in the right-click menu
-            if (Main?.ExplorerControl is { } explorer)
-            {
-                var clipboard = ClipboardCommands.Items(explorer.GetClipboardContext()).ToList();
-                if (clipboard.Count > 0)
-                {
-                    if (NodeMenu.Items.Count > 0 && NodeMenu.Items[^1] is not Separator) NodeMenu.Items.Add(new Separator());
-                    foreach (var item in clipboard) NodeMenu.Items.Add(item);
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            Log.Warning(ex, "Building the Node menu failed");
-        }
-
-        // never leave it empty: a menu item with no items cannot open again
-        if (NodeMenu.Items.Count == 0)
-            NodeMenu.Items.Add(new MenuItem
-                               {
-                                   Header    = node is null ? "(select a node in the Explorer)" : "(no commands)",
-                                   IsEnabled = false
-                               });
-    }
-
-    // ---- Analysis ------------------------------------------------------------------------------
-
-    /// <summary>
-    ///     Lists the Labs the container knows, to open one on its own; below them the Labs that can study what is selected in
-    ///     the
-    ///     Explorer; below those the Lab windows that are open.
-    /// </summary>
-    private void AnalysisMenu_SubmenuOpened(object sender, RoutedEventArgs e)
-    {
-        if (!ReferenceEquals(e.OriginalSource, sender)) return;
-
-        AnalysisMenu.Items.Clear();
-
-        var labs = LabHost.Labs;
-        foreach (var lab in labs)
-        {
-            var l    = lab;
-            var item = new MenuItem { Header = "Open " + l.Name.Replace("_", "__"), ToolTip = l.Description };
-
-            // always set, even to nothing: inside the menu bar an implicit style would otherwise read an icon off the command
-            item.Icon  =  ToolbarIcons.Find(l.IconKey) is { } geometry ? new AppIcon { Icon = geometry, Size = 16 } : null;
-            item.Click += (_, _) => LabHost.Open(l);
-            AnalysisMenu.Items.Add(item);
-        }
-
-        if (labs.Count == 0) AnalysisMenu.Items.Add(new MenuItem { Header = "(no labs)", IsEnabled = false });
-
-        // the selected node, in the Labs that take it
-        var selected  = NodeCommandHub.Current;
-        var accepting = selected?.Model is { } model ? LabHost.LabsAccepting(model).ToList() : [];
-        if (accepting.Count > 0)
-        {
-            AnalysisMenu.Items.Add(new Separator());
-            foreach (var (lab, value) in accepting)
-            {
-                var l    = lab;
-                var v    = value;
-                var item = new MenuItem { Header = $"Open \"{selected!.Display.Replace("_", "__")}\" in {l.Name.Replace("_", "__")}" };
-                item.Icon  =  ToolbarIcons.Find(l.IconKey) is { } geometry ? new AppIcon { Icon = geometry, Size = 16 } : null;
-                item.Click += (_, _) => LabHost.Open(l, v);
-                AnalysisMenu.Items.Add(item);
-            }
-        }
-
-        // the windows that are open
-        var windows = LabHost.Windows;
-        if (windows.Count > 0)
-        {
-            AnalysisMenu.Items.Add(new Separator());
-            foreach (var window in windows)
-            {
-                var w    = window;
-                var item = new MenuItem { Header = "Window: " + Shorten(w.Title), ToolTip = w.Title };
-                item.Click += (_, _) =>
-                              {
-                                  if (w.WindowState == WindowState.Minimized) w.WindowState = WindowState.Normal;
-                                  w.Activate();
-                              };
-                AnalysisMenu.Items.Add(item);
-            }
-        }
-    }
-
     // ---- View ----------------------------------------------------------------------------------
 
     /// <summary>
@@ -318,6 +252,8 @@ public partial class MenuBar : Menu
     public MenuBar()
     {
         InitializeComponent();
+        BuildMenus();
+        MenuSettings.Changed += (_, _) => Dispatcher.InvokeAsync(BuildMenus);
 
         // MenuBar derives from Menu, and an implicit style only applies to its exact target type, so the themed Menu
         // style (background, text colour) is asked for explicitly

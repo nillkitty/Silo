@@ -69,6 +69,9 @@ public sealed class ExplorerNode : INotifyPropertyChanged, IOverridableNode, ICo
     /// <summary>Which of the Silo's databases the node's thing is kept in; drawn as a badge on the icon. <see cref="Realm.None" />: no badge.</summary>
     public Realm Realm { get; init; }
 
+    /// <summary>The thing is known not to exist (a name DNS said NXDOMAIN for): drawn as a red X badge on the icon.</summary>
+    public bool IsMissing { get; init; }
+
     /// <summary>For a node in a world: the key of the world, which decides how the globe on its badge is turned.</summary>
     public string? WorldKey { get; init; }
 

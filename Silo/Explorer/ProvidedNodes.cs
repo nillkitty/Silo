@@ -70,6 +70,7 @@ public static class ProvidedNodes
                        Model    = source.DataContext,
                        Realm    = (source.DataContext as IRealmed)?.Realm ?? Realm.None,
                        WorldKey = (source.DataContext as IRealmed)?.WorldKey,
+                       IsMissing = (source.DataContext as Silo.Contracts.Core.INodeStatus)?.IsMissing ?? false,
                        Activate = ActivateOf(source),
                        LoadChildren =
                            lazy
@@ -220,8 +221,9 @@ public static class ProvidedNodes
     {
         return source.DataContext switch
                {
-                   ITool t => () => t.Toggle(),
-                   _       => null
+                   ITool t               => () => t.Toggle(),
+                   Silo.Contracts.Core.INodeActivation a => a.Activate,
+                   _                     => null
                };
     }
 

@@ -182,6 +182,13 @@ public class HierarchyBuilder
         return this;
     }
 
+    /// <summary>The icon of this level: an icon key or a picture's address.</summary>
+    public HierarchyBuilder Icon(IconRef icon)
+    {
+        _icon = icon.Required();
+        return this;
+    }
+
     /// <summary>What the level is, in words, for the Properties pane ("Folder" if not said).</summary>
     public HierarchyBuilder Kind(string typeName)
     {

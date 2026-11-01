@@ -42,7 +42,7 @@ public sealed partial class SqliteDatabaseProvider : IWindowStore
         _gate.Wait();
         try
         {
-            return WindowRows.Get(_conn, WindowTable, CurrentUserId(), type, uri);
+            return Healing(() => WindowRows.Get(_conn, WindowTable, CurrentUserId(), type, uri));
         }
         finally
         {
@@ -57,18 +57,21 @@ public sealed partial class SqliteDatabaseProvider : IWindowStore
         _gate.Wait();
         try
         {
-            long?     uid = CurrentUserId();
-            using var tx  = _conn.BeginTransaction();
-            try
-            {
-                WindowRows.Save(_conn, tx, WindowTable, uid, windows);
-                tx.Commit();
-            }
-            catch
-            {
-                tx.Rollback();
-                throw;
-            }
+            Healing(() =>
+                    {
+                        long?     uid = CurrentUserId();
+                        using var tx  = _conn.BeginTransaction();
+                        try
+                        {
+                            WindowRows.Save(_conn, tx, WindowTable, uid, windows);
+                            tx.Commit();
+                        }
+                        catch
+                        {
+                            tx.Rollback();
+                            throw;
+                        }
+                    });
         }
         finally
         {
@@ -81,7 +84,7 @@ public sealed partial class SqliteDatabaseProvider : IWindowStore
         _gate.Wait();
         try
         {
-            return WindowRows.Clear(_conn, WindowTable, CurrentUserId());
+            return Healing(() => WindowRows.Clear(_conn, WindowTable, CurrentUserId()));
         }
         finally
         {
@@ -94,7 +97,7 @@ public sealed partial class SqliteDatabaseProvider : IWindowStore
         _gate.Wait();
         try
         {
-            WindowRows.Forget(_conn, WindowTable, type, uri);
+            Healing(() => WindowRows.Forget(_conn, WindowTable, type, uri));
         }
         finally
         {

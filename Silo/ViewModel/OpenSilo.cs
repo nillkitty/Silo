@@ -116,25 +116,28 @@ public partial class OpenSilo : ModelBase
             true)]
     public bool RememberConnections { get; set; } = true;
 
+    [Toggle("Starter Nodes in Explorer", "silo.starterNodes", "Whether the Explorer starts with System (Network, Filesystem, Registry, WMI) and Universe (Schema, Unicode, DNS, IPv4, IPv6) nodes. Applies when the Silo is opened", true)]
+    public bool ShowStarterNodes { get; set; } = true;
+
     private bool _showIpv4;
     private bool _showIpv6;
     private bool _showDns;
 
-    [Toggle("IPv4 Address Space in Explorer", "silo.addressSpace.ipv4", "Whether the IPv4 address space is shown in the Explorer as a tree of subnets", false)]
+    [Toggle("IPv4 Address Space in Explorer", "silo.addressSpace.ipv4", "Whether the IPv4 address space is shown in the Explorer as a tree of subnets", true)]
     public bool ShowIpv4AddressSpace
     {
         get => _showIpv4;
         set => ShowAddressSpace(ref _showIpv4, value, AddressSpace.Ipv4);
     }
 
-    [Toggle("IPv6 Address Space in Explorer", "silo.addressSpace.ipv6", "Whether the IPv6 address space is shown in the Explorer as a tree of subnets", false)]
+    [Toggle("IPv6 Address Space in Explorer", "silo.addressSpace.ipv6", "Whether the IPv6 address space is shown in the Explorer as a tree of subnets", true)]
     public bool ShowIpv6AddressSpace
     {
         get => _showIpv6;
         set => ShowAddressSpace(ref _showIpv6, value, AddressSpace.Ipv6);
     }
 
-    [Toggle("Domain Names in Explorer", "silo.addressSpace.dns", "Whether the domain name space is shown in the Explorer as a tree of names", false)]
+    [Toggle("Domain Names in Explorer", "silo.addressSpace.dns", "Whether the domain name space is shown in the Explorer as a tree of names", true)]
     public bool ShowDnsNames
     {
         get => _showDns;
@@ -326,6 +329,9 @@ public partial class OpenSilo : ModelBase
         {
             Log.Warning(ex, "The Silo's own Explorer node could not be made");
         }
+
+        // and a starting point beside it: System (Network, Filesystem, Registry, WMI) and Universe (Schema, Unicode, DNS, IPv4, IPv6)
+        if (ShowStarterNodes) StarterNodes.Install(this);
 
         // the Recent view lists this Silo from now on
         RecentSilos.Instance.Record(this);

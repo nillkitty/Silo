@@ -61,9 +61,7 @@ public class AppIdentity : IAppIdentity
 
     public AppIdentity()
     {
-        // Silo has no logo of its own yet (no .ico/.png in the project, and no Silo geometry in the icon dictionaries):
-        // until there is one, the database icon stands in. Point this at the real one (a key, or a pack:// URI) when it exists.
-        DefaultAppIcon = IconRef.FromKey("Database");
+        DefaultAppIcon = IconRef.FromUri(new Uri("pack://application:,,,/Silo;component/Assets/Silo.ico", UriKind.Absolute));
 
         UserAccentColor = ReadWindowsAccent();
     }

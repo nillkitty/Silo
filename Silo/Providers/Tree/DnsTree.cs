@@ -1,10 +1,12 @@
 ﻿using System.Globalization;
 using System.Net;
 using System.Net.Http;
+using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using System.Numerics;
 using System.Text;
 using System.Windows;
+using Microsoft.Win32;
 using Serilog;
 using Silo.Connectors.Web;
 using Silo.Contracts.Core;
@@ -33,7 +35,10 @@ public enum DnsNodeKind
     Zone,
 
     /// <summary>A name with name servers of its own: the start of a delegated zone (it has NS records).</summary>
-    Delegated
+    Delegated,
+
+    /// <summary>A name that was asked about and does not exist (DNS answered NXDOMAIN); shown with a red X.</summary>
+    Missing
 }
 
 /// <summary>The kinds of resource record the tree puts together under a name.</summary>
@@ -60,19 +65,31 @@ public static class DnsIcons
     public const string Special          = "IconStreetSign";
     public const string Tld              = "IconDomain1";
     public const string Zone             = "IconNameTag";
-    public const string Delegated        = "Icon025Server";
+    public const string Missing          = "IconNameTag";
+    public const string Delegated        = "Icon021Hosting";
     public const string Host             = "Icon026Internet";
     public const string Alias            = "IconLabel";
-    public const string Mail             = "IconMexico";
+    public const string Mail             = "Icon087Envelope";
     public const string NameServers      = "Icon025Server";
     public const string Soa              = "Icon068CreditCard";
-    public const string Text             = "Icon119Signature";
+    public const string Text             = "Icon245Text";
     public const string Service          = "Icon012Server";
     public const string DelegationSigner = "Icon051DomainRegistration";
     public const string PublicKey        = "IconKey";
-    public const string Signature        = "Icon114IdCard";
+    public const string Signature        = "Icon119Signature";
     public const string Pointer          = "IconIpAddress";
     public const string Other            = "IconWebsite";
+    public const string Ipv6             = "Icon094Globe";
+    public const string Caa              = "Icon040Lock";
+    public const string Notice           = "Icon064Warning";
+
+    /// <summary>The icon of a single record: the one of its group, except that an AAAA (IPv6 host) and a CAA have their own.</summary>
+    public static string For(DnsType type) => type switch
+                                               {
+                                                   DnsType.AAAA => Ipv6,
+                                                   DnsType.CAA  => Caa,
+                                                   _            => For(DnsRecordGroup.KindOf(type))
+                                               };
 
     public static string For(DnsNodeKind kind) => kind switch
                                                    {
@@ -80,6 +97,7 @@ public static class DnsIcons
                                                        DnsNodeKind.Special   => Special,
                                                        DnsNodeKind.Tld       => Tld,
                                                        DnsNodeKind.Delegated => Delegated,
+                                                       DnsNodeKind.Missing   => Missing,
                                                        _                     => Zone
                                                    };
 
@@ -163,6 +181,76 @@ public static class DnsNames
 
         normalized = joined;
         return true;
+    }
+
+    /// <summary>
+    ///     The top-level domains the given DNS suffixes are in ("corp.example.com" gives "com."), less the ones the tree always lists
+    ///     (com, net, arpa), in order.
+    /// </summary>
+    public static IReadOnlyList<string> RelevantTlds(IEnumerable<string?> suffixes)
+    {
+        return suffixes.Where(s => !string.IsNullOrWhiteSpace(s))
+                       .Select(s => TryNormalize(s, out string n) && n != "." ? PathTo(n)[0] : null)
+                       .OfType<string>()
+                       .Where(t => t is not ("com." or "net." or "arpa."))
+                       .Distinct()
+                       .OrderBy(t => t, StringComparer.Ordinal)
+                       .ToList();
+    }
+
+    /// <summary>The DNS suffixes this computer uses: its domain, the search list, and each connection's own suffix.</summary>
+    public static IReadOnlyList<string> SystemSuffixes()
+    {
+        var found = new List<string>();
+        try
+        {
+            found.Add(IPGlobalProperties.GetIPGlobalProperties().DomainName);
+            foreach (var nic in NetworkInterface.GetAllNetworkInterfaces()) found.Add(nic.GetIPProperties().DnsSuffix);
+        }
+        catch (NetworkInformationException)
+        {
+            // what was read so far
+        }
+
+        try
+        {
+            using var key = Registry.LocalMachine.OpenSubKey(@"SYSTEM\CurrentControlSet\Services\Tcpip\Parameters");
+            found.Add(key?.GetValue("Domain") as string ?? "");
+            found.AddRange((key?.GetValue("SearchList") as string ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+        }
+        catch (Exception ex) when (ex is System.Security.SecurityException or UnauthorizedAccessException or IOException)
+        {
+            // not readable: the connection suffixes above
+        }
+
+        return found.Where(s => !string.IsNullOrWhiteSpace(s)).ToList();
+    }
+
+    /// <summary>
+    ///     The full name for what a person typed in "Add Subdomain" under <paramref name="parent" />: a relative name ("toys") gets
+    ///     the parent added, while one that is already complete -- it ends with a dot, or it already ends with the parent
+    ///     ("toys.contoso.com" under "contoso.com.") -- is kept as it is. Null when the text is not a name, is the parent itself, or
+    ///     is a complete name that is not below the parent.
+    /// </summary>
+    public static string? ChildNameFor(string? text, string parent)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return null;
+
+        string typed = text.Trim();
+        parent = Normalize(parent);
+        if (!TryNormalize(typed, out string name) || name == parent) return null;
+
+        bool complete = typed.EndsWith('.') || parent == "." || IsBelow(name, parent);
+        string full   = complete ? name : name[..^1] + "." + parent;
+        if (parent == ".") return full == "." ? null : full;
+
+        return TryNormalize(full, out string result) && IsBelow(result, parent) ? result : null;
+    }
+
+    /// <summary>True when <paramref name="name" /> is a name under <paramref name="parent" /> (both normalized), at any depth.</summary>
+    public static bool IsBelow(string name, string parent)
+    {
+        return parent == "." ? name != "." : name.Length > parent.Length && name.EndsWith("." + parent, StringComparison.Ordinal);
     }
 
     /// <summary>The name one label shorter ("www.example.com." gives "example.com."; a top-level name gives "."); null for the root.</summary>
@@ -361,7 +449,7 @@ public sealed class DnsTree : ITreeProvider<DnsNode>
 }
 
 /// <summary>A name of the domain name tree.</summary>
-public sealed class DnsNode : INodeProvider, INodeDetails, ICommandProvider
+public sealed class DnsNode : INodeProvider, INodeDetails, ICommandProvider, INodeStatus
 {
     // the names that DNS is asked about, besides the ones a name's own label asks for
     private static readonly DnsType[] BaseTypes = [DnsType.A, DnsType.AAAA, DnsType.CNAME, DnsType.MX, DnsType.NS, DnsType.TXT, DnsType.SOA, DnsType.DS, DnsType.DNSKEY];
@@ -389,6 +477,9 @@ public sealed class DnsNode : INodeProvider, INodeDetails, ICommandProvider
 
     /// <summary>The name, lower case with the root dot ("example.com.").</summary>
     public string Name { get; }
+
+    /// <summary>True for a name DNS said does not exist (NXDOMAIN); the Explorer draws a red X on its icon.</summary>
+    public bool IsMissing => Kind == DnsNodeKind.Missing;
 
     /// <summary>The first label ("example" of "example.com.").</summary>
     public string Label => DnsNames.LabelOf(Name);
@@ -448,6 +539,7 @@ public sealed class DnsNode : INodeProvider, INodeDetails, ICommandProvider
                                   DnsNodeKind.Special   => "Name: Special/Reserved",
                                   DnsNodeKind.Tld       => "Name: TLD Zone",
                                   DnsNodeKind.Delegated => "Name: Delegated Zone (NS)",
+                                  DnsNodeKind.Missing   => "Name: Does not exist (NXDOMAIN)",
                                   _                     => "Name: Zone"
                               };
 
@@ -466,7 +558,7 @@ public sealed class DnsNode : INodeProvider, INodeDetails, ICommandProvider
         }
 
         if (Kind == DnsNodeKind.Root)
-            yield return ("Top-level domains", _topLevel is null ? "not read yet (expand the node)" : _topLevel.Count.ToString("N0"));
+            yield return ("Top-level domains", AllTlds.Count is { } all ? all.ToString("N0") : "not read yet (expand All TLDs)");
 
         if (DnsNames.TryReverseZone(Name, out var block))
         {
@@ -478,6 +570,7 @@ public sealed class DnsNode : INodeProvider, INodeDetails, ICommandProvider
             yield return ("Did you know", "Reserved for examples by RFC 2606: it is safe to use in documentation.");
 
         if (Kind == DnsNodeKind.Delegated) yield return ("Delegation", "has name servers of its own (NS records)");
+        if (Kind == DnsNodeKind.Missing) yield return ("Status", "NXDOMAIN: the name does not exist");
 
         if (_lookup is { } lookup)
         {
@@ -494,13 +587,10 @@ public sealed class DnsNode : INodeProvider, INodeDetails, ICommandProvider
 
         if (Kind == DnsNodeKind.Root)
         {
-            var tlds = await Tree.TopLevelDomainsAsync();
             lock (_gate)
             {
-                _topLevel ??= BuildTopLevel(tlds);
+                _topLevel ??= BuildShortList();
             }
-
-            if (tlds.Count == 0) nodes.Add(Info("The list of top-level domains could not be read (are you online?)"));
         }
         else
         {
@@ -510,15 +600,30 @@ public sealed class DnsNode : INodeProvider, INodeDetails, ICommandProvider
         }
 
         foreach (var child in NameChildren) nodes.Add(child.GetNode());
+        if (Kind == DnsNodeKind.Root) nodes.Add(AllTlds.GetNode());
         return nodes;
     }
 
     private static SiloNode Info(string text)
     {
-        return new SiloNode(text, text, null, null, null);
+        return new SiloNode(text, text, null, IconRef.FromKey(DnsIcons.Notice), null);
     }
 
-    private List<DnsNode> BuildTopLevel(IReadOnlyList<string> tlds)
+    /// <summary>The names the root shows at first: com., net., the top-level domains this computer's DNS suffixes are in, and arpa.</summary>
+    private List<DnsNode> BuildShortList()
+    {
+        var names = new List<string> { "com.", "net." };
+        names.AddRange(DnsNames.RelevantTlds(DnsNames.SystemSuffixes()));
+        names.Add("arpa.");
+        return names.Select(n => new DnsNode(Tree, this, n, DnsNodeKind.Tld)).ToList();
+    }
+
+    /// <summary>The "All TLDs" node of the root: the whole list IANA publishes, and the special names.</summary>
+    public DnsAllTldsNode AllTlds => _allTlds ??= new DnsAllTldsNode(this);
+
+    private DnsAllTldsNode? _allTlds;
+
+    internal List<DnsNode> BuildTopLevel(IReadOnlyList<string> tlds)
     {
         var list = new List<DnsNode>();
         foreach (var special in DnsNames.Reserved) list.Add(new DnsNode(Tree, this, special.Name, DnsNodeKind.Special, special));
@@ -588,7 +693,10 @@ public sealed class DnsNode : INodeProvider, INodeDetails, ICommandProvider
             try
             {
                 var answer = await DnsClient.QueryAsync(childName, DnsType.NS, null, cancel);
-                if (answer.Answers.Any(r => r.Type == DnsType.NS && r.Name == childName)) kind = DnsNodeKind.Delegated;
+                if (answer.ResponseCode == 3)
+                    kind = DnsNodeKind.Missing;
+                else if (answer.Answers.Any(r => r.Type == DnsType.NS && r.Name == childName))
+                    kind = DnsNodeKind.Delegated;
             }
             catch (DnsException)
             {
@@ -675,7 +783,13 @@ public sealed class DnsNode : INodeProvider, INodeDetails, ICommandProvider
         string? text = PromptDialog.Ask("Add Subdomain", $"A name below {Name}  (one label, or more):", "Add");
         if (text is null) return;
 
-        string full = DnsNames.Normalize(text.TrimEnd('.') + "." + Name);
+        string? full = DnsNames.ChildNameFor(text, Name);
+        if (full is null)
+        {
+            App.Status($"'{text}' is not a name below {Name}");
+            return;
+        }
+
         await Tree.RevealAsync(full);
     }
 
@@ -694,6 +808,63 @@ public sealed class DnsNode : INodeProvider, INodeDetails, ICommandProvider
             App.Status("The Visual Traceroute tool is not available");
         else
             tool.Trace(Name.TrimEnd('.'));
+    }
+}
+
+/// <summary>
+///     The "All TLDs" node under the root: expanding it reads IANA's list of top-level domains and shows them with the special
+///     names. The names are nodes of their own, apart from the short list the root shows (com., net...).
+/// </summary>
+public sealed class DnsAllTldsNode : INodeProvider, INodeDetails
+{
+    private readonly DnsNode _root;
+    private List<DnsNode>?   _all;
+    private TreeSiloNode?    _node;
+
+    internal DnsAllTldsNode(DnsNode root)
+    {
+        _root = root;
+    }
+
+    /// <summary>How many names the list has; null until it is read.</summary>
+    public int? Count => _all?.Count;
+
+    public object? Data => _all;
+
+    public string  Name     => "All TLDs";
+    public string  TypeName => "All top-level domains";
+    public Uri     Uri      => new("dns:.?tlds=all");
+    public IconRef? Icon    => IconRef.FromKey(DnsIcons.Root);
+
+    public SiloNode GetNode()
+    {
+        lock (this)
+        {
+            return _node ??= new TreeSiloNode(this, Name, Uri, Icon, TypeName, LoadAsync);
+        }
+    }
+
+    SiloNode? INodeProvider.GetNode() => GetNode();
+
+    public IEnumerable<(string Name, string Value)> GetDetails()
+    {
+        yield return ("Name", Name);
+        yield return ("Names", Count is { } n ? n.ToString("N0") : "not read yet (expand the node)");
+        yield return ("Source", "https://data.iana.org/TLD/tlds-alpha-by-domain.txt, and the names set aside");
+    }
+
+    private async Task<IReadOnlyList<SiloNode>> LoadAsync(CancellationToken cancel)
+    {
+        var tlds = await _root.Tree.TopLevelDomainsAsync();
+        lock (this)
+        {
+            _all ??= _root.BuildTopLevel(tlds);
+        }
+
+        var nodes = new List<SiloNode>();
+        if (tlds.Count == 0) nodes.Add(new SiloNode("The list of top-level domains could not be read (are you online?)", "The list of top-level domains could not be read (are you online?)", null, null, null));
+        nodes.AddRange(_all.Select(n => n.GetNode()));
+        return nodes;
     }
 }
 
@@ -893,7 +1064,7 @@ public sealed class DnsRecordLeaf : INodeProvider, INodeDetails, ICommandProvide
 
     public Uri Uri => new($"dns:{Group.Owner.Name}?type={Record.TypeName}&n={Index}");
 
-    public IconRef? Icon => IconRef.FromKey(DnsIcons.For(Group.Kind));
+    public IconRef? Icon => IconRef.FromKey(DnsIcons.For(Record.Type));
 
     public IEnumerable<(string Name, string Value)> GetDetails()
     {

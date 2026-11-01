@@ -146,6 +146,14 @@ public sealed class ExplorerView : UserControl, IClipboardSurface
         badge.SetValue(VerticalAlignmentProperty,   VerticalAlignment.Bottom);
         badge.SetValue(MarginProperty,              new Thickness(0, 0, -3, -3));
         iconHost.AppendChild(badge);
+
+        var missing = new FrameworkElementFactory(typeof(MissingBadge));
+        missing.SetBinding(MissingBadge.IsMissingProperty, new Binding(nameof(ExplorerNode.IsMissing)));
+        missing.SetBinding(MissingBadge.SizeProperty,      new Binding(nameof(ExplorerNode.BadgeSize)));
+        missing.SetValue(HorizontalAlignmentProperty, HorizontalAlignment.Right);
+        missing.SetValue(VerticalAlignmentProperty,   VerticalAlignment.Bottom);
+        missing.SetValue(MarginProperty,              new Thickness(0, 0, -3, -3));
+        iconHost.AppendChild(missing);
         row.AppendChild(iconHost);
 
         var text = new FrameworkElementFactory(typeof(TextBlock));

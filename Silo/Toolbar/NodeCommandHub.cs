@@ -22,6 +22,7 @@ namespace Silo.Toolbar;
 /// <param name="IsDefault">Shown in bold: it is what the node does by default.</param>
 /// <param name="IsDestructive">Shown in red.</param>
 /// <param name="Children">A submenu's entries.</param>
+/// <param name="MenuGroup">The menu group the command goes in (see <c>MenuGroups</c>); null: the Node menu, as before.</param>
 public sealed record NodeCommand(
     string   Id,
     string   Header,
@@ -35,7 +36,8 @@ public sealed record NodeCommand(
     Func<bool>? IsChecked  = null,
     bool     IsDefault     = false,
     bool     IsDestructive = false,
-    IReadOnlyList<NodeCommand>? Children = null)
+    IReadOnlyList<NodeCommand>? Children = null,
+    string?  MenuGroup     = null)
 {
     /// <summary>The group of the node's built-in actions: nameless (no heading) and apart from the provided commands.</summary>
     public const string ActionsGroup = "";
@@ -53,7 +55,7 @@ public sealed record NodeCommand(
     public static NodeCommand From(ProvidedCommand c)
     {
         return new NodeCommand(c.Id, c.Header, c.Command, c.Parameter, c.IconKey, c.ToolTip, c.Group, c.Placement.HasFlag(CommandPlacement.Toolbar),
-                               c.Gesture, c.IsChecked, c.IsDefault, c.IsDestructive, c.Children?.Select(From).ToList());
+                               c.Gesture, c.IsChecked, c.IsDefault, c.IsDestructive, c.Children?.Select(From).ToList(), c.MenuGroup);
     }
 }
 

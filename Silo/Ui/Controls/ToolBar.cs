@@ -7,6 +7,7 @@ using Silo.Commanding;
 using Silo.Converters;
 using Silo.Design;
 using Silo.Toolbar;
+using Silo.Tools;
 
 namespace Silo.Ui;
 
@@ -67,6 +68,7 @@ public class ToolBar : System.Windows.Controls.ToolBar
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
         ToolbarSettings.Changed += OnLayoutChanged;
+        ToolSettings.Changed    += OnLayoutChanged;
         NodeCommandHub.Changed  += OnNodeChanged;
         if (App.Instance is { } app) app.ActiveSiloChanged += OnActiveSiloChanged;
 
@@ -76,6 +78,7 @@ public class ToolBar : System.Windows.Controls.ToolBar
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
         ToolbarSettings.Changed -= OnLayoutChanged;
+        ToolSettings.Changed    -= OnLayoutChanged;
         NodeCommandHub.Changed  -= OnNodeChanged;
         if (App.Instance is { } app) app.ActiveSiloChanged -= OnActiveSiloChanged;
     }
@@ -147,6 +150,11 @@ public class ToolBar : System.Windows.Controls.ToolBar
 
                     case ToolbarItemKind.NodeCommands:
                         AddNodeCommands();
+                        break;
+
+                    case ToolbarItemKind.Group:
+                        foreach (var c in MenuCommands.Commands(slot.Id[ToolbarLayout.GroupPrefix.Length..]))
+                            Items.Add(CommandButton(c.Command, c.Parameter, c.IconKey, c.Header, c.ToolTip, c.IconKey is null));
                         break;
                 }
             }

@@ -60,7 +60,7 @@ public static class AppNavTree
     /// <summary>One open Silo: its own views, in the order of the navigation design.</summary>
     public static AppNavNode BuildSilo()
     {
-        return _group("Silo", "DataModel", null, silo => new[]
+        return _group("Silo", "SiloCube", null, silo => new[]
                                                          {
                                                              _leaf("Search", "Search", silo,
                                                                    view: _view("Search", () => new PlaceholderView("Search"))),

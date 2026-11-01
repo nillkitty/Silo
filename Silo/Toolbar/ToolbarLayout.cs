@@ -47,6 +47,9 @@ public sealed class ToolbarLayout
     public const string NodeCommandsId    = "node.commands";
     public const string CustomizeId       = "toolbar.customize";
 
+    /// <summary>The start of the id of a slot that holds every command of a menu group ("group:Silo.ExportList").</summary>
+    public const string GroupPrefix = "group:";
+
     public bool Visible { get; set; } = true;
 
     public List<ToolbarSlot> Slots { get; set; } = [];

@@ -1,4 +1,4 @@
-﻿using System.Windows.Input;
+using System.Windows.Input;
 using Silo.Commanding;
 using Silo.Model;
 using Silo.Tabular;
@@ -21,7 +21,10 @@ public enum ToolbarItemKind
     NodeCommands,
 
     /// <summary>The button that opens the Customize Toolbar dialog.</summary>
-    Customize
+    Customize,
+
+    /// <summary>One button per command of a menu group (see <see cref="Silo.Commanding.MenuGroups" />): what the group's menu section holds.</summary>
+    Group
 }
 
 /// <summary>
@@ -49,8 +52,17 @@ public sealed record ToolbarItemDef(
     ToolbarItemKind Kind      = ToolbarItemKind.Command,
     ICommand?       Command   = null,
     Func<ICommand?>? Resolve  = null,
-    object?         Parameter = null)
+    object?         Parameter = null,
+    string?         MenuGroup = null,
+    string?         Gesture   = null)
 {
+    /// <summary>The item as a provided command, for the menu group it is in.</summary>
+    public ProvidedCommand ToProvided()
+    {
+        return new ProvidedCommand(Id, Header, CreateCommand() ?? new DelegateCommand(_ => { }, _ => false), Parameter, IconKey, ToolTip, null, CommandPlacement.Menu, Gesture,
+                                   MenuGroup: MenuGroup);
+    }
+
     /// <summary>The label without its access-key underscore or trailing dots.</summary>
     public string PlainHeader => ToolbarText.Plain(Header);
 
@@ -110,7 +122,7 @@ public static class ToolbarCatalog
     {
         foreach (var tool in Tools())
         {
-            if (tool is not ICommandProvider provider) continue;
+            if (tool is not ICommandProvider provider || !tool.IsVisible) continue;
 
             IEnumerable<ProvidedCommand> commands;
             try
@@ -155,11 +167,14 @@ public static class ToolbarCatalog
         return new ToolbarItemDef(id, category, c.Header, c.ToolTip ?? ToolbarText.Plain(c.Header), c.IconKey, Command: c.Command, Parameter: c.Parameter);
     }
 
+    /// <summary>Every tool, in the person's order (the disabled ones too).</summary>
+    public static IEnumerable<ITool> AllTools() => Tools();
+
     private static IEnumerable<ITool> Tools()
     {
         try
         {
-            return App.Instance?.Tools.Tools.ToList() ?? [];
+            return Silo.Tools.ToolSettings.Ordered(App.Instance?.Tools.Tools.ToList() ?? []);
         }
         catch (Exception ex)
         {
@@ -172,52 +187,52 @@ public static class ToolbarCatalog
     {
         var items = new List<ToolbarItemDef>();
 
-        void Add(string id, string category, string header, string? tip, string? icon, Func<ICommand?> resolve, object? parameter = null)
+        void Add(string id, string category, string header, string? tip, string? icon, Func<ICommand?> resolve, object? parameter = null, string? group = null, string? gesture = null)
         {
-            items.Add(new ToolbarItemDef(id, category, header, tip, icon, Resolve: resolve, Parameter: parameter));
+            items.Add(new ToolbarItemDef(id, category, header, tip, icon, Resolve: resolve, Parameter: parameter, MenuGroup: group, Gesture: gesture));
         }
 
-        void Routed(string id, string header, string tip, string icon, ICommand command)
+        void Routed(string id, string header, string tip, string icon, ICommand command, string group, string? gesture = null)
         {
-            items.Add(new ToolbarItemDef(id, "Edit", header, tip, icon, Command: command));
+            items.Add(new ToolbarItemDef(id, "Edit", header, tip, icon, Command: command, MenuGroup: group, Gesture: gesture));
         }
 
         // ---- File ---------------------------------------------------------------------------
-        Add("file.new",     "File", "_New Silo...",       "New Silo (Ctrl+N)",                 "TbNew",     () => App.NewSiloCommand);
-        Add("file.open",    "File", "_Open Silo...",      "Open Silo (Ctrl+O)",                "TbOpen",    () => App.OpenSiloCommand);
-        Add("file.openurl", "File", "Open from _URL...",  "Open Silo from URL (Ctrl+Shift+O)", "Link",      () => App.OpenSiloFromUrlCommand);
-        Add("file.save",    "File", "_Save Silo",         "Save Silo (Ctrl+S)",                "TbSave",    () => Active?.Commands.SaveSilo);
-        Add("file.saveas",  "File", "Save Silo _As...",   "Save Silo As (Ctrl+Shift+S)",       "TbSaveAs",  () => Active?.Commands.SaveSiloAs);
-        Add("file.close",   "File", "_Close Silo",        "Close Silo",                        "TbCloseSilo", () => Active?.Commands.CloseSilo);
-        Add("file.exit",    "File", "E_xit",              "Exit (Alt+F4)",                     "TbExit",    () => App.ExitCommand);
+        Add("file.new",     "File", "_New Silo...",       "New Silo (Ctrl+N)",                 "TbNew",     () => App.NewSiloCommand, null, MenuGroups.DocMgmt, "Ctrl+N");
+        Add("file.open",    "File", "_Open Silo...",      "Open Silo (Ctrl+O)",                "TbOpen",    () => App.OpenSiloCommand, null, MenuGroups.DocMgmt, "Ctrl+O");
+        Add("file.openurl", "File", "Open from _URL...",  "Open Silo from URL (Ctrl+Shift+O)", "Link",      () => App.OpenSiloFromUrlCommand, null, MenuGroups.DocMgmt, "Ctrl+Shift+O");
+        Add("file.save",    "File", "_Save Silo",         "Save Silo (Ctrl+S)",                "TbSave",    () => Active?.Commands.SaveSilo, null, MenuGroups.FileMgmt, "Ctrl+S");
+        Add("file.saveas",  "File", "Save Silo _As...",   "Save Silo As (Ctrl+Shift+S)",       "TbSaveAs",  () => Active?.Commands.SaveSiloAs, null, MenuGroups.FileMgmt, "Ctrl+Shift+S");
+        Add("file.close",   "File", "_Close Silo",        "Close Silo",                        "TbCloseSilo", () => Active?.Commands.CloseSilo, null, MenuGroups.FileMgmt);
+        Add("file.exit",    "File", "E_xit",              "Exit (Alt+F4)",                     "TbExit",    () => App.ExitCommand, null, MenuGroups.ExitCmds, "Alt+F4");
 
         // ---- Edit: routed commands, so they act on whatever has the keyboard focus --------------
-        Routed("edit.undo",      "_Undo",      "Undo (Ctrl+Z)",  "Undo",     ApplicationCommands.Undo);
-        Routed("edit.redo",      "_Redo",      "Redo (Ctrl+Y)",  "TbRedo",   ApplicationCommands.Redo);
-        Routed("edit.cut",       "Cu_t",       "Cut (Ctrl+X)",   "TbCut",    ApplicationCommands.Cut);
-        Routed("edit.copy",      "_Copy",      "Copy (Ctrl+C)",  "TbCopy",   ApplicationCommands.Copy);
-        Routed("edit.paste",     "_Paste",     "Paste (Ctrl+V)", "TbPaste",  ApplicationCommands.Paste);
+        Routed("edit.undo",      "_Undo",      "Undo (Ctrl+Z)",  "Undo",     ApplicationCommands.Undo, MenuGroups.UndoRedo);
+        Routed("edit.redo",      "_Redo",      "Redo (Ctrl+Y)",  "TbRedo",   ApplicationCommands.Redo, MenuGroups.UndoRedo);
+        Routed("edit.cut",       "Cu_t",       "Cut (Ctrl+X)",   "TbCut",    ApplicationCommands.Cut, MenuGroups.ClipboardCmds);
+        Routed("edit.copy",      "_Copy",      "Copy (Ctrl+C)",  "TbCopy",   ApplicationCommands.Copy, MenuGroups.ClipboardCmds);
+        Routed("edit.paste",     "_Paste",     "Paste (Ctrl+V)", "TbPaste",  ApplicationCommands.Paste, MenuGroups.ClipboardCmds);
         items.Add(new ToolbarItemDef("edit.pastetable", "Edit", "Paste as _New Table...",
                                      "Make a new table in the Silo from the table or text on the clipboard", "TbPasteTable",
-                                     Command: new DelegateCommand(_ => TablePaste.AsNewTable(Active), _ => Active is not null)));
-        Routed("edit.delete",    "_Delete",    "Delete (Del)",       "TbDelete",    ApplicationCommands.Delete);
-        Routed("edit.selectall", "Select _All", "Select All (Ctrl+A)", "TbSelectAll", ApplicationCommands.SelectAll);
+                                     Command: new DelegateCommand(_ => TablePaste.AsNewTable(Active), _ => Active is not null), MenuGroup: MenuGroups.ClipboardCmds));
+        Routed("edit.delete",    "_Delete",    "Delete (Del)",       "TbDelete",    ApplicationCommands.Delete, MenuGroups.ClipboardCmds);
+        Routed("edit.selectall", "Select _All", "Select All (Ctrl+A)", "TbSelectAll", ApplicationCommands.SelectAll, MenuGroups.ClipboardCmds);
 
         // ---- Help ---------------------------------------------------------------------------
-        Add("help.about", "Help", "_About Silo...", "About Silo", "TbHelp", () => App.About);
+        Add("help.about", "Help", "_About Silo...", "About Silo", "TbHelp", () => App.About, null, MenuGroups.AboutCmds);
 
         // ---- Silo (act on the active Silo) -------------------------------------------------------
-        Add("silo.newconnection", "Silo", "_New Connection...", "New Connection (Ctrl+Shift+N)", "Plug",  () => Active?.Commands.NewConnection);
-        Add("silo.newcredential", "Silo", "New _Credential...", "New Credential",                "Key",   () => Active?.Commands.NewCredential);
-        Add("silo.archive",       "Silo", "Convert to _Archive Format", "Convert the Silo to its archive format", "Layers", () => Active?.Commands.ConvertToArchive);
+        Add("silo.newconnection", "Silo", "_New Connection...", "New Connection (Ctrl+Shift+N)", "Plug",  () => Active?.Commands.NewConnection, null, MenuGroups.ConnectionMgmt, "Ctrl+Shift+N");
+        Add("silo.newcredential", "Silo", "New _Credential...", "New Credential",                "Key",   () => Active?.Commands.NewCredential, null, MenuGroups.ConnectionMgmt);
+        Add("silo.archive",       "Silo", "Convert to _Archive Format", "Convert the Silo to its archive format", "Layers", () => Active?.Commands.ConvertToArchive, null, MenuGroups.FormatList);
         Add("silo.table.rich",      "Silo", "New Table: _Rich Text",    "A table whose every column is rich text",         "TbTable", () => Active?.Commands.NewTable, "rich");
         Add("silo.table.plain",     "Silo", "New Table: _Plain Text",   "A table whose every column is literal text",      "TbTable", () => Active?.Commands.NewTable, "plain");
         Add("silo.table.typed",     "Silo", "New Table: T_yped Columns", "A table that starts with a text, a number and a date column", "TbTable", () => Active?.Commands.NewTable, "typed");
         Add("silo.table.clipboard", "Silo", "New Table From _Clipboard...", "A table made of the table or text on the clipboard", "TbPasteTable", () => Active?.Commands.NewTable, "clipboard");
-        Add("silo.export.logs",  "Silo", "Export _Logs...",  "Export the Silo's logs",  "TbExport", () => Active?.Commands.ExportLogs);
-        Add("silo.export.state", "Silo", "Export _State...", "Export the Silo's state", "TbExport", () => Active?.Commands.ExportState);
-        Add("silo.export.all",   "Silo", "Export _All...",   "Export everything in the Silo", "TbExport", () => Active?.Commands.ExportAll);
-        Add("silo.import",       "Silo", "_Import Data...",  "Import data files into the Silo", "TbImport", () => Active?.Commands.ImportData);
+        Add("silo.export.logs",  "Silo", "Export _Logs...",  "Export the Silo's logs",  "TbExport", () => Active?.Commands.ExportLogs, null, MenuGroups.ExportList);
+        Add("silo.export.state", "Silo", "Export _State...", "Export the Silo's state", "TbExport", () => Active?.Commands.ExportState, null, MenuGroups.ExportList);
+        Add("silo.export.all",   "Silo", "Export _All...",   "Export everything in the Silo", "TbExport", () => Active?.Commands.ExportAll, null, MenuGroups.ExportList);
+        Add("silo.import",       "Silo", "_Import Data...",  "Import data files into the Silo", "TbImport", () => Active?.Commands.ImportData, null, MenuGroups.ImportList);
 
         // ---- structure -------------------------------------------------------------------------
         items.Add(new ToolbarItemDef(ToolbarLayout.NodeCommandsId, "Node", "Node commands",
@@ -228,6 +243,10 @@ public static class ToolbarCatalog
                                      "Open or close a tool (the tools that have no buttons of their own)", "Puzzle", ToolbarItemKind.ToolsDropdown));
         items.Add(new ToolbarItemDef(ToolbarLayout.CustomizeId, "Toolbar", "Customize Toolbar...", "Add, remove, reorder and rename the toolbar's buttons",
                                      "TbCustomize", ToolbarItemKind.Customize));
+
+        // ---- groups: every command of a menu group, as the menu has them -----------------------------
+        foreach (string group in MenuLayoutDef.Default().Groups())
+            items.Add(new ToolbarItemDef(ToolbarLayout.GroupPrefix + group, "Groups", group, "Every command of the menu group " + group + ", the way its menu lists them", "Layers", ToolbarItemKind.Group));
 
         return items;
     }

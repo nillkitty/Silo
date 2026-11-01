@@ -48,6 +48,10 @@ public enum CommandPlacement
 /// <param name="IsDefault">The command a double-click would run; its menu entry is shown in bold.</param>
 /// <param name="IsDestructive">Deletes or discards something; its menu entry is shown in red.</param>
 /// <param name="Children">When given, the entry is a submenu holding these commands (<see cref="Command" /> is not run).</param>
+/// <param name="MenuGroup">
+///     Which menu group the command goes in (see <c>MenuGroups</c>): a group id like "Silo.ExportList", or a menu id like "Tools" for that menu's default group.
+///     Null: the command is not in the menu bar (a node's commands are still in the Node menu and its right-click menu).
+/// </param>
 public sealed record ProvidedCommand(
     string           Id,
     string           Header,
@@ -61,7 +65,8 @@ public sealed record ProvidedCommand(
     Func<bool>?      IsChecked     = null,
     bool             IsDefault     = false,
     bool             IsDestructive = false,
-    IReadOnlyList<ProvidedCommand>? Children = null)
+    IReadOnlyList<ProvidedCommand>? Children = null,
+    string?          MenuGroup     = null)
 {
     /// <summary>
     ///     A group that is always the last in a menu, whatever order the commands came in: it has no heading, only a separator
@@ -71,10 +76,10 @@ public sealed record ProvidedCommand(
 
     /// <summary>A command that runs <paramref name="run" />, enabled whenever <paramref name="canRun" /> (if given) says so.</summary>
     public static ProvidedCommand From(string  id,             string header, Action run, string? iconKey = null, Func<bool>? canRun = null,
-                                       string? toolTip = null, string? group = null, CommandPlacement placement = CommandPlacement.Both)
+                                       string? toolTip = null, string? group = null, CommandPlacement placement = CommandPlacement.Both, string? menuGroup = null)
     {
         return new ProvidedCommand(id, header, new DelegateCommand(_ => run(), canRun is null ? null : _ => canRun()), null, iconKey,
-                                   toolTip, group, placement);
+                                   toolTip, group, placement, MenuGroup: menuGroup);
     }
 
     /// <summary>

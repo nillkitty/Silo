@@ -128,7 +128,7 @@ public sealed class OpenInLabActions : IActionProvider<object>
         {
             var l = lab;
             var v = value;
-            yield return ProvidedCommand.From("lab.open." + l.Id, $"Open in {l.Name}", () => LabHost.Open(l, v), l.IconKey, null, l.Description, "Analysis");
+            yield return ProvidedCommand.From("lab.open." + l.Id, $"Open in {l.Name}", () => LabHost.Open(l, v), l.IconKey, null, l.Description, "Analysis", CommandPlacement.Both, MenuGroups.NodeLabCmds);
         }
     }
 }

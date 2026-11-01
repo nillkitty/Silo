@@ -160,6 +160,53 @@ public class DnsTreeTests
         Assert.That(DnsNames.TryReverseZone(name, out _), Is.False);
     }
 
+    [TestCase("toys",                "contoso.com.", "toys.contoso.com.")]
+    [TestCase("toys.contoso.com",    "contoso.com.", "toys.contoso.com.")]
+    [TestCase("Toys.Contoso.COM.",   "contoso.com.", "toys.contoso.com.")]
+    [TestCase("a.b",                 "contoso.com.", "a.b.contoso.com.")]
+    [TestCase("toys.fabrikam.com.",  "contoso.com.", null)]
+    [TestCase("contoso.com",         "contoso.com.", null)]
+    [TestCase("xcontoso.com",        "contoso.com.", "xcontoso.com.contoso.com.")]
+    [TestCase("example.org",         ".",            "example.org.")]
+    [TestCase("bad name",            "contoso.com.", null)]
+    public void Add_subdomain_keeps_a_complete_name_and_completes_a_relative_one(string typed, string parent, string? expected)
+    {
+        Assert.That(DnsNames.ChildNameFor(typed, parent), Is.EqualTo(expected));
+    }
+
+    [Test]
+    public void Every_kind_of_record_group_has_its_own_icon()
+    {
+        var kinds = Enum.GetValues<DnsGroupKind>().Select(DnsIcons.For).ToList();
+
+        Assert.That(kinds, Is.Unique);
+        Assert.That(DnsIcons.For(DnsType.AAAA), Is.Not.EqualTo(DnsIcons.For(DnsType.A)));
+    }
+
+    [Test]
+    public void Relevant_tlds_come_from_the_suffixes_less_com_net_and_arpa()
+    {
+        var tlds = DnsNames.RelevantTlds(["corp.example.com", "Lan", "", null, "home.nl.", "x.net", "ZZ.lan.", "bad name"]);
+
+        Assert.That(tlds, Is.EqualTo(new[] { "lan.", "nl." }));
+    }
+
+    [Test]
+    public async Task The_root_first_shows_a_short_list_then_All_TLDs()
+    {
+        var tree = new DnsTree();
+        var node = tree.Root.GetNode();
+
+        await node.LoadChildrenAsync();
+
+        var names = node.Children.Select(c => c.Text).ToList();
+        Assert.That(names.First(),   Is.EqualTo("com."));
+        Assert.That(names[1],        Is.EqualTo("net."));
+        Assert.That(names[^2],       Is.EqualTo("arpa."));
+        Assert.That(names.Last(),    Is.EqualTo("All TLDs"));
+        Assert.That(tree.Find("com."), Is.Not.Null);
+    }
+
     [Test]
     public void The_root_is_the_top_of_the_tree_and_a_top_level_name_goes_under_it_without_asking_anyone()
     {

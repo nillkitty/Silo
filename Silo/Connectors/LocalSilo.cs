@@ -268,7 +268,7 @@ public class LocalSilo : VirtualRoot<OpenSilo>, INodeProvider<OpenSilo>, IUriCon
         var h = new HierarchyBuilder(this);
         h.Level("LocalSilo", $"Your Silo ({Data?.Name ?? "no Silo is open"})", UriConstants.LocalSiloUri)
          .Kind("Silo")
-         .Icon("Server")
+         .Icon(IconRef.FromUri(new Uri("pack://application:,,,/Silo;component/Assets/Silo.ico", UriKind.Absolute)))
          .Expanded();
 
         if (Data is not null)

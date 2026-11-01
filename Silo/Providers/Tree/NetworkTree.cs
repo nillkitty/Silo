@@ -386,7 +386,7 @@ public abstract class NetTreeNode : INodeProvider, INodeDetails, ICommandProvide
     }
 
     /// <inheritdoc />
-    public Uri Uri => IsUnexplored ? new Uri($"{Subnet.ToUri().AbsoluteUri}/unexplored/{FirstAddress()}-{LastAddress()}".Replace("[", string.Empty).Replace("]", string.Empty), UriKind.Absolute) : Subnet.ToUri();
+    public Uri Uri => IsUnexplored ? new Uri($"{Subnet.ToUri().AbsoluteUri}/unexplored/{FirstAddress().ToString().Trim('[', ']')}-{LastAddress().ToString().Trim('[', ']')}", UriKind.Absolute) : Subnet.ToUri();
 
     /// <inheritdoc />
     public object? Data => Subnet;

@@ -1,4 +1,4 @@
-﻿<Menu x:Class="Silo.Ui.MenuBar"
+<Menu x:Class="Silo.Ui.MenuBar"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -52,114 +52,6 @@
         </Style>
     </Menu.Resources>
 
-    <MenuItem Header="_File" Name="FileMenu" DataContext="{Binding App}">
-        <MenuItem Header="_New Silo" InputGestureText="Ctrl+N" Command="{Binding NewSiloCommand}" />
-        <MenuItem Header="_Open Silo" InputGestureText="Ctrl+O" Command="{Binding OpenSiloCommand}" />
-        <MenuItem Header="Open from _URL..." InputGestureText="Ctrl+Shift+O" Command="{Binding OpenSiloFromUrlCommand}" />
-        <Separator />
-        <!-- The text editor (TextEditing/TextEditors.cs): a new document (each item's Tag names its language), or a file. -->
-        <MenuItem Header="New _Text Document">
-            <MenuItem Header="_Plain Text" Tag="PlainText" Click="NewTextDocument_Click" />
-            <MenuItem Header="_JSON" Tag="Json" Click="NewTextDocument_Click" />
-            <MenuItem Header="_XML" Tag="Xml" Click="NewTextDocument_Click" />
-            <MenuItem Header="_YAML" Tag="Yaml" Click="NewTextDocument_Click" />
-            <Separator />
-            <MenuItem Header="_C# Script" Tag="CSharp" Click="NewTextDocument_Click" />
-            <MenuItem Header="_F# Script" Tag="FSharp" Click="NewTextDocument_Click" />
-            <MenuItem Header="Po_werShell Script" Tag="PowerShell" Click="NewTextDocument_Click" />
-            <MenuItem Header="P_ython Script" Tag="Python" Click="NewTextDocument_Click" />
-            <MenuItem Header="_Batch Script" Tag="Batch" Click="NewTextDocument_Click" />
-        </MenuItem>
-        <MenuItem Header="Open Te_xt File..." Click="OpenTextFile_Click"
-                  ToolTip="Open a file in the text editor (JSON, XML and YAML are coloured, checked and can be formatted)" />
-        <Separator />
-        <!-- These act on the active Silo: each item re-points its own DataContext from App (this menu's) to App.ActiveSilo. -->
-        <MenuItem Header="_Save Silo" InputGestureText="Ctrl+S"
-                  DataContext="{Binding ActiveSilo}"
-                  CommandTarget="{Binding .}"
-                  Command="{Binding Commands.SaveSilo}" />
-        <MenuItem Header="Save Silo _As..." InputGestureText="Ctrl+Shift+S"
-                  DataContext="{Binding ActiveSilo}"
-                  CommandTarget="{Binding .}"
-                  Command="{Binding Commands.SaveSiloAs}" />
-        <MenuItem Header="_Close Silo"
-                  DataContext="{Binding ActiveSilo}"
-                  CommandTarget="{Binding .}"
-                  Command="{Binding Commands.CloseSilo}" />
-        <Separator />
-        <MenuItem Header="E_xit" InputGestureText="Alt+F4" Command="{Binding ExitCommand}" />
-    </MenuItem>
-
-    <MenuItem Header="_Silo" Name="SiloMenu"
-                   IsEnabled="{Binding ., Converter={StaticResource ObjectExistsToBool}}"
-                   DataContext="{Binding App.ActiveSilo}">
-        <MenuItem Header="_New Connection"
-                       InputGestureText="Ctrl+Shift+N"
-                       CommandTarget="{Binding .}"
-                       Command="{Binding Commands.NewConnection}" />
-        <MenuItem Header="_Credential" Command="{Binding Commands.NewCredential}" />
-        <MenuItem Header="Convert to _Archive Format..." CommandTarget="{Binding .}"  Command="{Binding Commands.ConvertToArchive}" />
-        <Separator />
-        <!--
-            Add Data: things authored here rather than pulled from a source. Each item hands its kind to the same command
-            as its CommandParameter (rich, plain or typed: see TableTemplate.FromKey).
-        -->
-        <MenuItem Header="Add _Data">
-            <MenuItem Header="_Tabular">
-                <MenuItem Header="_Rich Text" CommandTarget="{Binding .}" Command="{Binding Commands.NewTable}" CommandParameter="rich"
-                          ToolTip="A table whose every column is rich text (bold, italic, code, links)" />
-                <MenuItem Header="_Plain Text" CommandTarget="{Binding .}" Command="{Binding Commands.NewTable}" CommandParameter="plain"
-                          ToolTip="A table whose every column is literal text" />
-                <MenuItem Header="T_yped Columns" CommandTarget="{Binding .}" Command="{Binding Commands.NewTable}" CommandParameter="typed"
-                          ToolTip="Starts with a text, a number and a date column; change each column's type as needed" />
-                <Separator />
-                <MenuItem Header="From _Clipboard..." CommandTarget="{Binding .}" Command="{Binding Commands.NewTable}" CommandParameter="clipboard"
-                          ToolTip="A table made of the table or text on the clipboard (Excel, a web page, CSV...)" />
-            </MenuItem>
-        </MenuItem>
-        <!-- The address space as a tree of subnets in the Explorer (Providers/Tree/NetworkTree.cs); the parameter picks the family. -->
-        <MenuItem Header="Add _Address Space">
-            <MenuItem Header="_IPv4" CommandTarget="{Binding .}" Command="{Binding Commands.AddAddressSpace}" CommandParameter="4"
-                      ToolTip="0.0.0.0/0 and everything below it: registries, reserved blocks, reverse DNS, WHOIS" />
-            <MenuItem Header="IPv_6" CommandTarget="{Binding .}" Command="{Binding Commands.AddAddressSpace}" CommandParameter="6"
-                      ToolTip="::/0 and everything below it: registries, reserved blocks, reverse DNS, WHOIS" />
-            <Separator />
-            <MenuItem Header="IPv4 and IPv6 _Both" CommandTarget="{Binding .}" Command="{Binding Commands.AddAddressSpace}" CommandParameter="both" />
-            <Separator />
-            <MenuItem Header="_Domain Names" CommandTarget="{Binding .}" Command="{Binding Commands.AddAddressSpace}" CommandParameter="dns"
-                      ToolTip="The root zone, top-level domains and the names you go to, with their records (A, MX, NS, TXT, DNSSEC...)" />
-        </MenuItem>
-        <Separator />
-        <MenuItem Header="_Export/Backup" >
-            <MenuItem Header="_Logs..." CommandTarget="{Binding .}"  Command="{Binding Commands.ExportLogs}" />
-            <MenuItem Header="_State..." CommandTarget="{Binding .}"  Command="{Binding Commands.ExportState}" />
-            <Separator />
-            <MenuItem Header="_All..." CommandTarget="{Binding .}"  Command="{Binding Commands.ExportAll}" />
-
-        </MenuItem>
-        <MenuItem Header="_Import" >
-            <MenuItem Header="_Data..." CommandTarget="{Binding .}"  Command="{Binding Commands.ImportData}" />
-        </MenuItem>
-
-    </MenuItem>
-    <!--
-        Standard editing acts on whichever control has the keyboard focus (a text box, the data grid...). Below the
-        separator come the entries of the active document, added each time the menu opens (EditMenu_SubmenuOpened).
-    -->
-    <MenuItem x:Name="EditMenu" Header="_Edit" SubmenuOpened="EditMenu_SubmenuOpened">
-        <MenuItem Header="_Undo" Command="ApplicationCommands.Undo" />
-        <MenuItem Header="_Redo" Command="ApplicationCommands.Redo" />
-        <Separator />
-        <MenuItem Header="Cu_t" Command="ApplicationCommands.Cut" />
-        <MenuItem Header="_Copy" Command="ApplicationCommands.Copy" />
-        <MenuItem Header="_Paste" Command="ApplicationCommands.Paste" />
-        <MenuItem Header="Paste as _New Table..." Click="PasteNewTable_Click"
-                  ToolTip="Make a new table in the Silo from the table or text on the clipboard" />
-        <MenuItem Header="_Delete" Command="ApplicationCommands.Delete" />
-        <Separator />
-        <MenuItem Header="Select _All" Command="ApplicationCommands.SelectAll" />
-        <Separator x:Name="EditDynamicSeparator" Visibility="Collapsed" />
-    </MenuItem>
     <MenuItem x:Name="ViewMenu" Header="_View" SubmenuOpened="ViewMenu_SubmenuOpened">
         <MenuItem Header="_Theme" DataContext="{Binding App.Theme}">
             <MenuItem Header="_Light"
@@ -237,34 +129,4 @@
         <!-- Tables popped out into their own windows are listed here (filled in ViewMenu_SubmenuOpened). -->
         <Separator x:Name="ViewWindowsSeparator" Visibility="Collapsed" />
     </MenuItem>
-    <!--
-        The commands of the node selected in the Explorer (filled in each time the menu opens, NodeMenu_SubmenuOpened); the
-        same list is in the Explorer's right-click menu and on the toolbar.
-    -->
-    <MenuItem x:Name="NodeMenu" Header="_Node" SubmenuOpened="NodeMenu_SubmenuOpened">
-        <!-- an empty menu item cannot open, so SubmenuOpened would never come: this stand-in is replaced each time the menu opens -->
-        <MenuItem Header="(select a node in the Explorer)" IsEnabled="False" />
-    </MenuItem>
-    <!--
-        One entry per Lab the container knows (Labs/LabHost.cs), filled each time the menu opens
-        (AnalysisMenu_SubmenuOpened): a Lab that is added shows up here without a change to this file. An empty menu item
-        cannot open, so it starts with a stand-in.
-    -->
-    <MenuItem x:Name="AnalysisMenu" Header="_Analysis" SubmenuOpened="AnalysisMenu_SubmenuOpened">
-        <MenuItem Header="(no labs)" IsEnabled="False" />
-    </MenuItem>
-    <MenuItem Header="_Tools" Name="ToolsMenu"
-                   DataContext="{Binding App.Tools}">
-        <MenuItem Header="Manage Tools..."
-                       Visibility="{Binding HasToolsAuthoring, Converter={StaticResource BoolToVisibility}}" />
-        <Separator Visibility="{Binding HasToolsAuthoring, Converter={StaticResource BoolToVisibility}}" />
-        <MenuItem Header="Break Debugger"
-                       Command="{Binding Break}" />
-        <!-- One MenuItem per ITool, appended here and kept in sync with Tools -->
-        <ui:MenuGroup ItemsSource="{Binding Tools}" ItemContainerStyle="{StaticResource ToolMenuItemStyle}" />
-    </MenuItem>
-    <MenuItem Header="_Help" Name="HelpMenu">
-        <MenuItem Header="_About Silo..."
-                       Command="{Binding App.About}"/>
-    </MenuItem>
-</Menu>
+    </Menu>

@@ -29,7 +29,8 @@
  *   ui.sidebar.addPalette(id, title, expanded, fn)     shape sidebar sections
  *   mxStencilRegistry.addStencil(name, new mxStencil)  custom shapes
  *   mxCellRenderer.defaultShapes[name].prototype.customProperties   typed Format-panel properties
- *   StyleFormatPanel.prototype.init (wrapped)          the Silo Properties section above draw.io's Property grid
+ *   StyleFormatPanel.prototype.init (wrapped)          the Properties section (replaces draw.io's Property grid)
+ *   DiagramStylePanel.prototype.init (wrapped)         the default diagram style (replaces the style presets)
  *   ui.formatContainer / ui.formatWidth / ui.refresh   the drag handle that resizes the Format panel
  */
 (function () {
@@ -443,7 +444,10 @@
 
     function drawnIcon(name) {
         var svg;
-        if (DRAWN[name])
+        if (name === 'silo') // the Silo app icon (same cube as Assets/Silo.ico); in color, so not an adaptive (inverted) asset
+            svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><path d="M50 5L91 27.5L50 50L9 27.5Z" fill="#9ad7ff"/>' +
+                '<path d="M9 27.5L50 50V95L9 72.5Z" fill="#3b8de0"/><path d="M50 50L91 27.5V72.5L50 95Z" fill="#1d4f9c"/></svg>';
+        else if (DRAWN[name])
             svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#000"><path d="M4 4h16v16H4z" stroke-width="1.2" stroke-dasharray="2 2" opacity=".5"/><path d="' + DRAWN[name] + '" stroke-width="2.6" stroke-linecap="square"/></svg>';
         else if (name === 'compass')
             svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="#000" stroke-width="1.6"/><path d="M12 5l3 7h-6z" fill="#000"/><path d="M12 19l-3-7h6z" fill="none" stroke="#000" stroke-width="1.2"/></svg>';
@@ -548,7 +552,7 @@
         var img = document.createElement('img');
         var src = iconSource(name);
         if (src) img.src = src;
-        img.className = 'geAdaptiveAsset';
+        if (name !== '#silo') img.className = 'geAdaptiveAsset';
         img.title = title || '';
         img.alt = title || '';
         img.style.cssText = 'width:' + (size || 16) + 'px;height:' + (size || 16) + 'px;vertical-align:middle;flex:0 0 auto;' +
@@ -983,8 +987,8 @@
         title.setAttribute('role', 'button');
         title.setAttribute('aria-expanded', propsView.open ? 'true' : 'false');
         title.appendChild(icon(propsView.open ? 'expandMoreImage' : 'expandLessImage', '', 14));
-        title.appendChild(icon('sparklesImage', '', 16));
-        title.appendChild(document.createTextNode('Silo Properties'));
+        title.appendChild(icon('#silo', '', 16));
+        title.appendChild(document.createTextNode('Properties'));
         title.addEventListener('click', function () { propsView.open = !propsView.open; saveView(); refresh(); });
         header.appendChild(title);
         if (propsView.open) {
@@ -1180,6 +1184,229 @@
         return div;
     }
 
+    // ---- the default diagram style (the Style tab with nothing selected) ------------------------------------------------
+    //
+    // Replaces draw.io's built-in style presets with the same kind of property grid, editing the diagram's default vertex or
+    // edge style: it starts from draw.io's own default (captured the first time the tab shows) and each change goes to
+    // graph.currentVertexStyle / currentEdgeStyle (what new shapes get) and to the stylesheet's default style (what shapes
+    // without their own value look like). A reset puts back the captured default.
+    // draw.io internals used (VERIFY on a version change): DiagramStylePanel.prototype.init, graph.currentVertexStyle /
+    // currentEdgeStyle, graph.getStylesheet().get/putDefaultVertexStyle / get/putDefaultEdgeStyle, Editor.commonVertexProperties /
+    // commonEdgeProperties.
+
+    var DEFAULT_STYLE_KEY = 'silo.defaultStylePanel.target';
+    var STYLE_ENUMS = {
+        align: ['left', 'center', 'right'], verticalAlign: ['top', 'middle', 'bottom'], whiteSpace: ['wrap', 'nowrap'],
+        edgeStyle: ['none', 'orthogonalEdgeStyle', 'elbowEdgeStyle', 'entityRelationEdgeStyle', 'isometricEdgeStyle'],
+        endArrow: ['none', 'classic', 'classicThin', 'block', 'blockThin', 'open', 'openThin', 'oval', 'diamond', 'diamondThin', 'box', 'halfCircle', 'dash', 'cross', 'circlePlus', 'ERone', 'ERmany'],
+        startArrow: ['none', 'classic', 'classicThin', 'block', 'blockThin', 'open', 'openThin', 'oval', 'diamond', 'diamondThin', 'box', 'halfCircle', 'dash', 'cross', 'circlePlus', 'ERone', 'ERmany']
+    };
+
+    function basicProperty(name, label, type) {
+        var prop = { name: name, dispName: label, type: type };
+        if (STYLE_ENUMS[name]) {
+            prop.type = 'enum';
+            prop.enumList = STYLE_ENUMS[name].map(function (v) { return { val: v, dispName: v }; });
+        }
+        return prop;
+    }
+
+    var BASIC_VERTEX = [
+        ['fillColor', 'Fill Color', 'color'], ['gradientColor', 'Gradient Color', 'color'], ['strokeColor', 'Line Color', 'color'],
+        ['strokeWidth', 'Line Width', 'float'], ['dashed', 'Dashed', 'bool'], ['opacity', 'Opacity', 'int'], ['rounded', 'Rounded', 'bool'],
+        ['shadow', 'Shadow', 'bool'], ['glass', 'Glass', 'bool'], ['sketch', 'Sketch', 'bool'], ['fontColor', 'Font Color', 'color'],
+        ['fontSize', 'Font Size', 'int'], ['fontFamily', 'Font', 'string'], ['align', 'Horizontal Align', 'enum'],
+        ['verticalAlign', 'Vertical Align', 'enum'], ['whiteSpace', 'Word Wrap', 'enum'], ['html', 'HTML Label', 'bool']
+    ];
+    var BASIC_EDGE = [
+        ['strokeColor', 'Line Color', 'color'], ['strokeWidth', 'Line Width', 'float'], ['dashed', 'Dashed', 'bool'],
+        ['edgeStyle', 'Connection', 'enum'], ['rounded', 'Rounded', 'bool'], ['curved', 'Curved', 'bool'], ['shadow', 'Shadow', 'bool'],
+        ['sketch', 'Sketch', 'bool'], ['startArrow', 'Start Arrow', 'enum'], ['endArrow', 'End Arrow', 'enum'],
+        ['startFill', 'Start Fill', 'bool'], ['endFill', 'End Fill', 'bool'], ['fontColor', 'Font Color', 'color'],
+        ['fontSize', 'Font Size', 'int'], ['fontFamily', 'Font', 'string'], ['html', 'HTML Label', 'bool']
+    ];
+
+    function styleSnapshot(graph) {
+        if (!graph.__siloStock) {
+            var sheet = graph.getStylesheet();
+            graph.__siloStock = {
+                vertex: { current: window.mxUtils.clone(graph.currentVertexStyle || {}), sheet: window.mxUtils.clone(sheet.getDefaultVertexStyle() || {}) },
+                edge: { current: window.mxUtils.clone(graph.currentEdgeStyle || {}), sheet: window.mxUtils.clone(sheet.getDefaultEdgeStyle() || {}) }
+            };
+        }
+        return graph.__siloStock;
+    }
+
+    function writeDefaultStyle(graph, edge, current, sheetStyle) {
+        var sheet = graph.getStylesheet();
+        if (edge) { graph.currentEdgeStyle = current; sheet.putDefaultEdgeStyle(sheetStyle); }
+        else { graph.currentVertexStyle = current; sheet.putDefaultVertexStyle(sheetStyle); }
+        graph.refresh();
+    }
+
+    function buildDefaultStylePanel(panel) {
+        var ui = panel.editorUi;
+        var graph = ui.editor.graph;
+        var edge = readStored(DEFAULT_STYLE_KEY, 'vertex') === 'edge';
+        var stock = styleSnapshot(graph)[edge ? 'edge' : 'vertex'];
+        var current = (edge ? graph.currentEdgeStyle : graph.currentVertexStyle) || {};
+        var sheetStyle = (edge ? graph.getStylesheet().getDefaultEdgeStyle() : graph.getStylesheet().getDefaultVertexStyle()) || {};
+        var div = panel.createPanel();
+        div.style.paddingTop = '6px';
+        div.style.paddingBottom = '6px';
+
+        function refresh() { ui.format.refresh(); }
+
+        function effective(key) {
+            return current[key] !== undefined ? current[key] : sheetStyle[key];
+        }
+
+        // the rows: the basics first, then draw.io's other typed properties for the kind of cell
+        var rows = [], seen = {};
+        (edge ? BASIC_EDGE : BASIC_VERTEX).forEach(function (b) {
+            seen[b[0]] = true;
+            rows.push({ key: b[0], prop: basicProperty(b[0], b[1], b[2]) });
+        });
+
+        var merged = {};
+        for (var m in sheetStyle) merged[m] = sheetStyle[m];
+        for (var n in current) merged[n] = current[n];
+        var fake = { style: merged, cells: [], vertices: edge ? [] : [{}], edges: edge ? [{}] : [], customProperties: {} };
+        ((edge ? window.Editor.commonEdgeProperties : window.Editor.commonVertexProperties) || []).forEach(function (p) {
+            if (!p || p.type === 'separator' || !p.name || seen[p.name]) return;
+            if (typeof p.isVisible === 'function' && guard('defaultStyle.isVisible', function () { return p.isVisible(fake, panel); }) === false) return;
+            seen[p.name] = true;
+            rows.push({ key: p.name, prop: p });
+        });
+
+        rows.forEach(function (row) {
+            var value = effective(row.key);
+            if (value === undefined)
+                value = typeof row.prop.getDefaultValue === 'function'
+                    ? guard('defaultStyle.default', function () { return row.prop.getDefaultValue(fake, panel); }) : row.prop.defVal;
+            row.value = value;
+            row.changed = String(effective(row.key)) !== String(stock.current[row.key] !== undefined ? stock.current[row.key] : stock.sheet[row.key]);
+        });
+
+        function change(key, value) {
+            var nextCurrent = window.mxUtils.clone(current), nextSheet = window.mxUtils.clone(sheetStyle);
+            [nextCurrent, nextSheet].forEach(function (style) {
+                if (value === null || value === undefined || value === '') delete style[key];
+                else style[key] = value;
+            });
+            writeDefaultStyle(graph, edge, nextCurrent, nextSheet);
+            refresh();
+        }
+
+        function restore(key) {
+            var nextCurrent = window.mxUtils.clone(current), nextSheet = window.mxUtils.clone(sheetStyle);
+            if (stock.current[key] !== undefined) nextCurrent[key] = stock.current[key]; else delete nextCurrent[key];
+            if (stock.sheet[key] !== undefined) nextSheet[key] = stock.sheet[key]; else delete nextSheet[key];
+            writeDefaultStyle(graph, edge, nextCurrent, nextSheet);
+            refresh();
+        }
+
+        // header: the title and the toolbar
+        var header = document.createElement('div');
+        header.style.cssText = 'display:flex;align-items:center;flex-wrap:wrap;gap:2px 0;margin-bottom:4px;';
+        var title = document.createElement('div');
+        title.style.cssText = 'flex:1 1 auto;font-weight:bold;font-size:13px;display:flex;align-items:center;gap:4px;';
+        title.appendChild(icon('#silo', '', 16));
+        title.appendChild(document.createTextNode('Default Style'));
+        header.appendChild(title);
+        var tools = document.createElement('div');
+        tools.style.cssText = 'display:flex;align-items:center;';
+        tools.appendChild(toolButton('thinRectangleImage', 'Default style of shapes', !edge, function () { writeStored(DEFAULT_STYLE_KEY, 'vertex'); refresh(); }));
+        tools.appendChild(toolButton('Format.straightImage', 'Default style of connectors', edge, function () { writeStored(DEFAULT_STYLE_KEY, 'edge'); refresh(); }));
+        tools.appendChild(toolButton('refreshImage', 'Reset the ' + (edge ? 'connector' : 'shape') + ' default style to draw.io\'s default', false, function () {
+            writeDefaultStyle(graph, edge, window.mxUtils.clone(stock.current), window.mxUtils.clone(stock.sheet));
+            refresh();
+        }));
+        header.appendChild(tools);
+        div.appendChild(header);
+
+        var hint = document.createElement('div');
+        hint.textContent = 'What new ' + (edge ? 'connectors' : 'shapes') + ' look like, and what ones without their own value fall back to.';
+        hint.style.cssText = 'font-size:10px;opacity:0.7;margin:0 0 6px;';
+        div.appendChild(hint);
+
+        var searchRow = document.createElement('div');
+        searchRow.style.cssText = 'display:flex;align-items:center;gap:4px;margin:2px 0 6px;';
+        searchRow.appendChild(icon('magnifyImage', 'Search', 16));
+        var search = document.createElement('input');
+        search.type = 'search';
+        search.placeholder = 'Search properties';
+        search.setAttribute('aria-label', 'Search properties');
+        search.style.cssText = 'position:static;flex:1;min-width:0;box-sizing:border-box;margin:0;font-size:11px;text-align:left;height:22px;padding:0 4px;';
+        searchRow.appendChild(search);
+        div.appendChild(searchRow);
+
+        var groups = {}, order = [];
+        rows.forEach(function (row) {
+            var category = categoryOf(row.key);
+            row.category = category;
+            if (!groups[category[0]]) { groups[category[0]] = []; order.push(category[0]); }
+            groups[category[0]].push(row);
+        });
+        order.sort(function (a, b) {
+            return CATEGORY_RULES.findIndex(function (r) { return r[0] === a; }) - CATEGORY_RULES.findIndex(function (r) { return r[0] === b; });
+        });
+
+        var list = document.createElement('div');
+        order.forEach(function (name) {
+            var section = document.createElement('div');
+            section.className = 'silo-prop-section';
+            section.style.cssText = 'margin-top:8px;';
+            var heading = document.createElement('div');
+            heading.style.cssText = 'display:flex;align-items:center;gap:6px;padding:4px 6px;margin:0 -4px 3px;border-radius:4px;' +
+                'font-weight:bold;font-size:12px;background:rgba(122,79,214,0.13);border-left:3px solid #7a4fd6;';
+            heading.appendChild(icon(groups[name][0].category[1], '', 16));
+            heading.appendChild(document.createTextNode(name));
+            section.appendChild(heading);
+
+            groups[name].forEach(function (row) {
+                var line = document.createElement('div');
+                line.className = 'silo-prop-row';
+                line.setAttribute('data-search', ((row.prop.dispName || row.key) + ' ' + row.key + ' ' + name).toLowerCase());
+                line.style.cssText = 'display:flex;align-items:center;gap:4px;min-height:24px;margin:1px 0;';
+                line.appendChild(icon(tokenIcon(row.key), '', 16));
+
+                var label = document.createElement('div');
+                label.style.cssText = 'flex:1 1 auto;min-width:0;overflow:hidden;line-height:1.2;white-space:normal;overflow-wrap:break-word;';
+                label.title = (row.prop.dispName || row.key) + '  (' + row.key + ')';
+                label.appendChild(document.createTextNode(row.prop.dispName || row.key));
+                line.appendChild(label);
+
+                var holder = document.createElement('div');
+                holder.style.cssText = (row.prop.type === 'bool' ? 'flex:0 0 auto;padding:0 4px;' : 'flex:0 0 34%;') + 'min-width:0;overflow:hidden;';
+                holder.appendChild(valueEditor(row.prop, row.value, function (v) { change(row.key, v); }));
+                line.appendChild(holder);
+
+                var reset = toolButton('crossImage', 'Back to draw.io\'s default for this property', false, function () { restore(row.key); }, 18);
+                reset.style.visibility = row.changed ? 'visible' : 'hidden';
+                reset.style.margin = '0';
+                line.appendChild(reset);
+                section.appendChild(line);
+            });
+            list.appendChild(section);
+        });
+        div.appendChild(list);
+
+        search.addEventListener('input', function () {
+            var q = search.value.trim().toLowerCase();
+            Array.prototype.forEach.call(list.querySelectorAll('.silo-prop-section'), function (section) {
+                var shown = 0;
+                Array.prototype.forEach.call(section.querySelectorAll('.silo-prop-row'), function (r) {
+                    var match = !q || r.getAttribute('data-search').indexOf(q) >= 0;
+                    r.style.display = match ? 'flex' : 'none';
+                    if (match) shown++;
+                });
+                section.style.display = shown > 0 ? '' : 'none';
+            });
+        });
+        return div;
+    }
+
     function installPropertiesPanel(ui) {
         if (options.propertiesPanel === false) return;
 
@@ -1193,19 +1420,32 @@
             var panel = this;
             guard('propertiesPanel', function () {
                 closeMenu();
-                var sstate = panel.editorUi.getSelectionState();
-                if (!sstate || !sstate.cells || sstate.cells.length === 0) return;
 
-                var ours = buildPropertiesPanel(panel, sstate);
-
-                // above draw.io's own grid when there is one, else at the end of the Style tab
+                // draw.io's own Property grid goes: Silo's Properties replaces it
                 var grid = panel.container.querySelector('table.geProperties');
                 var gridPanel = grid;
                 while (gridPanel && gridPanel.parentNode !== panel.container) gridPanel = gridPanel.parentNode;
-                if (gridPanel) panel.container.insertBefore(ours, gridPanel);
-                else panel.container.appendChild(ours);
+                if (gridPanel) panel.container.removeChild(gridPanel);
+
+                var sstate = panel.editorUi.getSelectionState();
+                if (!sstate || !sstate.cells || sstate.cells.length === 0) return;
+                panel.container.appendChild(buildPropertiesPanel(panel, sstate));
             });
         };
+
+        // the Style tab with nothing selected: the default diagram style instead of draw.io's style presets
+        var DiagramStylePanel = window.DiagramStylePanel;
+        if (DiagramStylePanel && DiagramStylePanel.prototype.init) {
+            var styleInit = DiagramStylePanel.prototype.init;
+            DiagramStylePanel.prototype.init = function () {
+                var panel = this;
+                var built = guard('defaultStyle', function () {
+                    panel.container.appendChild(buildDefaultStylePanel(panel));
+                    return true;
+                });
+                if (!built) styleInit.apply(this, arguments);
+            };
+        }
     }
 
     // ---- operations the host can call ----------------------------------------------------------------------------

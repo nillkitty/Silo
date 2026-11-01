@@ -254,12 +254,22 @@ public sealed class WindowsLocalPortOwnershipProvider : ILocalPortOwnershipProvi
     {
         if (port is < 1 or > 65535) return [];
 
-        var matches = Snapshot()
-                     .Where(s => s.Protocol == protocol && s.LocalPort == port && (remotePort is null || s.RemotePort == remotePort))
-                     .OrderBy(s => s.State  == TcpState.Listen ? 0 : 1)
-                     .ThenBy(s => s.State   == TcpState.Established ? 0 : 1)
-                     .ThenBy(s => s.Pid)
-                     .ToList();
+        return Join(Snapshot().Where(s => s.Protocol == protocol && s.LocalPort == port && (remotePort is null || s.RemotePort == remotePort)));
+    }
+
+    /// <summary>Every TCP and UDP socket on this computer, joined with its owning process; listeners first, then by local port.</summary>
+    public IReadOnlyList<PortOwner> GetAllOwners()
+    {
+        return Join(Snapshot());
+    }
+
+    private IReadOnlyList<PortOwner> Join(IEnumerable<RawSocket> sockets)
+    {
+        var matches = sockets.OrderBy(s => s.State == TcpState.Listen ? 0 : 1)
+                             .ThenBy(s => s.State  == TcpState.Established ? 0 : 1)
+                             .ThenBy(s => s.LocalPort)
+                             .ThenBy(s => s.Pid)
+                             .ToList();
 
         var processes = new Dictionary<int, LocalProcessInfo?>();
         var owners    = new List<PortOwner>(matches.Count);

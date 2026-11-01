@@ -26,6 +26,7 @@ public sealed class NodeHost : INavManager
     private readonly object                      _gate      = new();
     private readonly List<SiloNode>              _roots     = [];
     private readonly List<(object Owner, SiloNode Node)> _owned = [];
+    private readonly Dictionary<INodeProvider, SiloNode> _placements = new(ReferenceEqualityComparer.Instance);
 
     /// <summary>The top-level nodes, in the order they were added.</summary>
     public IReadOnlyList<SiloNode> Roots
@@ -66,6 +67,22 @@ public sealed class NodeHost : INavManager
     ///     offer (<c>GetNode</c> returns null), fails, or was already added, adds nothing.
     /// </summary>
     /// <returns>The node added, or null.</returns>
+    /// <summary>
+    ///     Says that the node of <paramref name="provider" /> goes under <paramref name="parent" /> instead of at the top, whenever
+    ///     <see cref="Add(INodeProvider)" /> puts it in (for a provider that is shown and hidden by a preference, such as the address spaces).
+    /// </summary>
+    public void Place(INodeProvider provider, SiloNode parent)
+    {
+        lock (_gate) _placements[provider.Required()] = parent.Required();
+    }
+
+    /// <summary>Adds the node of <paramref name="provider" /> under <paramref name="parent" /> (see <see cref="Place" />).</summary>
+    public SiloNode? Add(INodeProvider provider, SiloNode parent)
+    {
+        Place(provider, parent);
+        return Add(provider);
+    }
+
     public SiloNode? Add(INodeProvider provider)
     {
         provider.Required();
@@ -94,7 +111,13 @@ public sealed class NodeHost : INavManager
         }
 
         // a connection may already have put its node in the tree through ConnectContext.CreateNode
-        if (!Contains(node)) AddNode(node, null);
+        if (!Contains(node))
+        {
+            SiloNode? parent;
+            lock (_gate) _placements.TryGetValue(provider, out parent);
+            AddNode(node, parent is not null && Contains(parent) ? parent : null);
+        }
+
         return node;
     }
 
