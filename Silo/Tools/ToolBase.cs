@@ -38,7 +38,7 @@ public abstract class ToolBase : ITool, ICommand, INotifyPropertyChanged
     ///     this simply mirrors that window's visibility rather than tracking separate
     ///     state that could drift out of sync with it.
     /// </summary>
-    public bool IsChecked
+    public virtual bool IsChecked
     {
         get
         {
@@ -212,7 +212,7 @@ public abstract class ToolBase : ITool, ICommand, INotifyPropertyChanged
     }
 
     /// <inheritdoc />
-    public Window? Toggle()
+    public virtual Window? Toggle()
     {
         var d = App.Instance!.Dispatcher;
         if (!d.CheckAccess())

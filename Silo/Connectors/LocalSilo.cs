@@ -31,8 +31,14 @@ namespace Silo.Connectors;
 ///     itself when something is stored (see <see cref="Stored.Changed" />) or the design level changes.
 /// </remarks>
 [Transient(typeof(IConnector))]
-public class LocalSilo : VirtualRoot<OpenSilo>, INodeProvider<OpenSilo>
+public class LocalSilo : VirtualRoot<OpenSilo>, INodeProvider<OpenSilo>, IUriConnector
 {
+    /// <summary>The scheme of the addresses of things inside the Silo (<c>silo:///active/...</c>).</summary>
+    public UriSchemeScope HandlesScheme(string scheme)
+    {
+        return string.Equals(scheme, "silo", StringComparison.OrdinalIgnoreCase) ? UriSchemeScope.Private : UriSchemeScope.Unknown;
+    }
+
     private bool      _refreshQueued;
     private SiloNode? _saved;
     private SiloNode? _scalars;

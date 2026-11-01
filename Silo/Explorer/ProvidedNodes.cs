@@ -28,7 +28,7 @@ public static class ProvidedNodes
         {
             var roots = host.Roots;
             for (int i = 0; i < roots.Count; i++)
-                yield return Adapt(roots[i], $"node/{scope}", i, seen);
+                yield return Adapt(roots[i], scope, i, seen);
         }
     }
 
@@ -132,13 +132,14 @@ public static class ProvidedNodes
     }
 
     /// <summary>
-    ///     Stable across rebuilds (so expansion and selection survive): the node's URI if it has one, else its place in
-    ///     the tree.
+    ///     Stable across rebuilds (so expansion and selection survive): the path of the node's names down from its scope
+    ///     (<c>silo/Your Silo/Saved Objects/Linear</c>), else its place among its siblings when it has no name or another
+    ///     node already has the path. Never a URI.
     /// </summary>
     private static string KeyOf(SiloNode source, string parentKey, int index, HashSet<string> seen)
     {
-        Uri?   uri = source.Uri;
-        string key = uri is null ? $"{parentKey}/{index}" : $"{parentKey}/{uri.OriginalString}";
+        string name = (source.Text ?? string.Empty).Trim().Replace('/', '_').Replace('\\', '_');
+        string key  = name.Length == 0 ? $"{parentKey}/{index}" : $"{parentKey}/{name}";
         if (!seen.Add(key))
         {
             key = $"{parentKey}/{index}";

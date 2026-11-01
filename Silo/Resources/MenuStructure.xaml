@@ -1,0 +1,35 @@
+﻿<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:regularExpressions="clr-namespace:System.Text.RegularExpressions;assembly=System.Text.RegularExpressions">
+    <!--<Menubar>
+        <Menu Header="_File" Name="FileMenu">
+
+        </Menu>
+        <Menu Header="_Edit" Name="FileMenu">
+
+        </Menu>
+        <Menu Header="_Silo" Name="FileMenu">
+
+        </Menu>
+        <Menu Header="_Connection" Name="FileMenu">
+
+        </Menu>
+        <Menu Header="_Node" Name="FileMenu">
+
+        </Menu>
+        <Menu Header="_Lab" Name="FileMenu">
+
+        </Menu>
+        <Menu Header="_Diagram" Name="FileMenu">
+s
+        </Menu>
+        <Menu Header="_Tools" Name="FileMenu">
+            --><!--<Item>App.ManageTools</Item>
+            <Sep />
+            <Group Id="" />--><!--
+        </Menu>
+        <Menu Header="_Help" Name="FileMenu">
+
+        </Menu>
+    </Menubar>-->
+</ResourceDictionary>

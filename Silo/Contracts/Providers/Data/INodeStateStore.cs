@@ -2,7 +2,7 @@
 
 /// <summary>What the person left a node of the Explorer tree like: open or closed, showing in a tab, selected.</summary>
 /// <param name="Key">
-///     The Explorer node's key (stable across runs: <c>local/tables/5</c>, <c>node/silo/file:///C:/Data</c>
+///     The Explorer node's key (stable across runs: <c>local/tables/5</c>, <c>silo/Your Silo/Saved Objects</c>
 ///     ...).
 /// </param>
 /// <param name="Name">The node's text when it was saved. Only for reading the table; a node is found by its key.</param>
