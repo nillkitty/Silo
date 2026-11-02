@@ -25,6 +25,7 @@ public static class TypeIcons
     /// </summary>
     private static readonly (string Fragment, string Key)[] NameRules =
     [
+        ("Certificate", "Certificate"), ("Keypair", "Keypair"), ("Signature", "Signature"),
         ("Credential", "Credentials"), ("Secret", "Key"), ("Password", "Key"), ("Lock", "Padlock"),
         ("Unicode", "Unicode"), ("Glyph", "Unicode"), ("Character", "Unicode"),
         ("Drawio", "FlowDiagram"), ("Diagram", "FlowDiagram"),

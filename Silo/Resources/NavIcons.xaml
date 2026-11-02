@@ -147,4 +147,31 @@
     <StreamGeometry x:Key="Reel">F0 M2.5,4.5 L21.5,4.5 L21.5,19.5 L2.5,19.5 Z M6,9 L18,9 L18,15 L6,15 Z M4.2,6.2 L5.8,6.2 L5.8,7.8 L4.2,7.8 Z M4.2,16.2 L5.8,16.2 L5.8,17.8 L4.2,17.8 Z M7.8,6.2 L9.4,6.2 L9.4,7.8 L7.8,7.8 Z M7.8,16.2 L9.4,16.2 L9.4,17.8 L7.8,17.8 Z M11.4,6.2 L13.0,6.2 L13.0,7.8 L11.4,7.8 Z M11.4,16.2 L13.0,16.2 L13.0,17.8 L11.4,17.8 Z M15,6.2 L16.6,6.2 L16.6,7.8 L15,7.8 Z M15,16.2 L16.6,16.2 L16.6,17.8 L15,17.8 Z M18.6,6.2 L20.2,6.2 L20.2,7.8 L18.6,7.8 Z M18.6,16.2 L20.2,16.2 L20.2,17.8 L18.6,17.8 Z</StreamGeometry>
     <!-- The Silo cube (the app icon), as three separate faces so a single foreground color still reads as a cube -->
     <StreamGeometry x:Key="SiloCube">F1 M12,0.75 L21.4,6.4 L12,11.55 L2.6,6.4 Z M1.7,7.2 L11.55,12.5 L11.55,23 L1.7,17.5 Z M22.3,7.2 L22.3,17.5 L12.45,23 L12.45,12.5 Z</StreamGeometry>
+
+    <!--
+        Certificates and keys. One icon per construct, drawn on the same 24x24 grid as the rest, as even-odd outlines whose parts never overlap
+        (a nested part is a hole, or a filled part inside a hole). Keys are the keys of CertificateInfo.
+    -->
+    <!-- Certificate: a certificate page with a seal -->
+    <StreamGeometry x:Key="Certificate">F0 M3,3 H21 V14 H3 Z M5,5 V12 H19 V5 Z M7,7 H17 V8.4 H7 Z M7,9.6 H13 V11 H7 Z M3,16.6 H11 V18 H3 Z M3,19.4 H9 V20.8 H3 Z M13.8,18.4 A3.2,3.2 0 1 0 20.2,18.4 A3.2,3.2 0 1 0 13.8,18.4 Z M15.6,18.4 A1.4,1.4 0 1 0 18.4,18.4 A1.4,1.4 0 1 0 15.6,18.4 Z</StreamGeometry>
+    <!-- Root CA: a ring badge holding a star, with ribbon tails -->
+    <StreamGeometry x:Key="CertRoot">F0 M3.8,10 A8.2,8.2 0 1 0 20.2,10 A8.2,8.2 0 1 0 3.8,10 Z M5.4,10 A6.6,6.6 0 1 0 18.6,10 A6.6,6.6 0 1 0 5.4,10 Z M12,5.4 L13.12,8.46 L16.37,8.58 L13.81,10.59 L14.7,13.72 L12,11.9 L9.3,13.72 L10.19,10.59 L7.63,8.58 L10.88,8.46 Z M8,19.2 L6.4,23.2 L9,22.2 L10.2,23.4 L11,19.6 Z M16,19.2 L17.6,23.2 L15,22.2 L13.8,23.4 L13,19.6 Z</StreamGeometry>
+    <!-- Intermediate CA: a certificate in front of the one that issued it, with a small authority ring -->
+    <StreamGeometry x:Key="CertCa">F0 M5,4 H22 V16 H20 V6 H5 Z M2,7 H17 V19 H2 Z M4,9 V17 H15 V9 Z M6,11 H13 V12.4 H6 Z M6,13.6 H10 V15 H6 Z M17.6,20 A2.4,2.4 0 1 0 22.4,20 A2.4,2.4 0 1 0 17.6,20 Z M19,20 A1,1 0 1 0 21,20 A1,1 0 1 0 19,20 Z</StreamGeometry>
+    <!-- Keypair: a key pointing each way (public and private) -->
+    <StreamGeometry x:Key="Keypair">F0 M9.907,6.2 H21 V7.8 H18.4 V10 H17 V7.8 H9.907 A3.5,3.5 0 1 1 9.907,6.2 Z M5,7 A1.5,1.5 0 1 0 8,7 A1.5,1.5 0 1 0 5,7 Z M14.093,16.2 H3 V17.8 H5.6 V20 H7 V17.8 H14.093 A3.5,3.5 0 1 0 14.093,16.2 Z M16,17 A1.5,1.5 0 1 0 19,17 A1.5,1.5 0 1 0 16,17 Z</StreamGeometry>
+    <!-- CA keypair: a key over a rubber stamp (what it can do is issue) -->
+    <StreamGeometry x:Key="KeypairCa">F0 M9.907,6.2 H21 V7.8 H18.4 V10 H17 V7.8 H9.907 A3.5,3.5 0 1 1 9.907,6.2 Z M5,7 A1.5,1.5 0 1 0 8,7 A1.5,1.5 0 1 0 5,7 Z M10.6,12.4 H13.4 V16.4 H17 V19 H7 V16.4 H10.6 Z M5,20.6 H19 V22 H5 Z</StreamGeometry>
+    <!-- Certificate store: a cabinet of drawers -->
+    <StreamGeometry x:Key="CertStore">F0 M3,3 H21 V21 H3 Z M5,5 H19 V8.8 H5 Z M5,10.6 H19 V13.4 H5 Z M5,15.2 H19 V19 H5 Z M9.5,6.4 H14.5 V7.4 H9.5 Z M9.5,11.5 H14.5 V12.5 H9.5 Z M9.5,16.6 H14.5 V17.6 H9.5 Z</StreamGeometry>
+    <!-- Certificate signing request: a form with an arrow going out -->
+    <StreamGeometry x:Key="CertRequest">F0 M5,2 H14.5 L19,6.5 V22 H5 Z M7,4 H13 V8.2 H17 V20 H7 Z M12,10.2 L15,13.2 H13 V17 H11 V13.2 H9 Z</StreamGeometry>
+    <!-- Signature: a pen over a signature line -->
+    <StreamGeometry x:Key="Signature">F0 M16.5,3 L20.5,7 L18.73,8.77 L14.73,4.77 Z M14.2,5.5 L18.17,9.33 L9.5,18 L5,19 L6,14.5 Z M3,21 H21 V22.4 H3 Z</StreamGeometry>
+    <!-- Revoked certificate: a certificate page with a struck-through seal -->
+    <StreamGeometry x:Key="CertRevoked">F0 M3,3 H21 V14 H3 Z M5,5 V12 H19 V5 Z M7,7 H17 V8.4 H7 Z M7,9.6 H13 V11 H7 Z M3,16.6 H11 V18 H3 Z M3,19.4 H9 V20.8 H3 Z M13.8,18.4 A3.2,3.2 0 1 0 20.2,18.4 A3.2,3.2 0 1 0 13.8,18.4 Z M15.2,18.4 A1.8,1.8 0 1 0 18.8,18.4 A1.8,1.8 0 1 0 15.2,18.4 Z M15.66,17.62 L16.22,17.06 L18.34,19.18 L17.78,19.74 Z</StreamGeometry>
+    <!-- Issued certificates: a list of certificates handed out, each a small page with a line, under an arrow going out -->
+    <StreamGeometry x:Key="CertIssued">F0 M3,9 H15 V21 H3 Z M5,11 V19 H13 V11 Z M6.5,13 H11.5 V14.2 H6.5 Z M6.5,15.6 H9.5 V16.8 H6.5 Z M11,3 L17,3 L17,2 L21,5 L17,8 L17,7 L11,7 Z</StreamGeometry>
+    <!-- Verified signature: a shield with a check mark -->
+    <StreamGeometry x:Key="SignatureVerified">F0 M12,2 L20,5 V11.5 C20,16.5 16.5,20.5 12,22 C7.5,20.5 4,16.5 4,11.5 V5 Z M12,4.2 L18,6.5 V11.4 C18,15.3 15.4,18.5 12,19.8 C8.6,18.5 6,15.3 6,11.4 V6.5 Z M8.6,11.6 L10.9,13.9 L15.6,9.2 L16.8,10.4 L10.9,16.3 L7.4,12.8 Z</StreamGeometry>
 </ResourceDictionary>

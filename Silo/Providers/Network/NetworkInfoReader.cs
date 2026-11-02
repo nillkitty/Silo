@@ -90,9 +90,15 @@ public record HostNetworkConfig(
     IReadOnlyList<IPAddress> DnsServers,
     IReadOnlyList<string>    DnsSuffixes);
 
+/// <summary>One host-global networking parameter, the kind <c>netsh</c> shows (<c>Group</c> "IPv6", <c>Name</c> "Use Temporary Addresses").</summary>
+public record HostSetting(string Group, string Name, string Value);
+
 /// <summary>Where the network connector reads the machine's network configuration and state from.</summary>
 public interface INetworkInfoReader
 {
+    /// <summary>The host-wide IP, IPv6 privacy, TCP stack and offload parameters. A group the machine cannot report is left out.</summary>
+    IReadOnlyList<HostSetting> GetHostSettings();
+
     IReadOnlyList<NetInterface>  GetInterfaces();
     IReadOnlyList<NetRoute>      GetRoutes();
     IReadOnlyList<AdapterConfig> GetAdapters();
@@ -200,6 +206,100 @@ public sealed class SystemNetworkInfoReader : INetworkInfoReader
         }
 
         return new HostNetworkConfig(g.HostName, g.DomainName, g.NodeType.ToString(), scope, g.IsWinsProxy, servers, suffix);
+    }
+
+    // (group, CIM class, WQL filter) of the settings classes behind `netsh int ip|ipv6|tcp show global` and `netsh int ipv6 show privacy`
+    private static readonly (string Group, string Class, string? Filter)[] HostSettingClasses =
+    [
+        ("IPv4", "MSFT_NetIPv4Protocol", null),
+        ("IPv6", "MSFT_NetIPv6Protocol", null),
+        ("TCP", "MSFT_NetTCPSetting", "SettingName = 'InternetCustom'"),
+        ("TCP", "MSFT_NetTCPSetting", "SettingName = 'Internet'"),
+        ("Offload", "MSFT_NetOffloadGlobalSetting", null)
+    ];
+
+    private static readonly HashSet<string> SkippedSettings = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "InstanceID", "Caption", "Description", "ElementName", "SettingName", "Name", "PSComputerName"
+    };
+
+    public IReadOnlyList<HostSetting> GetHostSettings()
+    {
+        var result = new List<HostSetting>();
+        var done   = new HashSet<string>();
+        foreach (var (group, cls, filter) in HostSettingClasses)
+        {
+            if (done.Contains(group)) continue; // the Custom TCP template wins over the plain one
+
+            try
+            {
+                var rows = ReadCim(group, cls, filter);
+                if (rows.Count == 0) continue;
+
+                done.Add(group);
+                result.AddRange(rows);
+            }
+            catch (Exception ex) when (ex is System.Management.ManagementException or UnauthorizedAccessException or COMException)
+            {
+                // no such class (an older Windows) or no access: this group is left out
+            }
+        }
+
+        return result;
+    }
+
+    private static List<HostSetting> ReadCim(string group, string cls, string? filter)
+    {
+        var scope = new System.Management.ManagementScope(@"\\.\root\StandardCimv2");
+        scope.Connect();
+
+        var rows = new List<HostSetting>();
+        using var searcher = new System.Management.ManagementObjectSearcher(scope, new System.Management.ObjectQuery(
+                                                                                 $"SELECT * FROM {cls}" + (filter is null ? "" : $" WHERE {filter}")));
+        using var results = searcher.Get();
+        foreach (System.Management.ManagementObject o in results)
+        {
+            foreach (var p in o.Properties)
+            {
+                if (SkippedSettings.Contains(p.Name) || p.Name.StartsWith("__", StringComparison.Ordinal) || p.Value is null) continue;
+
+                rows.Add(new HostSetting(group, Spaced(p.Name), CimValue(p)));
+            }
+
+            break; // a global setting has one instance
+        }
+
+        return rows;
+    }
+
+    private static string CimValue(System.Management.PropertyData p)
+    {
+        if (p.Value is Array array) return string.Join(", ", array.Cast<object?>().Select(v => MapEnum(p, v)));
+
+        return MapEnum(p, p.Value);
+    }
+
+    /// <summary>An enum-like value (<c>ValueMap</c> / <c>Values</c> qualifiers) as its name, else the value as it is.</summary>
+    private static string MapEnum(System.Management.PropertyData p, object? value)
+    {
+        var text = value switch { bool b => b ? "Yes" : "No", null => "", _ => value.ToString() ?? "" };
+        try
+        {
+            if (value is bool || p.Qualifiers["ValueMap"]?.Value is not string[] map || p.Qualifiers["Values"]?.Value is not string[] names) return text;
+
+            var i = Array.IndexOf(map, text);
+            return i >= 0 && i < names.Length ? names[i] : text;
+        }
+        catch (System.Management.ManagementException)
+        {
+            return text; // the property has no such qualifiers
+        }
+    }
+
+    /// <summary>"UseTemporaryAddresses" as "Use Temporary Addresses".</summary>
+    internal static string Spaced(string name)
+    {
+        return System.Text.RegularExpressions.Regex.Replace(name, @"(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])", " ");
     }
 
     // ---- adapters --------------------------------------------------------------------------------------------

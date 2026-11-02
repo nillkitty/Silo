@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Windows.Controls;
 using Serilog;
+using Silo.Certificates;
 using Silo.Design;
 using Silo.Drawio;
 using Silo.Labs;
@@ -78,6 +79,23 @@ public static class StockMenus
                                              Space("both", "IPv4 and IPv6 _Both", null),
                                              Space("dns", "_Domain Names", "The root zone, top-level domains and the names you go to, with their records (A, MX, NS, TXT, DNSSEC...)")
                                          ]) with { MenuGroup = MenuGroups.AddDataCmds });
+
+        // ---- Silo: certificates and keypairs (Certificates/CertificateActions.cs)
+        ProvidedCommand Cert(string id, string header, Action run, string icon, string tip) =>
+            ProvidedCommand.From(id, header, run, icon, () => Active is not null, tip, null, CommandPlacement.Menu, MenuGroups.AddDataCmds);
+        list.Add(ProvidedCommand.Submenu("silo.importcert", "Import _X509 Certificate",
+                                         [
+                                             Cert("silo.importcert.file", "From _File...", () => CertificateActions.ImportFromFile(), "TbOpen", "Certificates from CER, CRT, PEM, DER, P7B and PFX files (a PFX's private key is left out)"),
+                                             Cert("silo.importcert.store", "From Cert _Store...", () => CertificateActions.ImportFromStore(), CertificateInfo.StoreIcon, "Certificates from a Windows certificate store"),
+                                             Cert("silo.importcert.remote", "From Remote _URL/Host...", () => CertificateActions.ImportFromRemote(), "Network", "The certificate a server presents when a TLS connection is made to it"),
+                                             Cert("silo.importcert.clipboard", "From _Clipboard", () => CertificateActions.ImportFromClipboard(), "TbPaste", "PEM text (or base64) on the clipboard")
+                                         ], null, CertificateInfo.CertificateIcon, "Keep certificates (public parts only) in the Silo") with { MenuGroup = MenuGroups.AddDataCmds });
+        list.Add(ProvidedCommand.Submenu("silo.installkey", "Install _Keypair",
+                                         [
+                                             Cert("silo.installkey.pfx", "From _PFX File...", () => CertificateActions.InstallFromPfx(), "TbOpen", "A certificate and its private key from a PKCS #12 file"),
+                                             Cert("silo.installkey.pem", "From PE_M (or PEM+Key) File...", () => CertificateActions.InstallFromPem(), "Document", "A PEM certificate with its private key in the same file or in a key file"),
+                                             Cert("silo.installkey.generate", "_Generate New...", () => CertificateActions.GenerateNew(), "Plus", "A new private key with a self-signed certificate, or a self-signed root certificate authority")
+                                         ], null, CertificateInfo.KeypairIcon, "Keep a certificate with its private key (sealed) in the Silo") with { MenuGroup = MenuGroups.AddDataCmds });
 
         // ---- Diagram
         list.Add(ProvidedCommand.From("diagram.new", "_New Diagram...", () => DiagramActions.New(Active), "TbNew", () => Active is not null, "Make an empty diagram in the Silo and open it",

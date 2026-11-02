@@ -36,10 +36,13 @@ internal static class StarterNodes
 
         Try("Filesystem", () =>
                           {
-                              var files = FileConnection.FromPath(Find<FileConnector>(), FileConnection.GetRootPath(),
-                                                                  new ConnectionRequest { DisplayName = "Filesystem" });
-                              silo.Connections.Add(files);
-                              silo.Nodes.Add(files, system);
+                              // file:/// holds the volumes of this computer; it starts collapsed
+                              var uri  = new Uri("file:///");
+                              var icon = IconRef.FromKey("FsDrive");
+                              silo.Nodes.AddNode(new SiloNode(new FolderModel("Filesystem", "Filesystem", uri, icon), "Filesystem", uri, icon, null)
+                                                 {
+                                                     ChildLoader = _ => FileModel.LoadVolumeNodesAsync()
+                                                 }, system);
                           });
 
         Try("Registry", () =>

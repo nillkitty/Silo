@@ -133,6 +133,14 @@ public partial class FileModel : INodeProvider<FileSystemInfo>, INodeDetails, IN
         return new FileNode(this, expand);
     }
 
+    /// <summary>The volumes of this computer (C:\, D:\, ...) as collapsed nodes: what <c>file:///</c> holds.</summary>
+    internal static Task<IReadOnlyList<SiloNode>> LoadVolumeNodesAsync()
+    {
+        return Task.Run<IReadOnlyList<SiloNode>>(() => DriveInfo.GetDrives()
+                                                                .Select(d => new FileModel(d.Name).CreateNode(0))
+                                                                .ToList());
+    }
+
     internal async Task<IReadOnlyList<SiloNode>> LoadChildNodesAsync(CancellationToken cancel)
     {
         var (children, truncated) = await Task.Run(() => ListChildren(cancel), cancel);

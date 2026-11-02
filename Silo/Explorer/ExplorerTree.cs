@@ -40,10 +40,18 @@ public static class ExplorerTree
 
         // the Silo's own node (what it keeps: saved characters, strings, shortcuts, ...) comes first, so it is the first thing seen
         var own   = provided.Where(n => n.Kind == "Silo").ToList();
-        var roots = new List<ExplorerNode>(own) { BuildLocal(silo) };
-        if (BuildDiagrams(silo) is { } diagrams) roots.Add(diagrams);
-        if (BuildDataBindings(silo) is { } bindings) roots.Add(bindings);
-        if (BuildTypes(silo) is { } types) roots.Add(types);
+        // what the Silo keeps lives inside its node: tables, diagrams, data bindings and types come before the saved folders
+        var kept = new List<ExplorerNode>(BuildLocal(silo).Children);
+        if (BuildDiagrams(silo) is { } diagrams) kept.Add(diagrams);
+        if (BuildDataBindings(silo) is { } bindings) kept.Add(bindings);
+        if (BuildTypes(silo) is { } types) kept.Add(types);
+
+        var roots = new List<ExplorerNode>(own);
+        if (own.Count > 0)
+            for (int i = 0; i < kept.Count; i++)
+                own[0].Children.Insert(i, kept[i]);
+        else
+            roots.AddRange(kept);
         roots.AddRange(BuildConnections(silo));
 
         roots.AddRange(provided.Except(own));

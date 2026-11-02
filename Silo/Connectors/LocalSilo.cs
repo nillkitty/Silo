@@ -1,6 +1,7 @@
 ﻿using System.ComponentModel;
 using System.Windows.Threading;
 using Serilog;
+using Silo.Certificates;
 using Silo.Connectors.Virtual;
 using Silo.Design;
 using Silo.Model;
@@ -42,6 +43,7 @@ public class LocalSilo : VirtualRoot<OpenSilo>, INodeProvider<OpenSilo>, IUriCon
     private bool      _refreshQueued;
     private SiloNode? _saved;
     private SiloNode? _scalars;
+    private SiloNode? _security;
 
     public OpenSilo? Data { get; }
 
@@ -87,10 +89,10 @@ public class LocalSilo : VirtualRoot<OpenSilo>, INodeProvider<OpenSilo>, IUriCon
 
     /// <summary>A folder node; its children (if there are any to read) are read when it is first expanded.</summary>
     private static SiloNode Folder(string text, Uri uri, string icon, Func<IEnumerable<SiloNode>>? children = null, string kind = "Folder",
-                                   bool   expanded = false)
+                                   bool   expanded = false, object? model = null)
     {
         var iconRef = Icon(icon);
-        return new SiloNode(new FolderModel(text, kind, uri, iconRef), text, uri, iconRef, expanded ? 1 : null)
+        return new SiloNode(model ?? new FolderModel(text, kind, uri, iconRef), text, uri, iconRef, expanded ? 1 : null)
                {
                    ChildLoader =
                        children is null
@@ -120,13 +122,13 @@ public class LocalSilo : VirtualRoot<OpenSilo>, INodeProvider<OpenSilo>, IUriCon
 
         if (level.IsAtLeast(DesignLevel.Author))
         {
-            yield return Folder("Security", Under("security"), "Shield", () =>
+            _security = Folder("Security", Under("security"), "Shield", () =>
                                                                          [
-                                                                             Folder("Certificates", Under("security", "certificates"),
-                                                                                    "Lock", MakeCertificates),
+                                                                             MakeCertificatesFolder(),
                                                                              Folder("Secrets", Under("security", "secrets"), "Key",
                                                                                     MakeSecrets)
                                                                          ]);
+            yield return _security;
 
             yield return Folder("Prefs", Under("prefs"), "Settings", () =>
                                                                      [
@@ -207,9 +209,55 @@ public class LocalSilo : VirtualRoot<OpenSilo>, INodeProvider<OpenSilo>, IUriCon
         return items;
     }
 
-    private static IEnumerable<SiloNode> MakeCertificates()
+    /// <summary>
+    ///     Security, Certificates: the keypairs (a certificate with its private key) and the public certificates kept in the Silo, in two folders
+    ///     so which is which is plain. Each folder carries the commands that add to it (install for keypairs, import for certificates), and an
+    ///     authority's keypair holds what it issued, with each certificate's status.
+    /// </summary>
+    private SiloNode MakeCertificatesFolder()
     {
-        return [];
+        var vault = CertificateActions.OpenVault(Data);
+        var all   = vault?.List() ?? [];
+        var pairs = all.Where(e => e.HasKey).ToList();
+        var certs = all.Where(e => !e.HasKey).ToList();
+        var keys  = vault?.CanKeepKeys == true;
+
+        SiloNode Leaf(VaultEntry e)
+        {
+            var model = new CertificateNodeModel(e, Data!);
+            var node  = new SiloNode(model, e.Name, model.Uri, model.Icon, null);
+            if (vault is not null && e.HasKey && CertificateInfo.CanIssue(e.Certificate))
+                node.Children.Add(IssuedFolder(vault, e));
+
+            return node;
+        }
+
+        return Folder("Certificates", Under("security", "certificates"), CertificateInfo.StoreIcon, () =>
+                                                                                              [
+                                                                                                  Folder($"Keypairs ({pairs.Count})", Under("security", "certificates", "keypairs"), CertificateInfo.KeypairIcon,
+                                                                                                         () => pairs.Select(Leaf).ToList(), "Folder", true,
+                                                                                                         new CertificateFolderModel(Data!, CertificateFolderKind.Keypairs, pairs.Count, certs.Count, keys)),
+                                                                                                  Folder($"Public Certificates ({certs.Count})", Under("security", "certificates", "public"), CertificateInfo.CertificateIcon,
+                                                                                                         () => certs.Select(Leaf).ToList(), "Folder", true,
+                                                                                                         new CertificateFolderModel(Data!, CertificateFolderKind.Public, pairs.Count, certs.Count, keys))
+                                                                                              ], "Folder", true,
+                      new CertificateFolderModel(Data!, CertificateFolderKind.All, pairs.Count, certs.Count, keys));
+    }
+
+    /// <summary>What an authority issued (that this Silo recorded), each with its status; revoked ones are told apart by their icon.</summary>
+    private SiloNode IssuedFolder(CertificateVault vault, VaultEntry authority)
+    {
+        var records = vault.Issued(authority.Id);
+        var held    = vault.List().ToDictionary(e => e.Id, StringComparer.OrdinalIgnoreCase);
+        var revoked = records.Count(r => r.Revoked);
+        var text    = revoked > 0 ? $"Issued ({records.Count}, {revoked} revoked)" : $"Issued ({records.Count})";
+
+        return Folder(text, Under("security", "certificates", authority.Id, "issued"), CertificateInfo.IssuedIcon, () => records.Select(r =>
+                                                                                                                                  {
+                                                                                                                                      var model = new IssuedCertificateModel(r, held.GetValueOrDefault(r.Thumbprint), Data!);
+                                                                                                                                      return new SiloNode(model, r.Revoked ? $"{r.Name} (revoked)" : r.Name, model.Uri, model.Icon, null);
+                                                                                                                                  }).ToList(), "Folder", false,
+                      new CertificateFolderModel(Data!, CertificateFolderKind.Issued, 0, records.Count, true, authority));
     }
 
     private static IEnumerable<SiloNode> MakeWindowPrefs()
@@ -249,7 +297,7 @@ public class LocalSilo : VirtualRoot<OpenSilo>, INodeProvider<OpenSilo>, IUriCon
                                                   }
                                                   else
                                                   {
-                                                      foreach (var folder in new[] { _saved, _scalars })
+                                                      foreach (var folder in new[] { _saved, _scalars, _security })
                                                           if (folder is { ChildLoader: not null, ChildrenLoaded: true })
                                                               await folder.ReloadChildrenAsync();
                                                   }
@@ -298,10 +346,11 @@ public class LocalSilo : VirtualRoot<OpenSilo>, INodeProvider<OpenSilo>, IUriCon
         {
             var w = new Watcher(target);
             Stored.Changed                          += w.OnStored;
+            CertificateEvents.Changed               += w.OnStored;
             AppDesignLevel.Instance.PropertyChanged += w.OnLevel;
         }
 
-        private void OnStored(object? sender, StoredChangedEventArgs e)
+        private void OnStored(object? sender, EventArgs e)
         {
             if (!_target.TryGetTarget(out var t)) Stop();
             else t.QueueRefresh(false);
@@ -316,6 +365,7 @@ public class LocalSilo : VirtualRoot<OpenSilo>, INodeProvider<OpenSilo>, IUriCon
         private void Stop()
         {
             Stored.Changed                          -= OnStored;
+            CertificateEvents.Changed               -= OnStored;
             AppDesignLevel.Instance.PropertyChanged -= OnLevel;
         }
 

@@ -288,8 +288,12 @@ public static class MenuCommands
         }
 
         var commands = NodeCommandHub.CommandsFor(ctx.Node);
-        if (Is(group, MenuGroups.OtherNodeCmds) || Is(group, MenuGroups.NodeMenu))
-            return NodeMenuEntries(ctx, commands);
+        // The Node menu lays out two blocks (its default group, then Other Node Commands): each must hold its own commands, or everything is listed twice.
+        if (Is(group, MenuGroups.OtherNodeCmds))
+            return CommandMenu.Items(commands.Where(c => !string.IsNullOrEmpty(c.MenuGroup) && Is(c.MenuGroup, MenuGroups.OtherNodeCmds))).ToList();
+
+        if (Is(group, MenuGroups.NodeMenu))
+            return NodeMenuEntries(ctx, commands.Where(c => !Is(c.MenuGroup, MenuGroups.OtherNodeCmds)).ToList());
 
         return CommandMenu.Items(commands.Where(c => c.MenuGroup is not null && Is(c.MenuGroup, group))).ToList();
     }

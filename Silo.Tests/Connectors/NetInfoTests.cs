@@ -2,7 +2,9 @@ using System.Net;
 using System.Net.NetworkInformation;
 using Silo.Connectors.Virtual;
 using Silo.Providers.Data.Source;
+using Silo.Contracts.Core;
 using Silo.Providers.Network;
+using Silo.ViewModel;
 
 namespace Silo.Tests.Connectors;
 
@@ -41,6 +43,11 @@ public class NetInfoTests
         public HostNetworkConfig GetHostConfig()
         {
             return new HostNetworkConfig("box", "corp.local", "Hybrid", null, false, [IPAddress.Parse("10.0.0.1")], ["corp.local"]);
+        }
+
+        public IReadOnlyList<HostSetting> GetHostSettings()
+        {
+            return [new HostSetting("IPv6", "Use Temporary Addresses", "Enabled"), new HostSetting("TCP", "Auto Tuning Level Local", "Normal")];
         }
 
         public IReadOnlyList<PortOwner> GetSockets()
@@ -130,17 +137,68 @@ public class NetInfoTests
     }
 
     [Test]
-    public async Task The_tree_has_the_four_branches_and_one_node_per_interface()
+    public async Task The_tree_has_the_four_branches_with_adapters_and_addressed_interfaces()
     {
         var root = Model.BuildTree();
 
-        Assert.That(root.Children.Select(c => c.Text), Is.EqualTo(new[] { "Network Configuration", "Network State", "TCP Connections", "UDP Sessions" }));
+        Assert.That(root.Children.Select(c => c.Text), Is.EqualTo(new[] { "Network Configuration", "Network State", "TCP Connections", "UDP Connections" }));
 
-        var interfaces = root.Children[1].Children.Single(c => c.Text == "Interfaces");
+        var config = root.Children[0];
+        Assert.That(config.Children.Select(c => c.Text), Is.EqualTo(new[] { "Host Network Config", "Profiles", "Adapters" }));
+
+        var adapters = config.Children.Single(c => c.Text == "Adapters");
+        await adapters.LoadChildrenAsync();
+        Assert.That(adapters.Children.Select(c => c.Text), Is.EqualTo(new[] { "Ethernet" }));
+
+        var state = root.Children[1];
+        Assert.That(state.Children.Select(c => c.Text), Is.EqualTo(new[] { "Addresses", "Interfaces", "Routes" }));
+
+        var interfaces = state.Children.Single(c => c.Text == "Interfaces");
         await interfaces.LoadChildrenAsync();
         var eth = interfaces.Children.Single();
+        Assert.That(eth.Text,                          Is.EqualTo("10.0.0.5/24 Ethernet"));
         Assert.That(eth.Children.Select(c => c.Text), Is.EqualTo(new[] { "Interface", "Addresses", "Routes" }));
         Assert.That(eth.DataContext,                  Is.InstanceOf<IFlatDataProvider>());
+    }
+
+    [Test]
+    public async Task Addresses_and_wifi_profiles_expand_to_a_node_each()
+    {
+        var root = Model.BuildTree();
+
+        var addresses = root.Children[1].Children.Single(c => c.Text == "Addresses");
+        await addresses.LoadChildrenAsync();
+        Assert.That(addresses.Children.Select(c => c.Text), Is.EqualTo(new[] { "10.0.0.5/24" }));
+        var rows = ((INodeDetails)addresses.Children[0].DataContext).GetDetails().ToDictionary(r => r.Name, r => r.Value);
+        Assert.That(rows["Subnet Mask"], Is.EqualTo("255.255.255.0"));
+        Assert.That(rows["Network"],     Is.EqualTo("10.0.0.0/24"));
+
+        var profiles = root.Children[0].Children.Single(c => c.Text == "Profiles");
+        await profiles.LoadChildrenAsync();
+        var home = profiles.Children.Single();
+        Assert.That(home.Text, Is.EqualTo("Home"));
+        Assert.That(((ICommandProvider)home.DataContext).GetCommands().Select(c => c.Id), Is.EqualTo(new[] { "net.wifi.open" }));
+    }
+
+    [Test]
+    public void The_host_config_node_shows_the_stack_settings_as_properties()
+    {
+        var host = Model.BuildTree().Children[0].Children[0];
+
+        var rows = ((INodeDetails)host.DataContext).GetDetails().ToDictionary(r => r.Name, r => r.Value);
+        Assert.That(rows["IPv6: Use Temporary Addresses"], Is.EqualTo("Enabled"));
+        Assert.That(rows["TCP: Auto Tuning Level Local"],  Is.EqualTo("Normal"));
+    }
+
+    [Test]
+    public void The_primary_address_is_the_most_specific_ipv4_one()
+    {
+        var i = new NetInterface("X", "", "", 1, NetworkInterfaceType.Ethernet, OperationalStatus.Up, "", 0, 0, false, false, false, null, [], [],
+                                 [new NetAddress("X", IPAddress.Parse("fe80::1"), 64, "WellKnown", "IPv6"),
+                                  new NetAddress("X", IPAddress.Parse("10.0.0.5"), 24, "Dhcp", "IPv4"),
+                                  new NetAddress("X", IPAddress.Parse("10.0.1.5"), 32, "Manual", "IPv4")]);
+
+        Assert.That(NetInfoModel.PrimaryAddress(i)!.Cidr, Is.EqualTo("10.0.1.5/32"));
     }
 
     [Test]
@@ -178,6 +236,7 @@ public class NetInfoTests
         Assert.That(reader.GetAdapters(),   Is.Not.Empty);
         Assert.That(reader.GetSockets(),    Is.Not.Empty);
         Assert.DoesNotThrow(() => reader.GetWifiProfiles());
+        Assert.DoesNotThrow(() => reader.GetHostSettings());
         Assert.That(reader.GetHostConfig().HostName, Is.Not.Empty);
     }
 }
