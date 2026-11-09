@@ -1,5 +1,8 @@
-<Solution>
+﻿<Solution>
   <Project Path="Silo.Analyzers/Silo.Analyzers.csproj" />
   <Project Path="Silo.Tests/Silo.Tests.csproj" Id="15ee0f4c-2126-4545-954b-e028a5fe0df2" />
+  <Project Path="Silo.Storage.Contracts.Tests/Silo.Storage.Contracts.Tests.csproj" />
+  <Project Path="Silo.Storage.Contracts/Silo.Storage.Contracts.csproj" />
   <Project Path="Silo/Silo.csproj" />
 </Solution>
+

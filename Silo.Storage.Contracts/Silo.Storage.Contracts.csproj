@@ -1,0 +1,22 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>Silo.Storage</RootNamespace>
+    <Description>What a Silo's storage is, as seen from outside it: the async interfaces, the wire messages, and a server and client for them</Description>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <!-- Telefrag.Storage is built from the Telefrag repo until it is published; set TelefragRoot to point somewhere else -->
+    <TelefragRoot Condition="'$(TelefragRoot)' == ''">$(MSBuildThisFileDirectory)..\..\..\Workspaces\Telefrag2\Telefrag\</TelefragRoot>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="$(TelefragRoot)Telefrag.Storage\Telefrag.Storage.csproj" AdditionalProperties="GeneratePackageOnBuild=false" />
+  </ItemGroup>
+
+</Project>
+
