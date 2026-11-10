@@ -5,6 +5,7 @@ using Silo.Commanding;
 using Silo.Converters;
 using Silo.Labs;
 using Silo.Tabular;
+using Silo.Tasks;
 using Silo.TextEditing;
 using Silo.Toolbar;
 using Silo.Ui.Documents;
@@ -138,6 +139,7 @@ public partial class MenuBar : Menu
         ViewProperties.IsChecked   = main.IsPropertiesOpen;
         ViewToolbox.IsChecked      = main.IsToolboxOpen;
         ViewProblems.IsChecked     = ProblemsTool.Current?.IsChecked ?? false;
+        ViewTasks.IsChecked        = TasksTool.Current?.IsChecked ?? false;
         ViewSelectedItem.IsChecked = main.IsSelectedItemOpen;
         ViewToolbar.IsChecked      = ToolbarSettings.Visible;
 
@@ -231,6 +233,13 @@ public partial class MenuBar : Menu
             if (item.IsChecked) problems.Show();
             else if (problems.IsChecked) problems.Toggle();
             item.IsChecked = problems.IsChecked;
+        }
+        else if (ReferenceEquals(item, ViewTasks))
+        {
+            if (TasksTool.Current is not { } tasks) return;
+            if (item.IsChecked) tasks.Show();
+            else if (tasks.IsChecked) tasks.Toggle();
+            item.IsChecked = tasks.IsChecked;
         }
         else if (ReferenceEquals(item, ViewSelectedItem))
         {

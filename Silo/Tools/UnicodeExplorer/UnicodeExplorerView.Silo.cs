@@ -67,6 +67,8 @@ public sealed partial class UnicodeExplorerView
                                 "Keep the characters together as one constant, like your:mychars");
         yield return UiKit.Item("Save as Global Constant…", SaveAsConstants, any,
                                 "Keep a character as a constant of its own, like your:green (a labelled character is saved under its label)");
+        yield return UiKit.Item("Save Groups as Constants…", SaveGroupsAsConstants, _tray.Any(c => GlyphGroups.Clean(c.Group) is not null),
+                                "Keep each group of the collection as one constant named after it, like your:permission_modes");
         yield return UiKit.Item("Bind to global hotkey…", BindHotkey, any,
                                 "Choose a key that types the characters into whatever you are working in");
         yield return UiKit.Rule();
@@ -244,6 +246,65 @@ public sealed partial class UnicodeExplorerView
                     return string.Empty;
                 }, "Save as Global Constant"))
             Say($"Saved {named.Count} constants: {string.Join(", ", named.Take(6).Select(i => "your:" + i.Label))}{(named.Count > 6 ? ", …" : string.Empty)}");
+    }
+
+    // ---- groups --------------------------------------------------------------------------------------------------
+
+    /// <summary>"Save Group as Constant": the characters of one collection group as one list constant named after the group, <c>your:permission_modes = '…'</c>.</summary>
+    private void SaveGroupAsConstant(string group)
+    {
+        var items = CharactersOfGroup(group);
+        if (items.Count == 0 || !EnsureSilo()) return;
+
+        string text = CodePoint.ToText(items.Select(c => c.CodePoint));
+        string? name = AskConstantName("Save group",
+                                       $"Keep the group \"{group}\" ({items.Count:N0} character{(items.Count == 1 ? "" : "s")}: {Shorten(text, 30)}) as one constant in your Silo.",
+                                       YourConstants.NameFrom(group) ?? "chars", text);
+        if (name is null) return;
+
+        if (Try(() =>
+                {
+                    YourConstants.Default.SetCodePoints(name, items.Select(c => c.CodePoint));
+                    return name;
+                }, "Save group"))
+            Say($"Saved your:{name} = '{Shorten(text, 40)}'");
+    }
+
+    /// <summary>"Save Groups as Constants": every group of the collection as a list constant named after it (the characters in no group are left out).</summary>
+    private void SaveGroupsAsConstants()
+    {
+        var groups = GlyphGroups.Names(_tray.Count, i => _tray[i].Group).ToList();
+        if (groups.Count == 0 || !EnsureSilo()) return;
+
+        var named    = groups.Select(g => (Group: g, Name: YourConstants.NameFrom(g), Items: CharactersOfGroup(g))).ToList();
+        var unusable = named.Where(g => g.Name is null).Select(g => g.Group).ToList();
+        var usable   = named.Where(g => g.Name is not null).ToList();
+        if (usable.Count == 0)
+        {
+            PromptDialog.Show("Save groups", "None of the groups has a name that can be a constant's: rename them with letters and digits.", ["OK"]);
+            return;
+        }
+
+        var repeated = usable.GroupBy(g => g.Name!, StringComparer.OrdinalIgnoreCase).FirstOrDefault(g => g.Count() > 1);
+        if (repeated is not null)
+        {
+            PromptDialog.Show("Save groups", $"Groups {string.Join(" and ", repeated.Select(g => $"\"{g.Group}\""))} would both be saved as your:{repeated.Key}. Rename one of them.", ["OK"]);
+            return;
+        }
+
+        var replacing = usable.Where(g => YourConstants.Default.Get(g.Name!) is { } old && old.Text != CodePoint.ToText(g.Items.Select(c => c.CodePoint))).Select(g => "your:" + g.Name).ToList();
+        string message = $"Save {usable.Count} group{(usable.Count == 1 ? "" : "s")} as constants ({string.Join(", ", usable.Take(6).Select(g => "your:" + g.Name))}{(usable.Count > 6 ? ", …" : string.Empty)})?" +
+                         (unusable.Count > 0 ? $"\n\nNo constant can have the name of {string.Join(", ", unusable.Select(g => $"\"{g}\""))}: they are skipped." : string.Empty) +
+                         (replacing.Count > 0 ? $"\n\nThese exist with other contents and will be replaced: {string.Join(", ", replacing)}." : string.Empty);
+        var (button, _) = PromptDialog.Show("Save groups", message, ["Save", "Cancel"]);
+        if (button != 0) return;
+
+        if (Try(() =>
+                {
+                    foreach (var g in usable) YourConstants.Default.SetCodePoints(g.Name!, g.Items.Select(c => c.CodePoint));
+                    return string.Empty;
+                }, "Save groups"))
+            Say($"Saved {usable.Count} group{(usable.Count == 1 ? "" : "s")}: {string.Join(", ", usable.Take(6).Select(g => "your:" + g.Name))}{(usable.Count > 6 ? ", …" : string.Empty)}");
     }
 
     // ---- hotkeys -------------------------------------------------------------------------------------------------

@@ -30,6 +30,16 @@ public static class PromptDialog
     }
 
     /// <summary>
+    ///     Asks for one line of text that may be empty (to clear something): null if cancelled, an empty string if OK was pressed with nothing (or
+    ///     only white space) in the box, else the text, trimmed.
+    /// </summary>
+    public static string? AskOptional(string title, string message, string okText = "OK", string initial = "")
+    {
+        var (button, _, text) = ShowCore(title, message, [okText, "Cancel"], null, initial);
+        return button == 0 ? (text ?? string.Empty).Trim() : null;
+    }
+
+    /// <summary>
     ///     The window the prompt belongs to: the one the person is working in (a tool can float in a window of its own,
     ///     possibly kept above the others,
     ///     and a prompt owned by the main window would open behind it), else the main window.

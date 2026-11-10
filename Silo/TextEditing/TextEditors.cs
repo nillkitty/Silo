@@ -110,7 +110,11 @@ public static class TextEditors
             return;
         }
 
-        Open(new FileTextResource(path), pin);
+        Silo.Tasks.FileTasks.Read($"Opening {Path.GetFileName(path)}", "Text editor", path, () =>
+                                                                                              {
+                                                                                                  Open(new FileTextResource(path), pin);
+                                                                                                  return 1;
+                                                                                              }, _ => 1);
     }
 
     /// <summary>File → Open Text File: asks for one or more files and opens each.</summary>

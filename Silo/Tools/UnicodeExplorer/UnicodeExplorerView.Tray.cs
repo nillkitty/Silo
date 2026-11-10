@@ -17,11 +17,30 @@ public sealed partial class UnicodeExplorerView
     /// <summary>The most characters the collection holds; every one is drawn, so it has to stay reasonable.</summary>
     private const int TrayLimit = 5000;
 
-    private const double TrayCell = 44;
+    private const double MinTrayCell = 28;
+    private const double MaxTrayCell = 160;
+
+    /// <summary>The size of a cell of the collection (see <see cref="ExplorerSettings.CollectionGlyphSize" />).</summary>
+    private double TrayCell => Math.Clamp(Math.Round(_settings.CollectionGlyphSize), MinTrayCell, MaxTrayCell);
+
+    /// <summary>Makes the collection's cells larger or smaller (to <paramref name="size" />, or the usual size when null) and draws it again.</summary>
+    private void SetTraySize(double? size)
+    {
+        double now = TrayCell;
+        _settings.CollectionGlyphSize = Math.Clamp(Math.Round(size ?? 44), MinTrayCell, MaxTrayCell);
+        if (TrayCell == now) return;
+
+        RefreshTray();
+        SaveSettings();
+    }
+
+    /// <summary>Makes the results grid's cells larger or smaller (null: the usual size).</summary>
+    private void SetGlyphSize(double? size) => _view.CellSize = size ?? ResultsView.GridCell;
 
     private readonly List<CollectedCharacter> _tray    = [];
     private readonly HashSet<int>             _traySel = [];
-    private readonly List<Border>             _trayCells = [];
+    private readonly Dictionary<int, Border>  _trayCells = []; // by index in the collection: a folded group's characters have no cell
+    private readonly HashSet<string>          _trayFolded = []; // the groups shown folded, this session ("" is the characters in no group)
     private readonly WrapPanel                _trayPanel = new() { Margin = new Thickness(2) };
     private readonly ScrollViewer             _trayScroll = new() { VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled, Focusable = true };
     private readonly TextBlock                _trayTitle = UiKit.Text("Collection", weight: FontWeights.SemiBold);
@@ -69,6 +88,14 @@ public sealed partial class UnicodeExplorerView
         root.Children.Add(frame);
 
         _trayScroll.PreviewKeyDown += OnTrayKeyDown;
+        _trayScroll.PreviewMouseWheel += (_, e) =>
+                                         {
+                                             // Ctrl and the wheel: the cells get larger or smaller
+                                             if (Keyboard.Modifiers != ModifierKeys.Control) return;
+
+                                             SetTraySize(TrayCell + Math.Sign(e.Delta) * Math.Max(2, Math.Round(TrayCell * 0.08)) * Math.Max(1, Math.Abs(e.Delta) / 120.0));
+                                             e.Handled = true;
+                                         };
         _trayScroll.MouseDown      += (_, _) => _trayScroll.Focus();
         _trayScroll.MouseLeftButtonDown += (_, e) =>
                                            {
@@ -224,7 +251,14 @@ public sealed partial class UnicodeExplorerView
         var order = by < 0 ? _traySel.OrderBy(i => i).ToList() : _traySel.OrderByDescending(i => i).ToList();
         if (order.Any(i => i + by < 0 || i + by >= _tray.Count)) return;
 
-        foreach (int i in order) (_tray[i], _tray[i + by]) = (_tray[i + by], _tray[i]);
+        foreach (int i in order)
+        {
+            // a character moved past one in another group joins that group (the one it passed keeps its own)
+            string? group = _traySel.Contains(i + by) ? _tray[i].Group : _tray[i + by].Group;
+            (_tray[i], _tray[i + by]) = (_tray[i + by], _tray[i]);
+            _tray[i + by] = _tray[i + by] with { Group = group };
+        }
+
         var moved = _traySel.Select(i => i + by).ToList();
         _traySel.Clear();
         foreach (int i in moved) _traySel.Add(i);
@@ -235,7 +269,7 @@ public sealed partial class UnicodeExplorerView
 
     private void SortTray()
     {
-        var sorted = _tray.OrderBy(c => c.CodePoint.Value).ToList();
+        var sorted = GlyphGroups.SortWithin(_tray, c => c.Group, c => c.CodePoint.Value);
         _tray.Clear();
         _tray.AddRange(sorted);
         _traySel.Clear();
@@ -260,10 +294,34 @@ public sealed partial class UnicodeExplorerView
 
         int at = _traySel.First();
         var item = _tray[at];
-        string? label = PromptDialog.Ask("Label", $"Your own name for {item.CodePoint.Hex} in this collection (leave empty for none):", "OK", item.Label ?? string.Empty);
+        // OK with nothing in the box takes the label away; Cancel leaves it as it is
+        string? label = PromptDialog.AskOptional("Label", $"Your own name for {item.CodePoint.Hex} in this collection (leave empty for none):", "OK", item.Label ?? string.Empty);
         if (label is null) return;
 
-        _tray[at] = item with { Label = string.IsNullOrWhiteSpace(label) ? null : label.Trim() };
+        SetTrayLabel(at, string.IsNullOrWhiteSpace(label) ? null : label);
+    }
+
+    private void SetTrayLabel(int index, string? label)
+    {
+        if (index < 0 || index >= _tray.Count || _tray[index].Label == label) return;
+
+        _tray[index] = _tray[index] with { Label = label };
+        RefreshTray();
+        SaveTray();
+    }
+
+    /// <summary>Takes the label off every selected character that has one.</summary>
+    private void ClearSelectedLabels()
+    {
+        bool any = false;
+        foreach (int i in _traySel.Where(i => i < _tray.Count && !string.IsNullOrEmpty(_tray[i].Label)).ToList())
+        {
+            _tray[i] = _tray[i] with { Label = null };
+            any = true;
+        }
+
+        if (!any) return;
+
         RefreshTray();
         SaveTray();
     }
@@ -276,12 +334,34 @@ public sealed partial class UnicodeExplorerView
         _trayCells.Clear();
         _traySel.RemoveWhere(i => i >= _tray.Count);
 
-        for (int i = 0; i < _tray.Count; i++)
+        // groups: a header line over each run of characters in the same group (none when nothing is grouped); a folded group shows only its header
+        bool grouped = GlyphGroups.Any(_tray.Count, i => _tray[i].Group);
+        foreach (var run in GlyphGroups.Runs(_tray.Count, i => _tray[i].Group))
+        {
+            string key       = run.Name ?? string.Empty;
+            bool   collapsed = grouped && _trayFolded.Contains(key);
+            if (grouped)
+                _trayPanel.Children.Add(GroupHeaders.Create(_trayScroll, run.Name ?? "Ungrouped", run.Count, collapsed, run.Start, () => ToggleTrayGroup(key), () => TrayGroupMenu(run.Name)));
+
+            if (collapsed) continue;
+
+            for (int i = run.Start; i < run.Start + run.Count; i++) AddTrayCell(i);
+        }
+
+        PaintTray();
+        _trayHint.Visibility = _tray.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        _trayScroll.Visibility = _tray.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
+        _trayTitle.Text = _tray.Count == 0 ? "Collection" : $"Collection ({_tray.Count:N0})";
+        UpdateCollectionPaneTitle();
+    }
+
+    private void AddTrayCell(int i)
+    {
         {
             int index = i;
             var item  = _tray[i];
             var info  = _db?.Get(item.CodePoint);
-            var cell  = UiKit.Cell(info?.Glyph ?? item.CodePoint.Text, 20, TrayCell, TrayCell, string.IsNullOrEmpty(item.Label) ? null : item.Label);
+            var cell  = UiKit.Cell(info?.Glyph ?? item.CodePoint.Text, Math.Round(TrayCell * 0.45), TrayCell, TrayCell, string.IsNullOrEmpty(item.Label) ? null : item.Label);
             cell.ToolTip = $"{item.CodePoint.Hex}  {info?.Name ?? string.Empty}" + (string.IsNullOrEmpty(item.Label) ? string.Empty : $"\nLabel: {item.Label}");
             UiKit.MarkCell(cell, ColorOfCodePoint(item.CodePoint.Value), _settings.ColorMode);
             cell.MouseEnter += (_, _) => UiKit.Paint(cell, _traySel.Contains(index), hot: true);
@@ -321,20 +401,142 @@ public sealed partial class UnicodeExplorerView
                                            if (!_traySel.Contains(index)) SelectTray(index);
                                            FillTrayMenu(cell.ContextMenu);
                                        };
-            _trayCells.Add(cell);
+            _trayCells[index] = cell;
+            GlyphDrag.SetIndex(cell, index);
             _trayPanel.Children.Add(cell);
         }
-
-        PaintTray();
-        _trayHint.Visibility = _tray.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
-        _trayScroll.Visibility = _tray.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
-        _trayTitle.Text = _tray.Count == 0 ? "Collection" : $"Collection ({_tray.Count:N0})";
-        UpdateCollectionPaneTitle();
     }
 
     private void PaintTray()
     {
-        for (int i = 0; i < _trayCells.Count; i++) UiKit.Paint(_trayCells[i], _traySel.Contains(i));
+        foreach (var (i, cell) in _trayCells) UiKit.Paint(cell, _traySel.Contains(i));
+    }
+
+    // ---- groups --------------------------------------------------------------------------------------------------
+
+    private void ToggleTrayGroup(string key)
+    {
+        if (!_trayFolded.Remove(key)) _trayFolded.Add(key);
+        RefreshTray();
+    }
+
+    private void SetAllTrayGroupsFolded(bool folded)
+    {
+        _trayFolded.Clear();
+        if (folded)
+        {
+            foreach (string name in GlyphGroups.Names(_tray.Count, i => _tray[i].Group)) _trayFolded.Add(name);
+            if (_tray.Any(c => GlyphGroups.Clean(c.Group) is null)) _trayFolded.Add(string.Empty);
+        }
+
+        RefreshTray();
+    }
+
+    /// <summary>The group an item is in (null for none, or an index that is not there).</summary>
+    private string? TrayGroupOf(int index) => index >= 0 && index < _tray.Count ? GlyphGroups.Clean(_tray[index].Group) : null;
+
+    /// <summary>Puts the selected characters in a group (null: in none). They go to the end of that group and stay selected.</summary>
+    private void GroupSelected(string? group)
+    {
+        if (_traySel.Count == 0)
+        {
+            Say("Select the characters to group first.");
+            return;
+        }
+
+        var picked = _traySel.OrderBy(i => i).ToList();
+        int first  = GlyphGroups.Assign(_tray, picked, group, c => c.Group, (c, g) => c with { Group = g });
+        if (first < 0) return;
+
+        if (GlyphGroups.Clean(group) is not null)
+        {
+            _traySel.Clear();
+            for (int i = 0; i < picked.Count; i++) _traySel.Add(first + i);
+            _trayAnchor = first;
+            _trayFolded.Remove(GlyphGroups.Clean(group)!); // what was just put in it is meant to be seen
+        }
+
+        RefreshTray();
+        SaveTray();
+    }
+
+    private void NewTrayGroup()
+    {
+        string? name = PromptDialog.Ask("New group", "A name for the group the selected characters go in:", "Group", string.Empty);
+        if (GlyphGroups.Clean(name) is { } clean) GroupSelected(clean);
+    }
+
+    private void RenameTrayGroup(string name)
+    {
+        string? to = PromptDialog.Ask("Rename group", $"A new name for the group \"{name}\" (empty: no group):", "Rename", name);
+        if (to is null) return;
+
+        GlyphGroups.Rename(_tray, name, to, c => c.Group, (c, g) => c with { Group = g });
+        if (_trayFolded.Remove(name) && GlyphGroups.Clean(to) is { } kept) _trayFolded.Add(kept);
+        RefreshTray();
+        SaveTray();
+    }
+
+    private void SelectTrayGroup(string name)
+    {
+        _traySel.Clear();
+        for (int i = 0; i < _tray.Count; i++)
+            if (TrayGroupOf(i) == name)
+                _traySel.Add(i);
+
+        _trayAnchor = _traySel.Count > 0 ? _traySel.Min() : -1;
+        if (_traySel.Count > 0) InspectFromTray(_traySel.Min());
+        PaintTray();
+    }
+
+    /// <summary>The right-click menu of a group's header (null: the characters that are in no group).</summary>
+    private IEnumerable<Control> TrayGroupMenu(string? group)
+    {
+        if (group is not null)
+        {
+            yield return UiKit.Item("Select Its Characters", () => SelectTrayGroup(group));
+            yield return UiKit.Item("Rename Group…", () => RenameTrayGroup(group));
+            yield return UiKit.Item("Ungroup (keep the characters)", () => UngroupTray(group));
+            yield return UiKit.Item("Save Group as Constant…", () => SaveGroupAsConstant(group), tip: "Keep this group's characters as one constant in your Silo, like your:permission_modes");
+            yield return UiKit.Rule();
+        }
+
+        yield return UiKit.Item("Create Palette from This Group…", () => CreatePaletteFrom(CharactersOfGroup(group), false, group ?? "Palette"),
+                                tip: "A palette window with this group's characters");
+        yield return AddToPaletteItem(() => CharactersOfGroup(group), "Add This Group to Palette", group ?? "Palette");
+        yield return UiKit.Rule();
+
+        yield return UiKit.Item("Fold All Groups", () => SetAllTrayGroupsFolded(true));
+        yield return UiKit.Item("Unfold All Groups", () => SetAllTrayGroupsFolded(false));
+    }
+
+    /// <summary>Takes a group's characters out of it, without asking for a name.</summary>
+    private void UngroupTray(string name)
+    {
+        GlyphGroups.Rename(_tray, name, null, c => c.Group, (c, g) => c with { Group = g });
+        _trayFolded.Remove(name);
+        RefreshTray();
+        SaveTray();
+    }
+
+    /// <summary>The "Group" submenu of the characters' menu: a new group, one of the existing groups, or none.</summary>
+    private MenuItem TrayGroupItems()
+    {
+        var item = new MenuItem { Header = "Group" };
+        item.Items.Add(UiKit.Item("New Group…", NewTrayGroup));
+        foreach (string name in GlyphGroups.Names(_tray.Count, i => _tray[i].Group))
+        {
+            string captured = name;
+            item.Items.Add(UiKit.Item(name.Replace("_", "__"), () => GroupSelected(captured)));
+        }
+
+        if (_traySel.Any(i => TrayGroupOf(i) is not null))
+        {
+            item.Items.Add(UiKit.Rule());
+            item.Items.Add(UiKit.Item("Remove from Group", () => GroupSelected(null)));
+        }
+
+        return item;
     }
 
     private void SelectTray(int index)
@@ -344,7 +546,7 @@ public sealed partial class UnicodeExplorerView
         {
             _traySel.Add(index);
             _trayAnchor = index;
-            if (index < _trayCells.Count) _trayCells[index].BringIntoView();
+            if (_trayCells.TryGetValue(index, out var cell)) cell.BringIntoView();
             InspectFromTray(index);
         }
 
@@ -386,13 +588,16 @@ public sealed partial class UnicodeExplorerView
         menu.Items.Clear();
         bool one = _traySel.Count == 1;
         menu.Items.Add(UiKit.Item("Copy character" + (_traySel.Count > 1 ? "s" : string.Empty), () => CopyTray(CollectionFormat.Text, "characters"), gesture: "Ctrl+C"));
-        menu.Items.Add(UiKit.Item("Label…", LabelSelected, one, "Your own name for this character (kept with the collection, saved in files, used as the constant name suggestion)"));
+        menu.Items.Add(UiKit.Item("Label…", LabelSelected, one, "Your own name for this character (kept with the collection, saved in files, used as the constant name suggestion); OK with the box empty takes the label away"));
+        menu.Items.Add(UiKit.Item("Clear Label", ClearSelectedLabels, _traySel.Any(i => i < _tray.Count && !string.IsNullOrEmpty(_tray[i].Label)), "Take the label off the selected characters"));
         menu.Items.Add(UiKit.Rule());
         menu.Items.Add(UiKit.Item("Move left", () => MoveSelected(-1), gesture: "Alt+Left"));
         menu.Items.Add(UiKit.Item("Move right", () => MoveSelected(1), gesture: "Alt+Right"));
         menu.Items.Add(ColorMenu(() => TrayTarget().Select(c => c.CodePoint.Value).ToArray()));
+        menu.Items.Add(TrayGroupItems());
+        menu.Items.Add(AddToPaletteItem(() => TrayTarget(), "Add to Palette"));
         menu.Items.Add(UiKit.Rule());
-        menu.Items.Add(UiKit.Item("Sort by code point", SortTray));
+        menu.Items.Add(UiKit.Item("Sort by code point", SortTray, tip: "Orders the characters inside each group; the groups stay where they are"));
         menu.Items.Add(UiKit.Item("Remove repeated characters", RemoveTrayDuplicates));
         menu.Items.Add(UiKit.Rule());
         menu.Items.Add(UiKit.Item("Remove", RemoveSelected, gesture: "Delete"));
@@ -405,6 +610,12 @@ public sealed partial class UnicodeExplorerView
         {
             case Key.Delete:
                 RemoveSelected();
+                break;
+            case Key.F2 when mods == ModifierKeys.None:
+                // one character: its label; several that sit in one group: that group's name
+                var groups = _traySel.Select(TrayGroupOf).Distinct().ToList();
+                if (_traySel.Count == 1) LabelSelected();
+                else if (groups is [{ } only]) RenameTrayGroup(only);
                 break;
             case Key.A when mods == ModifierKeys.Control:
                 for (int i = 0; i < _tray.Count; i++) _traySel.Add(i);
@@ -459,7 +670,7 @@ public sealed partial class UnicodeExplorerView
         else
         {
             e.Effects = ReferenceEquals(payload.Source, _tray) ? DragDropEffects.Move : DragDropEffects.Copy;
-            GlyphDrag.Mark(_trayPanel, GlyphDrag.DropIndex(_trayPanel, e.GetPosition(_trayPanel)));
+            GlyphDrag.Mark(_trayPanel, GlyphDrag.DropIndex(_trayPanel, e.GetPosition(_trayPanel), _tray.Count));
         }
 
         e.Handled = true;
@@ -472,11 +683,17 @@ public sealed partial class UnicodeExplorerView
         e.Handled = true;
         if (GlyphDrag.Read(e.Data) is not { } payload) return;
 
-        int at = GlyphDrag.DropIndex(_trayPanel, e.GetPosition(_trayPanel));
+        var spot = GlyphDrag.Spot(_trayPanel, e.GetPosition(_trayPanel), _tray.Count);
+        int at   = spot.Index;
+
+        // what is dropped joins the group it lands in
+        string? group = TrayGroupOf(spot.GroupFrom);
         if (ReferenceEquals(payload.Source, _tray))
         {
             int first = PaletteRules.Move(_tray, payload.Indexes, at);
             if (first < 0) return;
+
+            for (int i = first; i < first + payload.Indexes.Count && i < _tray.Count; i++) _tray[i] = _tray[i] with { Group = group };
 
             _traySel.Clear();
             for (int i = 0; i < payload.Indexes.Count; i++) _traySel.Add(first + i);
@@ -498,7 +715,7 @@ public sealed partial class UnicodeExplorerView
         if (!HasTrayRoom(fresh.Count)) return;
 
         at = Math.Clamp(at, 0, _tray.Count);
-        _tray.InsertRange(at, fresh.Select(v => new CollectedCharacter(new CodePoint(v))));
+        _tray.InsertRange(at, fresh.Select(v => new CollectedCharacter(new CodePoint(v), Group: group)));
         _traySel.Clear();
         for (int i = 0; i < fresh.Count; i++) _traySel.Add(at + i);
         _trayAnchor = at;
@@ -534,7 +751,8 @@ public sealed partial class UnicodeExplorerView
             return;
         }
 
-        CopyText(CollectionFormats.Write(items, format, _db), what);
+        string text = CollectionFormats.Write(items, format, _db);
+        CopyText(format == CollectionFormat.Text ? GlyphClipboard.ForCopy(text) : text, what); // only the plain characters; the other formats are code points, tables and JSON
     }
 
     private void CopyText(string text, string what)

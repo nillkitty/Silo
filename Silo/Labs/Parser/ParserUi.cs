@@ -255,6 +255,7 @@ internal static class ParserUi
                    "convert"   => "Wrap",
                    "where"     => "Wrap",
                    "named"     => "Property",
+                   "int" or "bits" or "bytes" or "skip" or "counted" or "offsets" => "Data1",
                    _           => "Wrap"
                };
     }

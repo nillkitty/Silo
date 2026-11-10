@@ -559,6 +559,16 @@ public sealed class ExplorerView : UserControl, IClipboardSurface
                 c.Command.Execute(c.Parameter);
                 return;
             }
+
+            // F2 renames whatever the node is: its own Rename command if it has one, else the label shown for it
+            if (e.Key == Key.F2 && Keyboard.Modifiers == ModifierKeys.None)
+            {
+                var rename = NodeCommandHub.CommandsFor(node).SelectMany(c => c.SelfAndDescendants())
+                                           .FirstOrDefault(c => c.Header.Replace("_", string.Empty).StartsWith("Rename", StringComparison.OrdinalIgnoreCase) && c.Children is null && c.Command.CanExecute(c.Parameter));
+                e.Handled = true;
+                if (rename is not null) rename.Command.Execute(rename.Parameter);
+                else NodeDesignMenu.Rename(node);
+            }
         }
         catch (Exception ex)
         {
@@ -729,6 +739,10 @@ public sealed class ExplorerView : UserControl, IClipboardSurface
             app.Nodes.Changed     += OnNodesChanged; // the tools' nodes
         }
 
+        AppDesignLevel.Instance.PropertyChanged += (_, e) =>
+                                                   {
+                                                       if (e.PropertyName == nameof(AppDesignLevel.ShowEmptyContainers)) QueueRefresh();
+                                                   };
         TableEditors.Changed      += (_, _) => QueueRefresh();
         DiagramEvents.Changed     += (_, _) => QueueRefresh();
         DataBindingEvents.Changed += (_, _) => QueueRefresh();

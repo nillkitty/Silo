@@ -4,6 +4,7 @@ using System.IO;
 using System.Security;
 using Microsoft.Win32;
 using Silo.Connectors.File;
+using Silo.Design;
 using Silo.ViewModel;
 using Telefrag.DI;
 
@@ -140,14 +141,14 @@ public partial class RegistryModel : INodeProvider<RegistryKey>, INodeDetails, I
     /// </summary>
     public static string IconKeyOf(RegistryItemKind kind, bool accessible)
     {
-        if (!accessible) return "FsFileMissing";
+        if (!accessible) return IconRoles.Registry("missing", "Registry item that cannot be read", "FsFileMissing");
 
         return kind switch
                {
-                   RegistryItemKind.Root => "RegHive",
-                   RegistryItemKind.Hive => "RegHive",
-                   RegistryItemKind.Key  => "RegKey",
-                   _                     => "RegValue"
+                   RegistryItemKind.Root => IconRoles.Registry("hive", "Registry hive", "RegHive"),
+                   RegistryItemKind.Hive => IconRoles.Registry("hive", "Registry hive", "RegHive"),
+                   RegistryItemKind.Key  => IconRoles.Registry("key", "Registry key", "RegKey"),
+                   _                     => IconRoles.Registry("value", "Registry value", "RegValue")
                };
     }
 

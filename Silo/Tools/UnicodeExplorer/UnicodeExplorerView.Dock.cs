@@ -99,7 +99,19 @@ public sealed partial class UnicodeExplorerView
         }
 
         var pane = MakePane(part, TakePartForPane(key));
-        PlaceBeside(explorer, pane);
+        try
+        {
+            PlaceBeside(explorer, pane);
+        }
+        catch (InvalidOperationException ex)
+        {
+            // the part's controls were taken out of its tab for the pane: put them back so they are not lost
+            pane.Content = null;
+            GoHome(part);
+            Say($"The {part.Name.ToLowerInvariant()} could not be undocked: {ex.Message}");
+            return;
+        }
+
         AdoptPartPane(key, pane);
         pane.IsSelected = true;
         pane.IsActive   = true;
@@ -267,11 +279,18 @@ public sealed partial class UnicodeExplorerView
             return;
         }
 
-        if (explorer.Root?.Manager is { } manager)
+        // (an auto-hidden or hidden explorer has no pane group to sit beside: the new pane gets a group of its own at the edge of the dock area.
+        // AddToLayout is for panes that were hidden, and refuses a new one)
+        if (explorer.Root?.RootPanel is { } rootPanel)
         {
-            pane.AddToLayout(manager, AnchorableShowStrategy.Bottom);
-            pane.Float();
+            if (rootPanel.Orientation == Orientation.Horizontal) group.DockWidth = new GridLength(320);
+            else group.DockHeight = new GridLength(220);
+
+            rootPanel.Children.Add(group);
+            return;
         }
+
+        throw new InvalidOperationException("The explorer is not in the dock area, so there is nowhere to put the pane.");
     }
 
     // ---- a pane's own X -------------------------------------------------------------------------------------------

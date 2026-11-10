@@ -6,6 +6,7 @@ using Serilog;
 using Silo.Model;
 using Silo.Providers.Crypto;
 using Silo.Providers.Data;
+using Silo.Tasks;
 using Silo.Ui;
 using Silo.Ui.Windows;
 
@@ -131,6 +132,18 @@ public static class CertificateActions
         return n == 1 ? $"1 {noun}" : $"{n} {noun}s";
     }
 
+    /// <summary>Where a certificate came from, as an address: the file URI of the file it was imported from.</summary>
+    private static string FileUri(string path)
+    {
+        return new Uri(Path.GetFullPath(path)).AbsoluteUri;
+    }
+
+    /// <summary>The address of a certificate kept in the Silo (for those made from another).</summary>
+    private static string SiloUri(string id)
+    {
+        return $"silo:///active/#security/certificates/{id}";
+    }
+
     private static string Id(X509Certificate2 cert)
     {
         return CertificateInfo.ThumbprintSha256(cert).ToLowerInvariant();
@@ -155,17 +168,27 @@ public static class CertificateActions
                                              {
                                                  if (Dialogs.OpenFiles("Import X509 Certificates", CertificateFilter) is not { Count: > 0 } files) return;
 
-                                                 var all = new List<X509Certificate2>();
-                                                 foreach (var path in files)
+                                                 var all  = new List<X509Certificate2>();
+                                                 var task = TaskCenter.Begin($"Importing {Plural(files.Count, "certificate file")}", "Certificates");
+                                                 try
                                                  {
-                                                     var certs = ReadCertificates(path);
-                                                     if (certs is null) continue;
+                                                     foreach (var path in files)
+                                                     {
+                                                         var certs = ReadCertificates(path);
+                                                         if (certs is null) continue;
 
-                                                     if (certs.Count == 0) App.Alert($"{Path.GetFileName(path)} holds no certificate.");
-                                                     AddNew(vault, certs, $"File: {Path.GetFileName(path)}", all);
+                                                         if (certs.Count == 0) App.Alert($"{Path.GetFileName(path)} holds no certificate.");
+                                                         AddNew(vault, certs, FileUri(path), all);
+                                                     }
+
+                                                     Summarize(all);
+                                                     task.Succeed(null, all.Count, FileTasks.SizeOf(files));
                                                  }
-
-                                                 Summarize(all);
+                                                 catch (Exception ex)
+                                                 {
+                                                     task.Fail(ex);
+                                                     throw;
+                                                 }
                                              });
     }
 
@@ -216,7 +239,7 @@ public static class CertificateActions
 
                                                        var (certs, store) = picked;
 
-                                                       AddAll(vault, certs, "Windows store: " + store);
+                                                       AddAll(vault, certs, "certstore:///" + Uri.EscapeDataString(store));
                                                    });
     }
 
@@ -249,7 +272,7 @@ public static class CertificateActions
                                                {
                                                    var remote = await CertificateImport.FetchAsync(values["target"]);
                                                    var certs  = values["chain"] == "true" ? remote.Certificates : remote.Certificates.Take(1).ToList();
-                                                   AddAll(vault, certs, $"Server: {remote.Host}:{remote.Port}");
+                                                   AddAll(vault, certs, $"tls://{remote.Host}:{remote.Port}");
                                                    App.Status($"{remote.Host}:{remote.Port} presented {Plural(remote.Certificates.Count, "certificate")} ({remote.Protocol}, {(remote.TrustedBySystem ? "trusted by this computer" : "not trusted by this computer")})");
                                                });
     }
@@ -277,7 +300,7 @@ public static class CertificateActions
                                                    return;
                                                }
 
-                                               AddAll(vault, certs, "Clipboard");
+                                               AddAll(vault, certs, "clipboard:");
                                            });
     }
 
@@ -298,8 +321,8 @@ public static class CertificateActions
                                              try
                                              {
                                                  var pairs = KeyPair.FromPfx(data, pw, out var chain);
-                                                 foreach (var pair in pairs) vault.AddKeyPair(pair, $"PFX: {Path.GetFileName(path)}");
-                                                 foreach (var c in chain) vault.Add(c, $"PFX chain: {Path.GetFileName(path)}");
+                                                 foreach (var pair in pairs) vault.AddKeyPair(pair, FileUri(path));
+                                                 foreach (var c in chain) vault.Add(c, FileUri(path) + "#chain");
 
                                                  App.Status($"Installed {Plural(pairs.Count, "keypair")} from {Path.GetFileName(path)}" + (chain.Count > 0 ? $" and {Plural(chain.Count, "chain certificate")}" : ""));
                                                  return;
@@ -342,7 +365,7 @@ public static class CertificateActions
                                              try
                                              {
                                                  var pair  = KeyPair.FromPem(certPem, keyPem, pw);
-                                                 var entry = vault.AddKeyPair(pair, $"PEM: {Path.GetFileName(certPath)}");
+                                                 var entry = vault.AddKeyPair(pair, FileUri(certPath));
                                                  App.Status($"Installed the keypair of {entry.Name}");
                                                  return;
                                              }
@@ -385,7 +408,7 @@ public static class CertificateActions
         _ = RunAsync("Generating the keypair", async () =>
                                               {
                                                   var pair  = await Task.Run(() => CertificateFactory.CreateSelfSigned(options));
-                                                  var entry = vault.AddKeyPair(pair, isCa ? "Generated root CA" : "Generated");
+                                                  var entry = vault.AddKeyPair(pair, isCa ? "silo:///active/#generated/root-ca" : "silo:///active/#generated");
                                                   App.Status($"Generated {(isCa ? "the root certificate authority" : "the keypair")} {entry.Name}");
                                               });
     }
@@ -447,7 +470,7 @@ public static class CertificateActions
                                                {
                                                    using var issuer = vault.OpenKeyPair(authority.Id) ?? throw new InvalidOperationException($"The Silo holds no private key for {authority.Name}.");
                                                    var       pair   = await Task.Run(() => CertificateFactory.Issue(issuer, options));
-                                                   var       entry  = vault.AddKeyPair(pair, $"Issued by {authority.Name}");
+                                                   var       entry  = vault.AddKeyPair(pair, SiloUri(authority.Id));
                                                    vault.RecordIssued(authority.Id, pair.Certificate);
                                                    App.Status($"Issued {entry.Name}, signed by {authority.Name}");
                                                });
@@ -501,7 +524,7 @@ public static class CertificateActions
 
                                       using var issuer = vault.OpenKeyPair(authority.Id) ?? throw new InvalidOperationException($"The Silo holds no private key for {authority.Name}.");
                                       var       cert   = CertificateFactory.SignRequest(issuer, csr, new SigningOptions(int.Parse(values["days"]), values["server"] == "true", values["client"] == "true"));
-                                      vault.Add(cert, $"Signed request by {authority.Name}");
+                                      vault.Add(cert, SiloUri(authority.Id));
                                       vault.RecordIssued(authority.Id, cert);
                                       App.Status($"Signed the request for {CertificateInfo.DisplayName(cert)}");
 
@@ -642,8 +665,11 @@ public static class CertificateActions
                         {
                             if (Dialogs.SaveFile("Export Certificate", "PEM (*.pem)|*.pem|Certificate (*.crt)|*.crt|DER (*.cer)|*.cer", entry.Name + ".pem") is not { } path) return;
 
-                            if (path.EndsWith(".cer", StringComparison.OrdinalIgnoreCase)) File.WriteAllBytes(path, entry.Certificate.RawData);
-                            else File.WriteAllText(path, CertificateInfo.ToPem(entry.Certificate));
+                            FileTasks.Write($"Exporting {entry.Name}", "Certificates", path, () =>
+                                                                                          {
+                                                                                              if (path.EndsWith(".cer", StringComparison.OrdinalIgnoreCase)) File.WriteAllBytes(path, entry.Certificate.RawData);
+                                                                                              else File.WriteAllText(path, CertificateInfo.ToPem(entry.Certificate));
+                                                                                          }, 1);
 
                             App.Status($"Exported {entry.Name} to {path}");
                         });
@@ -662,7 +688,7 @@ public static class CertificateActions
                             var pair = vault.GetKeyPair(entry.Id) ?? throw new InvalidOperationException($"The Silo holds no private key for {entry.Name}.");
                             if (Dialogs.SaveFile("Export Keypair as PFX", "PKCS #12 (*.pfx)|*.pfx", entry.Name + ".pfx") is not { } path) return;
 
-                            File.WriteAllBytes(path, pair.ExportPfx(values["pw"]));
+                            FileTasks.Write($"Exporting {entry.Name} as PFX", "Certificates", path, () => File.WriteAllBytes(path, pair.ExportPfx(values["pw"])), 1);
                             App.Status($"Exported {entry.Name} with its key to {path}");
                         });
     }
@@ -679,7 +705,7 @@ public static class CertificateActions
                             var pair = vault.GetKeyPair(entry.Id) ?? throw new InvalidOperationException($"The Silo holds no private key for {entry.Name}.");
                             if (Dialogs.SaveFile("Export Keypair as PEM", "PEM (*.pem)|*.pem", entry.Name + ".pem") is not { } path) return;
 
-                            File.WriteAllText(path, pair.ToPem(values["pw"]));
+                            FileTasks.Write($"Exporting {entry.Name} as PEM", "Certificates", path, () => File.WriteAllText(path, pair.ToPem(values["pw"])), 1);
                             App.Status($"Exported {entry.Name} with its key to {path}");
                         });
     }
@@ -743,7 +769,7 @@ public static class CertificateActions
                                                                       {
                                                                           using var issuer = issuerEntry is null ? null : vault.OpenKeyPair(issuerEntry.Id);
                                                                           var       pair   = await Task.Run(() => CertificateFactory.Rekey(entry.Certificate, issuer, algorithm, days));
-                                                                          var       fresh  = vault.AddKeyPair(pair, $"Replaced the key of {entry.Name}");
+                                                                          var       fresh  = vault.AddKeyPair(pair, SiloUri(entry.Id));
                                                                           vault.SetReplaces(fresh.Id, entry.Id);
                                                                           if (issuerEntry is not null) vault.RecordIssued(issuerEntry.Id, pair.Certificate);
 
@@ -810,8 +836,11 @@ public static class CertificateActions
 
                                                 using var key = vault.OpenKeyPair(authority.Id) ?? throw new InvalidOperationException($"The Silo holds no private key for {authority.Name}.");
                                                 var       der = vault.BuildCrl(authority.Id, key, int.Parse(values["days"]));
-                                                if (path.EndsWith(".pem", StringComparison.OrdinalIgnoreCase)) File.WriteAllText(path, PemEncoding.WriteString("X509 CRL", der));
-                                                else File.WriteAllBytes(path, der);
+                                                FileTasks.Write($"Exporting the revocation list of {authority.Name}", "Certificates", path, () =>
+                                                                                                                                  {
+                                                                                                                                      if (path.EndsWith(".pem", StringComparison.OrdinalIgnoreCase)) File.WriteAllText(path, PemEncoding.WriteString("X509 CRL", der));
+                                                                                                                                      else File.WriteAllBytes(path, der);
+                                                                                                                                  }, revoked);
 
                                                 App.Status($"Exported the revocation list of {authority.Name} ({Plural(revoked, "revoked certificate")}) to {path}");
                                             });

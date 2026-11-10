@@ -59,6 +59,7 @@ public sealed class DrawioProfiles
     public const string ModelAnnotatable = "model-annotatable";
     public const string Canvas          = "canvas";
     public const string Traceroute      = "traceroute";
+    public const string CrawlMap        = "crawlmap";
 
     private static readonly string SettingsFile =
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Silo", "drawio-profiles.json");
@@ -122,6 +123,24 @@ public sealed class DrawioProfiles
                                   ShowLinkIcons           = true,
                                   LiveThrottleMs          = 150,
                                   LiveDeferWhileEditingMs = 600
+                              }));
+
+        Add(new DrawioProfile(CrawlMap,
+                              "The Link Crawler's live map: the generated boxes can be moved and deleted, room for notes, quick live updates as pages are read.",
+                              new DrawioOptions
+                              {
+                                  ShowLibraries           = false,
+                                  HideSidebar             = true,
+                                  HideAllMoreShapes       = true,
+                                  DisableCustomLibraries  = true,
+                                  HideTemplates           = true,
+                                  HideMenus               = ["file", "extras", "help"],
+                                  LockGeneratedCells      = false,
+                                  ZoomWheel               = true,
+                                  FitOnLoad               = false,
+                                  ShowLinkIcons           = true,
+                                  LiveThrottleMs          = 200,
+                                  LiveDeferWhileEditingMs = 800
                               }));
 
         Load();

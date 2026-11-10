@@ -59,6 +59,25 @@ public sealed class AppDesignLevel : ICommand, INotifyPropertyChanged
 
     public DesignLevel Level => _level;
 
+    private bool _showEmptyContainers;
+
+    /// <summary>
+    ///     Whether the Explorer lists a Silo's containers (Tables, Diagrams, Saved Scalars...) that hold nothing. Off by default, so the tree shows
+    ///     only what is there; an author can turn it on to see (and use the commands of) the empty ones.
+    /// </summary>
+    public bool ShowEmptyContainers => _showEmptyContainers && IsAtLeast(DesignLevel.Author);
+
+    public void SetShowEmptyContainers(bool show)
+    {
+        _showEmptyContainers = show;
+        _save(_level);
+        OnPropertyChanged(nameof(ShowEmptyContainers));
+        OnPropertyChanged(nameof(ShowEmptyContainersChecked));
+    }
+
+    /// <summary>The menu's check mark: the choice itself, whatever the level.</summary>
+    public bool ShowEmptyContainersChecked => _showEmptyContainers;
+
     public bool IsUser      => _level == DesignLevel.User;
     public bool IsAuthor    => _level == DesignLevel.Author;
     public bool IsDeveloper => _level == DesignLevel.Developer;
@@ -68,7 +87,11 @@ public sealed class AppDesignLevel : ICommand, INotifyPropertyChanged
     public bool IsAtLeast(DesignLevel min) => _level >= min;
 
     /// <summary>Loads the last-saved level (defaulting to <see cref="DesignLevel.User"/>). Call once, early in startup.</summary>
-    public static void Apply() => Instance.SetLevel(_loadSavedLevel());
+    public static void Apply()
+    {
+        Instance._showEmptyContainers = _loadShowEmpty();
+        Instance.SetLevel(_loadSavedLevel());
+    }
 
     public void SetLevel(DesignLevel level)
     {
@@ -84,6 +107,19 @@ public sealed class AppDesignLevel : ICommand, INotifyPropertyChanged
         OnPropertyChanged(nameof(IsAuthor));
         OnPropertyChanged(nameof(IsDeveloper));
         OnPropertyChanged(nameof(IsDebug));
+        OnPropertyChanged(nameof(ShowEmptyContainers));
+    }
+
+    private static bool _loadShowEmpty()
+    {
+        try
+        {
+            return File.Exists(SettingsFile) && JsonSerializer.Deserialize<DesignLevelSettings>(File.ReadAllText(SettingsFile)) is { ShowEmptyContainers: true };
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     private static DesignLevel _loadSavedLevel()
@@ -108,7 +144,7 @@ public sealed class AppDesignLevel : ICommand, INotifyPropertyChanged
         try
         {
             Directory.CreateDirectory(Path.GetDirectoryName(SettingsFile)!);
-            File.WriteAllText(SettingsFile, JsonSerializer.Serialize(new DesignLevelSettings { Level = level.ToString() }));
+            File.WriteAllText(SettingsFile, JsonSerializer.Serialize(new DesignLevelSettings { Level = level.ToString(), ShowEmptyContainers = Instance._showEmptyContainers }));
         }
         catch
         {
@@ -123,7 +159,9 @@ public sealed class AppDesignLevel : ICommand, INotifyPropertyChanged
 
     void ICommand.Execute(object? parameter)
     {
-        if (parameter is string s && Enum.TryParse<DesignLevel>(s, true, out var level))
+        if (parameter is "ToggleEmptyContainers")
+            SetShowEmptyContainers(!_showEmptyContainers);
+        else if (parameter is string s && Enum.TryParse<DesignLevel>(s, true, out var level))
             SetLevel(level);
     }
 
@@ -141,5 +179,7 @@ public sealed class AppDesignLevel : ICommand, INotifyPropertyChanged
     private sealed class DesignLevelSettings
     {
         public string Level { get; set; } = nameof(DesignLevel.User);
+
+        public bool ShowEmptyContainers { get; set; }
     }
 }

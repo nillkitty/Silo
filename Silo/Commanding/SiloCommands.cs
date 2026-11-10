@@ -6,6 +6,7 @@ using Silo.Providers.Data;
 using Silo.Providers.Format;
 using Silo.Providers.Tree;
 using Silo.Tabular;
+using Silo.Tasks;
 using Silo.Ui;
 
 namespace Silo.Commanding;
@@ -140,11 +141,25 @@ public record ImportDataCommand(OpenSilo Silo) : SiloCommand("_Import Data...", 
         int num = inFiles.Count;
         int ok  = 0;
         int ng  = 0;
-        foreach (var fn in inFiles)
-            if (await s.Data!.ImportFileAsync(fn))
-                ok++;
-            else
-                ng++;
+        try
+        {
+            await FileTasks.RunAsync($"Importing {(num == 1 ? Path.GetFileName(inFiles[0]) : num + " files")}", "Silo import", async task =>
+                                                                                                                               {
+                                                                                                                                   for (int i = 0; i < num; i++)
+                                                                                                                                   {
+                                                                                                                                       task.Token.ThrowIfCancellationRequested();
+                                                                                                                                       task.Report($"{i + 1} of {num}: {Path.GetFileName(inFiles[i])}", ok, FileTasks.SizeOf(inFiles.Take(i)));
+                                                                                                                                       if (await s.Data!.ImportFileAsync(inFiles[i])) ok++;
+                                                                                                                                       else ng++;
+                                                                                                                                   }
+
+                                                                                                                                   task.Report(ng == 0 ? $"{ok} imported" : $"{ok} imported, {ng} failed", ok, FileTasks.SizeOf(inFiles));
+                                                                                                                               }, canCancel: true);
+        }
+        catch (OperationCanceledException)
+        {
+            s.Debug("Import cancelled after {ok} files", ok);
+        }
 
         s.Debug("Finished processing {num} input files.  Success={ok} Failed={ng}", num, ok, ng);
     }

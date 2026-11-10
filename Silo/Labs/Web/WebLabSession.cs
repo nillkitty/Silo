@@ -316,6 +316,19 @@ public sealed partial class WebLabSession : LabSession<Uri>
     /// <summary>Shows one of the Lab's panes (a problem's way to its source).</summary>
     internal void ShowPane(string id) => Host?.ShowInspector(id);
 
+    /// <summary>Reads an address as the address box does.</summary>
+    internal bool TryParseAddress(string text, out Uri? value) => LabOf.TryParse(text, out value);
+
+    /// <summary>Shows an address in the Lab's page (the Link Crawler's way to look at a link).</summary>
+    internal void OpenAddress(Uri uri) => RunAsync(() => OpenValueAsync(uri));
+
+    /// <summary>What the page is told the browser is (the User agent parameter, else the browser's own); the crawler says the same.</summary>
+    internal string CrawlUserAgent()
+    {
+        string agent = Parameters[WebLabParameters.UserAgent].Text.Trim();
+        return agent.Length > 0 ? agent : _defaultUserAgent.Length > 0 ? _defaultUserAgent : "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Silo";
+    }
+
     /// <summary>Adds a host to the blocked hosts (the Network pane's way), saying how it went.</summary>
     internal void BlockHost(string host)
     {
@@ -970,7 +983,7 @@ public sealed partial class WebLabSession : LabSession<Uri>
         _console       = new ConsoleInspector(this);
         _network       = new NetworkInspector(this);
         var style      = new StyleInspector(this, dom);
-        _webInspectors = [dom, _console, _network, style];
+        _webInspectors = [dom, _console, _network, style, new CrawlerInspector(this)];
         dom.OwnedBy(LabOwner.OfAspect("dom"));
         _console.OwnedBy(LabOwner.OfAspect("console"));
         _network.OwnedBy(LabOwner.OfAspect("network"));

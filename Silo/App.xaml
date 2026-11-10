@@ -22,16 +22,8 @@
                 -->
                 <ResourceDictionary Source="/Theming/Theme.Styles.xaml" />
             </ResourceDictionary.MergedDictionaries>
-            <sys:String x:Key="AboutText">
-                Silo version {0} by {1}
-                {2}
-                {3}
-                Thanks to:
-                {4}
-    
-                In Memory:
-                {5}
-            </sys:String>
+            <!-- a format string: {0} version, {1} authors, {2} url, {3} info, {4} thanks, {5} in memory (see AboutBox); &#10; is a line break, which XAML would otherwise collapse -->
+            <sys:String x:Key="AboutText">Silo version {0} by {1}&#10;{2}&#10;{3}&#10;&#10;Thanks to:&#10;{4}&#10;&#10;In Memory:&#10;{5}</sys:String>
             <sys:String x:Key="AboutAuthors">
                 Nill (nill@nill.dev)
             </sys:String>

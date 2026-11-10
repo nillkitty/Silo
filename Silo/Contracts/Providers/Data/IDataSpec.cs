@@ -66,6 +66,9 @@ public interface IDataSpec
     /// <summary>The object identifier that tells this specification from any other; null for none.</summary>
     string? Oid => null;
 
+    /// <summary>How the data of this specification is best edited (see <see cref="IDataEditor" />); null for no particular editor.</summary>
+    IDataEditorSpec? Editor => null;
+
     /// <summary>
     ///     Gets whether the data specification matches the Stream,
     ///     at the current stream position.
@@ -81,6 +84,12 @@ public interface IDataSpec
     DataParseResult Parse(string text)
     {
         return DataParseResult.Failure(0, "This specification cannot read text.");
+    }
+
+    /// <summary>Reads <paramref name="data" /> as this specification, for one that describes bytes. <c>Consumed</c> is in bytes.</summary>
+    DataParseResult Parse(ReadOnlyMemory<byte> data)
+    {
+        return DataParseResult.Failure(0, "This specification cannot read bytes.");
     }
 
     /// <summary>A value this specification parsed, as <paramref name="target" /> (one of <see cref="ConvertsTo" />).</summary>

@@ -72,8 +72,8 @@ public class ParserLab : LabBase<IDataSpec>
                                       string.Join(", ", SpecCatalog.Formats) + ".", spec, hint: "hex-dotted4\nhex-colon\nSystem.Guid");
 
         yield return new LabParameter(ParserLabParameters.Mode, "Mode", LabParameterKind.Choice, "Parser",
-                                      "Parser: rules over characters. Tokenizer: rules that cut text into tokens first.", spec,
-                                      ["Parser", "Tokenizer"]);
+                                      "Parser: rules over characters. Tokenizer: rules that cut text into tokens first. Binary: rules over bytes.", spec,
+                                      ["Parser", "Tokenizer", "Binary"]);
 
         yield return new LabParameter(ParserLabParameters.TokenType, "Token type", LabParameterKind.Text, "Token",
                                       "In the tokenizer mode: what the kinds of token are called as a type (an enum).", spec);

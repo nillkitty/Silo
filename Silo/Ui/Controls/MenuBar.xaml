@@ -96,6 +96,14 @@
                            IsChecked="{Binding IsDebug, Mode=OneWay}"
                            Command="{Binding}"
                            CommandParameter="Debug" />
+            <Separator />
+            <MenuItem x:Name="ShowEmptyContainers"
+                           Header="Show _Empty Containers (Author)"
+                           ToolTip="List Silo containers that hold nothing (Tables, Diagrams, Saved Scalars...). Off by default."
+                           IsCheckable="True"
+                           IsChecked="{Binding ShowEmptyContainersChecked, Mode=OneWay}"
+                           Command="{Binding}"
+                           CommandParameter="ToggleEmptyContainers" />
         </MenuItem>
         <!--
             The dock panes can be closed with their own X; these bring them back (and hide them again). The check
@@ -107,6 +115,8 @@
         <MenuItem x:Name="ViewToolbox" Header="_Toolbox" IsCheckable="True" Click="ViewPane_Click" />
         <MenuItem x:Name="ViewProblems" Header="Pro_blems" IsCheckable="True" Click="ViewPane_Click"
                   ToolTip="What is wrong in the open text documents (JSON, XML and YAML that cannot be read, keys used twice...)" />
+        <MenuItem x:Name="ViewTasks" Header="Tas_ks" IsCheckable="True" Click="ViewPane_Click"
+                  ToolTip="What the app is working on (saving, loading, importing, exporting, syncing): status, duration and results, with cancel and a toast when one ends. Opens by itself when the first task starts" />
         <MenuItem x:Name="ViewSelectedItem" Header="Selected _Item" IsCheckable="True" Click="ViewPane_Click"
                   ToolTip="The view of the item selected in the Explorer (the italic preview tab; picking something in the navigation flyout replaces it)" />
         <Separator />

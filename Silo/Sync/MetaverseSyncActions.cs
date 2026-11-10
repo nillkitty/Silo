@@ -3,6 +3,7 @@ using Serilog;
 using Silo.Commanding;
 using Silo.Model;
 using Silo.Providers.Action;
+using Silo.Tasks;
 using Silo.Ui.Windows;
 
 namespace Silo.Sync;
@@ -39,26 +40,51 @@ public sealed class MetaverseSyncActions : IActionProvider<ISchema>
                                           types[0].Name);
         if (mvName is null) return;
 
+        _ = RunAsync(db, store, source, types.Count, mvName);
+    }
+
+    /// <summary>
+    ///     The sync as a task of the Tasks pane (source "Sync"): it reads and flows on a background thread, reports each type as it goes, counts the
+    ///     objects it read, and can be cancelled between objects. The summary is shown when it ends.
+    /// </summary>
+    private static async Task RunAsync(IDatabaseProvider db, IEntityStore store, ISchema source, int typeCount, string mvName)
+    {
         try
         {
-            App.Status($"Reading {source.SchemaDisplayName}...");
-            string worldKey = WorldSchemaAbsorber.KeyFor(source.SchemaUri!);
-            var    absorbed = WorldSchemaAbsorber.Absorb(db, store, worldKey, source);
-            var    sync     = new InboundSync(db, store);
+            var (absorbed, lines) = await TaskCenter.Run($"Syncing {source.SchemaDisplayName} to the Metaverse", "Sync", t => Task.Run(() =>
+                                                  {
+                                                      t.Report($"Reading {source.SchemaDisplayName}");
+                                                      string worldKey = WorldSchemaAbsorber.KeyFor(source.SchemaUri!);
+                                                      var    taken    = WorldSchemaAbsorber.Absorb(db, store, worldKey, source);
+                                                      var    sync     = new InboundSync(db, store);
 
-            var lines = new List<string>();
-            foreach (var (type, fields) in absorbed.Types)
-            {
-                var (_, created) = sync.EnsureMapping(absorbed.World, type, fields, types.Count == 1 ? mvName : $"{mvName}.{type.Name}");
-                var result = sync.Run(absorbed.World, type, source.GetObjects(type.Name));
-                lines.Add($"{type.Name}{(created ? " (new mapping)" : string.Empty)}: {result}");
-                lines.AddRange(result.Notes);
-            }
+                                                      var all  = new List<string>();
+                                                      int seen = 0, done = 0;
+                                                      foreach (var (type, fields) in taken.Types)
+                                                      {
+                                                          t.Token.ThrowIfCancellationRequested();
+                                                          t.Report($"{type.Name} ({++done} of {taken.Types.Count})", seen);
+
+                                                          var (_, created) = sync.EnsureMapping(taken.World, type, fields, typeCount == 1 ? mvName : $"{mvName}.{type.Name}");
+                                                          var result = sync.Run(taken.World, type, source.GetObjects(type.Name), t.Token);
+                                                          seen += result.Seen;
+                                                          t.SetResult(seen);
+                                                          all.Add($"{type.Name}{(created ? " (new mapping)" : string.Empty)}: {result}");
+                                                          all.AddRange(result.Notes);
+                                                      }
+
+                                                      t.Report(all.Count > 0 ? all[0] : "Nothing to sync", seen);
+                                                      return (taken, all);
+                                                  }), canCancel: true);
 
             App.Status($"Metaverse sync of {source.SchemaDisplayName}: {lines[0]}");
             PromptDialog.Show("Sync to Metaverse",
                               $"World \"{absorbed.World.Key}\": {absorbed.TypesAdded} type(s), {absorbed.FieldsAdded} field(s) added, {absorbed.FieldsChanged} changed.\n\n" +
                               string.Join('\n', lines), ["OK"]);
+        }
+        catch (OperationCanceledException)
+        {
+            App.Status($"Metaverse sync of {source.SchemaDisplayName} cancelled");
         }
         catch (Exception ex)
         {

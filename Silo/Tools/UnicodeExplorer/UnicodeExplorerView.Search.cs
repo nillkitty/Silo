@@ -110,6 +110,11 @@ public sealed partial class UnicodeExplorerView
         _view.ItemDragStarted += OnItemDragStarted;
         _view.MenuRequested += OnCellMenu;
         _view.ViewChanged  += () => UpdateWhere();
+        _view.CellSizeChanged += () =>
+                                 {
+                                     _settings.GlyphSize = _view.CellSize;
+                                     SaveSettings();
+                                 };
         _view.Map.Hover    += index => UpdateWhere(index);
         _view.PreviewKeyDown += OnResultsKeyDown;
         UpdateSelectionUi();
@@ -253,11 +258,15 @@ public sealed partial class UnicodeExplorerView
             var (found, outcome, segments) = await Task.Run(() =>
                                                            {
                                                                int[] all = lookup ? CodePoint.Enumerate(text).Select(c => c.Value).ToArray() : db.Search(query, cancel.Token);
+                                                               // a search that was replaced stops without throwing (the token is not given to Task.Run for the same reason)
+                                                               if (cancel.IsCancellationRequested) return (Array.Empty<int>(), new FilterOutcome([], 0, 0), new List<MapSegment>());
+
                                                                var result = filter is null ? new FilterOutcome(all, 0, 0) : filter.Apply(db, all, cancel.Token);
-                                                               cancel.Token.ThrowIfCancellationRequested();
+                                                               if (cancel.IsCancellationRequested) return (Array.Empty<int>(), new FilterOutcome([], 0, 0), new List<MapSegment>());
+
                                                                return (result.Kept, result, BuildSegments(db, result.Kept));
-                                                           }, cancel.Token);
-            if (version != _searchVersion) return;
+                                                           });
+            if (cancel.IsCancellationRequested || version != _searchVersion) return;
 
             _results       = found;
             _hiddenNoGlyph = outcome.NoGlyph;
@@ -594,7 +603,7 @@ public sealed partial class UnicodeExplorerView
         var cps = SelectedCodePoints();
         if (cps.Length == 0) return;
 
-        Copy(string.Concat(cps.Select(cp => new CodePoint(cp).Text)), cps.Length == 1 ? "character" : "characters");
+        Copy(GlyphClipboard.ForCopy(string.Concat(cps.Select(cp => new CodePoint(cp).Text))), cps.Length == 1 ? "character" : "characters");
     }
 
     private void OnResultsKeyDown(object sender, KeyEventArgs e)

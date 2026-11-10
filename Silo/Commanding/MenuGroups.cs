@@ -37,7 +37,7 @@ public static class MenuGroups
     public const string ConnectionNodeCmds = "Connection.NodeCmds", OtherNodeCmds = "Node.OtherNodeCmds", NodeLabCmds = "Node.NodeLabCmds", NodeDiagramGenCmds = "Node.DiagramGenCmds";
 
     // Diagram
-    public const string NewDiagramCmds = "Silo.NewDiagramCmds", DiagramList = "Silo.DiagramList", SiloDiagramGenCmds = "Silo.DiagramGenCmds";
+    public const string NewDiagramCmds = "Silo.NewDiagramCmds", DiagramList = "Silo.DiagramList", SiloDiagramGenCmds = "Silo.DiagramGenCmds", DiagramTools = "Silo.DiagramTools";
 
     // Lab
     public const string LabPreferences = "App.LabPreferences", LabsList = "App.LabsList";
@@ -110,7 +110,7 @@ public sealed class MenuLayoutDef
               S(MenuGroups.AddDataCmds), S(MenuGroups.ExportList, "_Export"), S(MenuGroups.ImportList, "_Import")),
             new MenuDef { Id = MenuGroups.ConnectionMenu, Header = "_Connection", EmptyText = "(select a node in a connection)", Sections = [S(MenuGroups.Default), S(MenuGroups.ConnectionNodeCmds)] },
             new MenuDef { Id = MenuGroups.NodeMenu, Header = "_Node", EmptyText = "(select a node in the Explorer)", Sections = [S(MenuGroups.Default), S(MenuGroups.OtherNodeCmds)] },
-            M(MenuGroups.DiagramMenu, "_Diagram", S(MenuGroups.NewDiagramCmds), S(MenuGroups.DiagramList, "_Open Diagram"), S(MenuGroups.NodeDiagramGenCmds), S(MenuGroups.SiloDiagramGenCmds)),
+            M(MenuGroups.DiagramMenu, "_Diagram", S(MenuGroups.NewDiagramCmds), S(MenuGroups.DiagramList, "_Open Diagram"), S(MenuGroups.NodeDiagramGenCmds), S(MenuGroups.SiloDiagramGenCmds), S(MenuGroups.DiagramTools)),
             M(MenuGroups.LabMenu, "_Lab", S(MenuGroups.LabPreferences), S(MenuGroups.NodeLabCmds), S(MenuGroups.LabsList)),
             M(MenuGroups.ToolsMenu, "_Tools", S(MenuGroups.ToolsMgmt), S(MenuGroups.ToolsList)),
             M(MenuGroups.HelpMenu, "_Help", S(MenuGroups.HelpCmds), S(MenuGroups.AboutCmds))

@@ -165,3 +165,18 @@ internal static class UiKit
         }
     }
 }
+
+/// <summary>
+///     A menu bar that does not fall over when focus reaches it before it is in a window. WPF's <see cref="Menu" /> turns "menu mode" on when
+///     keyboard focus enters it, and asks for the window it is in to do so; when focus navigation (a click on the tab that holds the explorer, for
+///     one) lands on one of its items while it has none, that is an <see cref="ArgumentNullException" />. Without a window there is no menu mode to enter.
+/// </summary>
+internal sealed class WindowSafeMenu : Menu
+{
+    protected override void OnIsKeyboardFocusWithinChanged(DependencyPropertyChangedEventArgs e)
+    {
+        if (PresentationSource.FromVisual(this) is null) return;
+
+        base.OnIsKeyboardFocusWithinChanged(e);
+    }
+}

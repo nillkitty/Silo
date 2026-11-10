@@ -4,6 +4,7 @@ using Microsoft.Win32;
 using Serilog;
 using Silo.Hosting;
 using Silo.Model;
+using Silo.Tasks;
 using Silo.Providers.Format;
 using Silo.Ui;
 using Silo.Ui.Windows;
@@ -52,6 +53,7 @@ public record OpenSiloCommand() : SiloCommand("_Open Silo...", Enabler.Always)
     public static async Task<OpenSilo?> OpenPathAsync(string path, StatusOperation? operation = null)
     {
         var status = operation ?? AppStatus.Instance.Begin("Opening " + Describe(path));
+        var task   = TaskCenter.Begin("Opening " + Describe(path), "Silo file");
         var clock  = Stopwatch.StartNew();
         try
         {
@@ -60,14 +62,24 @@ public record OpenSiloCommand() : SiloCommand("_Open Silo...", Enabler.Always)
                 await System.Windows.Threading.Dispatcher.Yield(DispatcherPriority.Background);
 
             var silo = await SiloRouting.OpenAsync(path);
-            if (silo is null) status.Dispose(); // handed to another process, or cancelled: those said so themselves
-            else status.Done($"Opened {silo.Name ?? Describe(path)} in {clock.ElapsedMilliseconds} ms");
+            if (silo is null)
+            {
+                status.Dispose(); // handed to another process, or cancelled: those said so themselves
+                task.Succeed("Not opened here (handed to another process, or cancelled)");
+            }
+            else
+            {
+                status.Done($"Opened {silo.Name ?? Describe(path)} in {clock.ElapsedMilliseconds} ms");
+                task.Succeed($"Opened {silo.Name ?? Describe(path)}", 1, FileTasks.SizeOf(silo.FilePath));
+            }
+
             return silo;
         }
         catch (Exception ex)
         {
             Log.Error(ex, "Opening '{path}' failed", path);
             status.Fail($"The Silo could not be opened: {ex.Message}");
+            task.Fail(ex);
             MessageBox.Show($"The Silo could not be opened:\n{path}\n\n{ex.Message}", AppIdentity.AppName, MessageBoxButton.OK,
                             MessageBoxImage.Error);
             return null;

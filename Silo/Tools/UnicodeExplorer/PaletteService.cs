@@ -122,6 +122,32 @@ internal sealed class PaletteService
         return palette;
     }
 
+    /// <summary>
+    ///     Makes a palette of collected characters, keeping their groups: all on one page with the groups as the page's groups (the folded ones folded),
+    ///     or -- with <paramref name="pagePerGroup" /> -- a page for each group (the characters in none on a page called "Ungrouped"). A character the
+    ///     collection holds twice is on a page once.
+    /// </summary>
+    public PaletteDefinition CreateFromCollection(string? name, IReadOnlyList<CollectedCharacter> items, IEnumerable<string> folded, bool pagePerGroup)
+    {
+        var palette = new PaletteDefinition { Name = PaletteRules.UniqueName(_palettes.Select(p => p.Name), name), Pages = PaletteRules.PagesFromCollection(items, folded, pagePerGroup) };
+
+        _palettes.Add(palette);
+        Selected = palette;
+        Save();
+        Open(palette);
+        return palette;
+    }
+
+    /// <summary>Adds collected characters to the page shown, each in the group the collection has it in (ones already on the page are left out); returns how many were added.</summary>
+    public int AddCollected(PaletteDefinition palette, IEnumerable<CollectedCharacter> items)
+    {
+        int added = 0;
+        foreach (var run in items.GroupBy(c => GlyphGroups.Clean(c.Group)))
+            added += Insert(palette, run.Select(c => c.CodePoint.Value), palette.Page().CodePoints.Count, run.Key);
+
+        return added;
+    }
+
     public void Open(PaletteDefinition palette)
     {
         if (_open.TryGetValue(palette, out var existing))
@@ -180,24 +206,102 @@ internal sealed class PaletteService
         Touched(palette);
     }
 
-    /// <summary>Inserts characters on the page shown at <paramref name="at" /> (ones already on it are left out); returns how many were added.</summary>
-    public int Insert(PaletteDefinition palette, IEnumerable<int> codePoints, int at)
+    /// <summary>Inserts characters on the page shown at <paramref name="at" /> (ones already on it are left out), into <paramref name="group" />; returns how many were added.</summary>
+    public int Insert(PaletteDefinition palette, IEnumerable<int> codePoints, int at, string? group = null)
     {
-        int added = PaletteRules.InsertNew(palette.Page().CodePoints, codePoints, at);
+        var page  = palette.Page();
+        var fresh = codePoints.Where(cp => !page.CodePoints.Contains(cp)).Distinct().ToList();
+        int added = PaletteRules.InsertNew(page.CodePoints, fresh, at);
+        SetGroup(page, fresh, group);
         Touched(palette);
         return added;
     }
 
-    /// <summary>Moves tiles of the page shown to <paramref name="at" /> (an index into the page as it was).</summary>
-    public void MoveTiles(PaletteDefinition palette, IEnumerable<int> indexes, int at)
+    /// <summary>Moves tiles of the page shown to <paramref name="at" /> (an index into the page as it was); they join <paramref name="group" /> (where they land).</summary>
+    public void MoveTiles(PaletteDefinition palette, IEnumerable<int> indexes, int at, string? group = null)
     {
-        PaletteRules.Move(palette.Page().CodePoints, indexes, at);
+        var page  = palette.Page();
+        var moved = indexes.Where(i => i >= 0 && i < page.CodePoints.Count).Select(i => page.CodePoints[i]).ToList();
+        PaletteRules.Move(page.CodePoints, indexes, at);
+        SetGroup(page, moved, group);
         Touched(palette);
     }
 
     public void Remove(PaletteDefinition palette, int codePoint)
     {
-        palette.Page().CodePoints.Remove(codePoint);
+        var page = palette.Page();
+        page.CodePoints.Remove(codePoint);
+        page.Groups.Remove(codePoint);
+        Touched(palette);
+    }
+
+    // ---- groups (of the page shown) ------------------------------------------------------------------------------
+
+    private static void SetGroup(PalettePage page, IEnumerable<int> codePoints, string? group)
+    {
+        group = GlyphGroups.Clean(group);
+        foreach (int cp in codePoints)
+        {
+            if (group is null) page.Groups.Remove(cp);
+            else page.Groups[cp] = group;
+        }
+    }
+
+    /// <summary>Puts a character in a group (null: in none); it goes to the end of that group.</summary>
+    public void Group(PaletteDefinition palette, int codePoint, string? group)
+    {
+        var page = palette.Page();
+        int at   = page.CodePoints.IndexOf(codePoint);
+        if (at < 0) return;
+
+        GlyphGroups.Assign(page.CodePoints, [at], group, page.GroupOf, (cp, g) =>
+                                                                       {
+                                                                           SetGroup(page, [cp], g);
+                                                                           return cp;
+                                                                       });
+        Touched(palette);
+    }
+
+    /// <summary>Asks for a group's new name (empty takes its characters out of the group; a name that is in use joins the groups).</summary>
+    public void RenameGroup(PaletteDefinition palette, string name, Window? owner = null)
+    {
+        string? to = PromptDialog.Ask("Rename group", $"A new name for the group \"{name}\" (empty: no group):", "Rename", name);
+        if (to is null) return;
+
+        var page = palette.Page();
+        foreach (int cp in page.CodePoints.Where(cp => page.GroupOf(cp) == name).ToList()) SetGroup(page, [cp], to);
+        if (page.Collapsed.Remove(name) && GlyphGroups.Clean(to) is { } kept && !page.Collapsed.Contains(kept)) page.Collapsed.Add(kept);
+        Touched(palette);
+    }
+
+    /// <summary>Takes a group's characters out of it (they stay on the page).</summary>
+    public void Ungroup(PaletteDefinition palette, string name)
+    {
+        var page = palette.Page();
+        foreach (int cp in page.CodePoints.Where(cp => page.GroupOf(cp) == name).ToList()) page.Groups.Remove(cp);
+        page.Collapsed.Remove(name);
+        Touched(palette);
+    }
+
+    /// <summary>Folds or unfolds a group (the empty name is the characters that are in none).</summary>
+    public void ToggleGroup(PaletteDefinition palette, string name)
+    {
+        var page = palette.Page();
+        if (!page.Collapsed.Remove(name)) page.Collapsed.Add(name);
+        Touched(palette);
+    }
+
+    /// <summary>Folds every group of the page, or unfolds them all.</summary>
+    public void SetAllGroupsFolded(PaletteDefinition palette, bool folded)
+    {
+        var page = palette.Page();
+        page.Collapsed.Clear();
+        if (folded)
+        {
+            page.Collapsed.AddRange(GlyphGroups.Names(page.CodePoints.Count, i => page.GroupOf(page.CodePoints[i])));
+            if (page.CodePoints.Any(cp => page.GroupOf(cp) is null)) page.Collapsed.Add(string.Empty);
+        }
+
         Touched(palette);
     }
 
@@ -291,6 +395,7 @@ internal sealed class PaletteService
     /// <summary>A character was clicked: it goes on the clipboard and, unless the Preferences say not to, is typed into the window that has the focus.</summary>
     public void Pick(string text)
     {
+        text = GlyphClipboard.ForCopy(text);
         UiKit.TryCopy(text);
         if (!TypesIntoWindow()) return;
 

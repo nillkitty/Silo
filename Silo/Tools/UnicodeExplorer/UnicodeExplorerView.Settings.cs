@@ -86,6 +86,7 @@ public sealed partial class UnicodeExplorerView
     private void ApplySettings()
     {
         _view.ListMode  = _settings.ListView;
+        _view.CellSize  = _settings.GlyphSize;
         _view.ColorMode = _settings.ColorMode;
         ApplyPanes();
         if (_tray.Count > 0) RefreshTray();

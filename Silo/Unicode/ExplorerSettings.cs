@@ -20,8 +20,17 @@ public sealed class ExplorerSettings
     /// <summary>Whether the results are a list rather than a grid.</summary>
     public bool ListView { get; set; }
 
+    /// <summary>The size of a cell of the results grid in pixels (Ctrl and the mouse wheel over the grid, or View &gt; Glyph Size).</summary>
+    public double GlyphSize { get; set; } = 46;
+
+    /// <summary>The size of a cell of the collection in pixels (Ctrl and the mouse wheel over the collection, or View &gt; Glyph Size).</summary>
+    public double CollectionGlyphSize { get; set; } = 44;
+
     /// <summary>The four-letter code of the script "Default script" stands for; null: the one that fits the display language.</summary>
     public string? DefaultScript { get; set; }
+
+    /// <summary>Whether characters that are emoji are copied (and typed and dragged) as text glyphs: with U+FE0E after them, so they do not turn into coloured pictures where they are pasted.</summary>
+    public bool CopyEmojiAsText { get; set; } = true;
 
     /// <summary>Whether a click in the palette window types the character into the window that had the focus (otherwise it only copies it).</summary>
     public bool PaletteTypes { get; set; } = true;

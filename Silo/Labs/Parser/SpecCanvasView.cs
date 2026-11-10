@@ -132,7 +132,7 @@ internal sealed class SpecCanvasView : Grid
     private void Rebuild()
     {
         double offset = _scroll.VerticalOffset;
-        bool   parser = _ws.Doc.Mode == SpecMode.Parser;
+        bool   parser = _ws.Doc.Mode != SpecMode.Tokenizer;
 
         _boxes.Clear();
         _ruleRows.Clear();
@@ -183,7 +183,7 @@ internal sealed class SpecCanvasView : Grid
     private UIElement ModeRow()
     {
         var row = Row("Mode:");
-        row.Children.Add(ParserUi.Combo(["Parser", "Tokenizer"], _ws.Doc.Mode.ToString(), m => _ws.Edit(d => d.Mode = Enum.Parse<SpecMode>(m), WorkspaceChange.Header), false, 110));
+        row.Children.Add(ParserUi.Combo(["Parser", "Tokenizer", "Binary"], _ws.Doc.Mode.ToString(), m => _ws.Edit(d => d.Mode = Enum.Parse<SpecMode>(m), WorkspaceChange.Header), false, 110));
         return row;
     }
 
@@ -512,6 +512,26 @@ internal sealed class SpecCanvasView : Grid
             case "eof":
                 return Leaf("Token", "EOF", italic: true);
 
+            case "int":
+                return Leaf("Data1", node.Text ?? "u8", error: CompiledBinarySpec.IntType(node.Text) is null);
+            case "bits":
+                return Leaf("Data1", "bits " + node.Text, error: CompiledBinarySpec.Fields(node.Text) is null);
+            case "bytes":
+                return Leaf("Literal", "bytes " + node.Text, error: CompiledBinarySpec.HexBytes(node.Text) is null);
+            case "skip":
+                return Leaf("Token", "skip " + node.Text + " byte(s)", italic: true);
+
+            case "counted":
+            {
+                var sp = new StackPanel();
+                string[] labels = ["count", "items"];
+                for (int i = 0; i < node.Children.Count; i++) sp.Children.Add(Labelled(i < 2 ? labels[i] : "…", Render(node.Children[i], slot)));
+                return sp;
+            }
+
+            case "offsets":
+                return Wrapped(node, slot, "offsets " + node.Text);
+
             case "seq":
             {
                 var sp = new StackPanel();
@@ -733,6 +753,19 @@ internal sealed class SpecCanvasView : Grid
                 row.Children.Add(LabUi.Check("anything but these", node.Negate, v => _ws.EditNode(node, n => n.Negate = v)));
                 break;
             }
+            case "int":
+            case "offsets":
+                row.Children.Add(ParserUi.Combo(["u8", "s8", "u16", "s16", "u32", "s32", "u16le", "s16le", "u32le", "s32le"], node.Text, t => _ws.EditNode(node, n => n.Text = t), false, 90));
+                break;
+            case "bits":
+                row.Children.Add(ParserUi.Field(node.Text, t => _ws.EditNode(node, n => n.Text = t), 260, "Fields, most significant first, 8, 16 or 32 bits in all: pri:1,pal:2,tile:13"));
+                break;
+            case "bytes":
+                row.Children.Add(ParserUi.Field(node.Text, t => _ws.EditNode(node, n => n.Text = t), 160, "Hex bytes that must be there: 53 4D"));
+                break;
+            case "skip":
+                row.Children.Add(ParserUi.Field(node.Text, t => _ws.EditNode(node, n => n.Text = t), 50, "How many bytes to pass over"));
+                break;
             case "ref":
                 row.Children.Add(ParserUi.Combo(node.Spec is { Length: > 0 } ? (_ws.LoadSpec(node.Spec)?.Rules.Select(r => r.Name) ?? []) : _ws.Doc.Rules.Select(r => r.Name), node.Text, t => _ws.EditNode(node, n => n.Text = t), false, 150));
                 if (node.Spec is { Length: > 0 } from) row.Children.Add(LabUi.Label("from " + from, muted: true));

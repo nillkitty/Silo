@@ -250,7 +250,7 @@ public sealed partial class ImageLabSession
                              ProvidedCommand.From("lay-flatten", "_Flatten Image", () => _doc.Flatten(), null, () => _doc.Layers.Count > 1, "Join all the visible layers into one"),
                              ProvidedCommand.From("lay-up", "Move _Up", () => _doc.MoveLayer(_doc.ActiveIndex, 1), null, () => _doc.ActiveIndex < _doc.Layers.Count - 1, "Raise the layer one step"),
                              ProvidedCommand.From("lay-down", "Move Dow_n", () => _doc.MoveLayer(_doc.ActiveIndex, -1), null, () => _doc.ActiveIndex > 0, "Lower the layer one step"),
-                             ProvidedCommand.From("lay-rename", "_Rename Layer...", RenameLayer, null, HasLayerFunc, "Give the layer another name"),
+                             ProvidedCommand.From("lay-rename", "_Rename Layer...", RenameLayer, null, HasLayerFunc, "Give the layer another name") with { Gesture = "F2" },
                              ProvidedCommand.From("lay-visible", "Layer _Shown", () => _doc.SetVisible(_doc.ActiveIndex, !(Layer?.Visible ?? true)), "Hide", HasLayerFunc, "Show or hide the layer") with { IsChecked = () => Layer?.Visible == true },
                              ProvidedCommand.From("lay-flip-h", "Flip Layer H_orizontally", () => _doc.FlipLayer(_doc.ActiveIndex, true), null, HasLayerFunc, "Mirror only this layer, left to right"),
                              ProvidedCommand.From("lay-flip-v", "Flip Layer Ver_tically", () => _doc.FlipLayer(_doc.ActiveIndex, false), null, HasLayerFunc, "Mirror only this layer, top to bottom")

@@ -77,7 +77,7 @@ public static class NodeDesignMenu
         return items;
     }
 
-    private static void Rename(IOverridableNode node)
+    internal static void Rename(IOverridableNode node)
     {
         string? answer = PromptDialog.Ask("Rename node", "The text shown for this node (\"Reset label\" in the menu goes back to the original):",
                                           "OK", node.LabelOverride ?? node.OriginalName);

@@ -31,10 +31,13 @@ public sealed partial class UnicodeExplorerView
 
         var color = form.AddChoice("Color applies to", ["Glyph", "Background", "Accent"], (int)_settings.ColorMode, "How a character marked with a color shows it");
         var types = form.AddCheck("A click in a palette types the character", _settings.PaletteTypes, "Otherwise it is only copied: paste it yourself");
+        var emoji = form.AddCheck("Copy emoji as text only", _settings.CopyEmojiAsText,
+                                  "Adds the text variation selector (U+FE0E) after each emoji that is copied, typed from a palette or dragged out, so it pastes as a plain glyph, not a coloured picture");
         if (!form.Ask()) return;
 
         if (script is not null && scripts is not null) _settings.DefaultScript = script.Index == 0 ? null : scripts[script.Index - 1].Code;
-        _settings.PaletteTypes = types.Value;
+        _settings.PaletteTypes    = types.Value;
+        _settings.CopyEmojiAsText = emoji.Value;
         SetColorMode((ColorMode)color.Index); // saves
         SaveSettings();
         Say("Preferences saved.");
@@ -49,7 +52,10 @@ public sealed partial class UnicodeExplorerView
         bool anyTray = _tray.Count > 0;
 
         yield return UiKit.Item("New Palette…", NewPalette, tip: "An empty palette window; right-click it to add characters");
-        yield return UiKit.Item("Create Palette from Collection…", CreatePaletteFromCollection, anyTray, "A palette window with the characters of the collection (the selected ones, or all)");
+        yield return UiKit.Item("Create Palette from Collection…", () => CreatePaletteFromCollection(false), anyTray,
+                                "A palette window with the characters of the collection (the selected ones, or all), the groups kept as the palette's groups");
+        yield return UiKit.Item("Create Palette from Collection Groups…", () => CreatePaletteFromCollection(true), _tray.Any(c => GlyphGroups.Clean(c.Group) is not null),
+                                "A palette window with a page for each group of the collection (the characters in none on a page called Ungrouped)");
         yield return UiKit.Rule();
 
         var open = new List<Control>();
@@ -116,20 +122,55 @@ public sealed partial class UnicodeExplorerView
         PaletteService.Current.Create(name, []);
     }
 
-    private void CreatePaletteFromCollection()
+    private void CreatePaletteFromCollection(bool pagePerGroup)
     {
-        var items = TrayTarget();
+        // a palette of the groups takes the whole collection; the other, the selected characters or all
+        var items = pagePerGroup ? _tray.ToList() : TrayTarget();
+        CreatePaletteFrom(items, pagePerGroup, "Palette");
+    }
+
+    /// <summary>Asks for a name and makes a palette of collected characters, keeping their groups.</summary>
+    private void CreatePaletteFrom(IReadOnlyList<CollectedCharacter> items, bool pagePerGroup, string suggestion)
+    {
         if (items.Count == 0)
         {
-            Say("The collection is empty.");
+            Say("There are no characters to make a palette of.");
             return;
         }
 
-        string? name = PromptDialog.Ask("Create palette", $"A palette of {items.Count:N0} character{(items.Count == 1 ? "" : "s")}. What is it called?", "Create", "Palette");
+        int pages = pagePerGroup ? items.Select(c => GlyphGroups.Clean(c.Group)).Distinct().Count() : 1;
+        string what = pagePerGroup ? $"{pages:N0} page{(pages == 1 ? "" : "s")} of {items.Count:N0} character{(items.Count == 1 ? "" : "s")}" : $"{items.Count:N0} character{(items.Count == 1 ? "" : "s")}";
+        string? name = PromptDialog.Ask("Create palette", $"A palette of {what}. What is it called?", "Create", suggestion);
         if (name is null) return;
 
         PaletteService.Current.Start();
-        PaletteService.Current.Create(name, items.Select(c => c.CodePoint.Value));
+        PaletteService.Current.CreateFromCollection(name, items, _trayFolded, pagePerGroup);
+    }
+
+    /// <summary>The characters of a group of the collection (null: those in none).</summary>
+    private IReadOnlyList<CollectedCharacter> CharactersOfGroup(string? group) => _tray.Where(c => GlyphGroups.Clean(c.Group) == GlyphGroups.Clean(group)).ToList();
+
+    /// <summary>"Add to Palette": a submenu of the palettes (and a new one) that takes some collected characters, in their groups.</summary>
+    private MenuItem AddToPaletteItem(Func<IReadOnlyList<CollectedCharacter>> items, string header = "Add to Palette", string suggestion = "Palette")
+    {
+        var service = PaletteService.Current;
+        service.Start();
+
+        var menu = new MenuItem { Header = header };
+        menu.Items.Add(UiKit.Item("New Palette…", () => CreatePaletteFrom(items(), false, suggestion), tip: "A palette window of these characters, in their groups"));
+        if (service.All.Count > 0) menu.Items.Add(UiKit.Rule());
+        foreach (var p in service.All)
+        {
+            var palette = p;
+            menu.Items.Add(UiKit.Item(palette.Name.Replace("_", "__"), () =>
+                                                                        {
+                                                                            var chosen = items();
+                                                                            int added  = service.AddCollected(palette, chosen);
+                                                                            Say($"Added {added:N0} character{(added == 1 ? "" : "s")} to {palette.Name}" + (added < chosen.Count ? $" ({chosen.Count - added:N0} already on its page)." : "."));
+                                                                        }));
+        }
+
+        return menu;
     }
 
     // ---- Developer -----------------------------------------------------------------------------------------------
@@ -203,6 +244,6 @@ public sealed partial class UnicodeExplorerView
     {
         if (_tray.Count == 0) return;
 
-        Copy(string.Concat(_tray.Select(c => _db?.Get(c.CodePoint).Glyph ?? c.CodePoint.Text)), $"{_tray.Count:N0} glyphs");
+        Copy(GlyphClipboard.ForCopy(string.Concat(_tray.Select(c => _db?.Get(c.CodePoint).Glyph ?? c.CodePoint.Text))), $"{_tray.Count:N0} glyphs");
     }
 }

@@ -293,9 +293,28 @@ public class UnicodeDatabaseTests
     [Test]
     public void ASearchCanBeCancelled()
     {
+        // a search that is no longer wanted stops with no results, and does not throw (a replaced search while typing is common, and an exception
+        // for each is noise in a debugger and a cost)
         using var cts = new CancellationTokenSource();
         cts.Cancel();
-        Assert.Throws<OperationCanceledException>(() => Db.Search(new UnicodeQuery(), cts.Token));
+
+        int[] found = [];
+        Assert.DoesNotThrow(() => found = Db.Search(new UnicodeQuery(), cts.Token));
+        Assert.That(found, Is.Empty);
+        Assert.That(Db.Search(new UnicodeQuery()), Is.Not.Empty, "the same search, not cancelled, finds characters");
+    }
+
+    [Test]
+    public void AFilterThatIsCancelledKeepsNothingAndDoesNotThrow()
+    {
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        var filter = new ResultFilter { Kind = GlyphKind.EmojiOnly };
+        int[] all  = Enumerable.Range(0x1F300, 0x8000).ToArray(); // enough to reach the check, which is made every 16 384 characters
+        FilterOutcome outcome = default;
+        Assert.DoesNotThrow(() => outcome = filter.Apply(Db, all, cts.Token));
+        Assert.That(outcome.Kept, Is.Empty);
     }
 
     [Test]

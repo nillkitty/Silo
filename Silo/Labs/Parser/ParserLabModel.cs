@@ -93,11 +93,15 @@ public sealed partial class ParserLabSession
                       {
                           new("integer", "Integer", integer.ToJson(), "Digits read as a number", "Data1", "Examples"),
                           new("mac", "MAC address", mac.ToJson(), "Six hex bytes with : or - between them", "Data1", "Examples"),
-                          new("yes-no", "Yes or no", yesNo.ToJson(), "One of two words, any case", "Data1", "Examples")
+                          new("yes-no", "Yes or no", yesNo.ToJson(), "One of two words, any case", "Data1", "Examples"),
+                          new("s2-mappings", "Sonic 2 sprite mappings", SpriteMappingSpecs.Sonic2Mappings().ToJson(),
+                              "A table of frames, each a count of 8-byte sprite pieces (position, size, flips, palette, tile). Comes with the Sonic Mappings Editor.", "Data1", "Sega Genesis"),
+                          new("s2-dplc", "Sonic 2 DPLC", SpriteMappingSpecs.Sonic2Dplc().ToJson(),
+                              "Dynamic pattern load cues: for each frame, which tiles of art to load (count-1 in the top nibble, offset in the rest)", "Data1", "Sega Genesis")
                       };
         var templates = new List<LabTemplate>
                         {
-                            new("empty", "Empty spec", "{{name}}|{{mode}}", [new("name", "Fully qualified name of the spec", "My.Data.Spec"), new("mode", "What the canvas builds", "parser", ["parser", "tokenizer"])], "A spec with nothing in it yet", "Data1"),
+                            new("empty", "Empty spec", "{{name}}|{{mode}}", [new("name", "Fully qualified name of the spec", "My.Data.Spec"), new("mode", "What the canvas builds", "parser", ["parser", "tokenizer", "binary"])], "A spec with nothing in it yet", "Data1"),
                             new("keywords", "Keywords", "{{name}}|parser|{{words}}", [new("name", "Fully qualified name of the spec", "My.Data.Keyword"), new("words", "The words, separated by semicolons", "red;green;blue")], "A spec that accepts one of some words", "Data1")
                         };
         yield return new LabSubjectType(SubjectId, "Spec", "Data1", "A data specification: the rules that read text into a value", prefabs, templates);
@@ -189,7 +193,7 @@ public sealed partial class ParserLabSession
         var doc = _ws.Doc;
         if (_ws.SelectedNode is { } node)
         {
-            if (doc.Mode == SpecMode.Parser)
+            if (doc.Mode != SpecMode.Tokenizer)
             {
                 foreach (var rule in doc.Rules)
                     if (rule.Body is not null && PathIn(rule.Body, node) is { } path)

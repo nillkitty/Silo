@@ -71,6 +71,17 @@ public sealed class CertificateVault
         return _store.GetStored(CertPrefix + id, StoredScope.Shared) is { } row ? Read(row, KeyRows().Select(r => r.Key).ToHashSet(StringComparer.OrdinalIgnoreCase)) : null;
     }
 
+    /// <summary>
+    ///     What to call a stored certificate in a list: its subject name (and when it expires, since one name can have several), rather than the
+    ///     hash that keys it. Null when the row is not a certificate.
+    /// </summary>
+    public static string? DisplayNameOf(StoredRecord row)
+    {
+        if (!row.Key.StartsWith(CertPrefix, StringComparison.OrdinalIgnoreCase)) return null;
+
+        return Read(row, []) is { } entry ? $"{entry.Name} ({entry.Certificate.NotAfter:yyyy-MM-dd})" : null;
+    }
+
     private static VaultEntry? Read(StoredRecord row, HashSet<string> withKeys)
     {
         try

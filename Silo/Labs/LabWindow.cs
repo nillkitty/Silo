@@ -97,7 +97,7 @@ public sealed class LabWindow : Window, IWindowLayout, ILabHost, ILabCreator
         MinWidth  = 640;
         MinHeight = 400;
         Title     = session.Title;
-        if (LabWindowIcon.For(session.Lab.IconKey) is { } icon) Icon = icon;
+        if (LabWindowIcon.For(session.Lab) is { } icon) Icon = icon;
 
         SetResourceReference(BackgroundProperty, "Theme.Background");
         SetResourceReference(ForegroundProperty, "Theme.Text");
@@ -507,7 +507,7 @@ public sealed class LabWindow : Window, IWindowLayout, ILabHost, ILabCreator
         foreach (var tool in LabModelRules.AvailableTools(model))
         {
             var captured = tool;
-            list.Add(Own("tool-" + tool.Id, tool.Name.Replace("_", "__"), "tool " + (tool.Id.IndexOf(' ') < 0 ? tool.Id : '"' + tool.Id + '"'), () => model.ActivateTool(captured), tool.IconKey, null, tool.Description, () => ReferenceEquals(model.ActiveTool, captured)));
+            list.Add(Own("tool-" + tool.Id, tool.Name, "tool " + (tool.Id.IndexOf(' ') < 0 ? tool.Id : '"' + tool.Id + '"'), () => model.ActivateTool(captured), tool.IconKey, null, tool.Description, () => ReferenceEquals(model.ActiveTool, captured)));
         }
 
         var own = LabModelRules.ActiveCommands(model).Where(e => e.Owner.Kind == LabOwnerKind.Tool).Select(e => Wrap(e.Command)).ToList();
@@ -948,7 +948,7 @@ public sealed class LabWindow : Window, IWindowLayout, ILabHost, ILabCreator
                 group = new WrapPanel { Orientation = Orientation.Vertical, MaxHeight = 140 };
             }
 
-            foreach (var command in items)
+            foreach (var command in FoldVerbs(items))
             {
                 if (command is null) Flush();
                 else group.Children.Add(CommandButton(command, true));
@@ -979,7 +979,7 @@ public sealed class LabWindow : Window, IWindowLayout, ILabHost, ILabCreator
             if (strip.Children.Count > 0) strip.Children.Add(new Border { Width = 1, Margin = new Thickness(5, 2, 7, 2), Opacity = 0.5 }.Also(b => b.SetResourceReference(Border.BackgroundProperty, "Theme.TextMuted")));
 
             var buttons = new WrapPanel { Orientation = Orientation.Vertical, MaxHeight = 140 };
-            foreach (var command in items.Where(c => c is not null)) buttons.Children.Add(CommandButton(command!, true));
+            foreach (var command in FoldVerbs(items).Where(c => c is not null)) buttons.Children.Add(CommandButton(command!, true));
 
             var label = new TextBlock { Text = caption, FontSize = 10, TextAlignment = TextAlignment.Center, Opacity = 0.7, Margin = new Thickness(0, 0, 0, 1) };
             var group = new StackPanel { VerticalAlignment = VerticalAlignment.Top };
@@ -1009,8 +1009,41 @@ public sealed class LabWindow : Window, IWindowLayout, ILabHost, ILabCreator
     {
         var row = new StackPanel { Orientation = Orientation.Horizontal };
         if (LabUi.Icon(icon, 15) is { } glyph) row.Children.Add(glyph);
-        if (dropdown) row.Children.Add(new TextBlock { Text = "?", Margin = new Thickness(3, 0, 0, 0), FontSize = 9, VerticalAlignment = VerticalAlignment.Center });
+        if (dropdown) row.Children.Add(new TextBlock { Text = "▾", Margin = new Thickness(3, 0, 0, 0), FontSize = 9, VerticalAlignment = VerticalAlignment.Center });
         return row;
+    }
+
+    private static readonly (string Prefix, string Header, string Icon)[] VerbGroups =
+    [
+        ("Copy as ", "Copy _As", "TbCopy"), ("Copy to ", "Copy _To", "TbCopy"), ("Save as ", "Save _As", "TbSaveAs")
+    ];
+
+    /// <summary>
+    ///     Folds the "Copy as ...", "Copy to ..." and "Save as ..." commands into one dropdown each (Copy As ▾, Save As ▾), put where
+    ///     the first of them was. A verb with a single command is left as it is.
+    /// </summary>
+    private static List<ProvidedCommand?> FoldVerbs(IEnumerable<ProvidedCommand?> items)
+    {
+        var list = items.ToList();
+        foreach (var (prefix, header, icon) in VerbGroups)
+        {
+            bool Is(ProvidedCommand? c) => c is { Children: null } && LabTerminal.Strip(c.Header).StartsWith(prefix, StringComparison.OrdinalIgnoreCase);
+
+            var members = list.Where(Is).Select(c => c!).ToList();
+            if (members.Count < 2) continue;
+
+            var children = members.Select(c =>
+                                          {
+                                              int at = c.Header.IndexOf(' ', c.Header.IndexOf(' ') + 1);
+                                              return c with { Header = at > 0 ? c.Header[(at + 1)..] : c.Header };
+                                          }).ToList();
+            var drop = ProvidedCommand.Submenu("fold-" + prefix.Trim().Replace(' ', '-').ToLowerInvariant(), header, children, iconKey: icon, toolTip: $"{prefix.Trim()}...: choose a format", placement: CommandPlacement.Toolbar);
+            int first = list.FindIndex(c => Is(c));
+            list.RemoveAll(c => Is(c));
+            list.Insert(Math.Min(first, list.Count), drop);
+        }
+
+        return list;
     }
 
     private UIElement CommandButton(ProvidedCommand command, bool labelled = false)
@@ -1189,7 +1222,7 @@ public sealed class LabWindow : Window, IWindowLayout, ILabHost, ILabCreator
         DockPanel.SetDock(_statusText, Dock.Right);
         DockPanel.SetDock(_outputText, Dock.Right);
 
-        var prompt = new TextBlock { Text = "�", FontSize = 16, Margin = new Thickness(0, 0, 6, 0), VerticalAlignment = VerticalAlignment.Center };
+        var prompt = new TextBlock { Text = "›", FontSize = 16, Margin = new Thickness(0, 0, 6, 0), VerticalAlignment = VerticalAlignment.Center };
         prompt.SetResourceReference(TextBlock.ForegroundProperty, "Theme.TextMuted");
         DockPanel.SetDock(prompt, Dock.Left);
 

@@ -46,6 +46,10 @@ public static class ExplorerTree
         if (BuildDataBindings(silo) is { } bindings) kept.Add(bindings);
         if (BuildTypes(silo) is { } types) kept.Add(types);
 
+        // a container with nothing in it is left out, unless an author asked to see them
+        if (!AppDesignLevel.Instance.ShowEmptyContainers)
+            kept.RemoveAll(n => n.Kind == "Folder" && n.Children.Count == 0);
+
         var roots = new List<ExplorerNode>(own);
         if (own.Count > 0)
             for (int i = 0; i < kept.Count; i++)
@@ -306,7 +310,7 @@ public static class ExplorerTree
             list = [];
         }
 
-        var folder = new ExplorerNode("bindings", "Data bindings", "Folder", "DataStructure")
+        var folder = new ExplorerNode("bindings", "Data bindings", "Folder", "DataBindings")
                      {
                          Details = () =>
                                    [
@@ -338,7 +342,7 @@ public static class ExplorerTree
     {
         int    id   = binding.Id;
         string name = binding.Name;
-        return new ExplorerNode($"bindings/{id}", name, "DataBinding", "Data1")
+        return new ExplorerNode($"bindings/{id}", name, "DataBinding", "DataBinding")
                {
                    Realm    = Realm.Global,
                    Stamp    = binding.Modified.Ticks.ToString(),

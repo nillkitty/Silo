@@ -168,10 +168,39 @@
     <StreamGeometry x:Key="CertRequest">F0 M5,2 H14.5 L19,6.5 V22 H5 Z M7,4 H13 V8.2 H17 V20 H7 Z M12,10.2 L15,13.2 H13 V17 H11 V13.2 H9 Z</StreamGeometry>
     <!-- Signature: a pen over a signature line -->
     <StreamGeometry x:Key="Signature">F0 M16.5,3 L20.5,7 L18.73,8.77 L14.73,4.77 Z M14.2,5.5 L18.17,9.33 L9.5,18 L5,19 L6,14.5 Z M3,21 H21 V22.4 H3 Z</StreamGeometry>
+    <!-- Tasks: a list of work, the last one under way -->
+    <StreamGeometry x:Key="Tasks">F0 M3,4 H7 V8 H3 Z M9.5,5 H21 V7 H9.5 Z M3,10 H7 V14 H3 Z M9.5,11 H21 V13 H9.5 Z M3,16 L7,18 L3,20 Z M9.5,17 H21 V19 H9.5 Z</StreamGeometry>
+    <!-- Crawl: a page with the pages it links to (a node with three branches) -->
+    <StreamGeometry x:Key="Crawl">F0 M9.5,4.5 A2.5,2.5 0 1 0 14.5,4.5 A2.5,2.5 0 1 0 9.5,4.5 Z M10.9,4.5 A1.1,1.1 0 1 0 13.1,4.5 A1.1,1.1 0 1 0 10.9,4.5 Z M2,19 A2.5,2.5 0 1 0 7,19 A2.5,2.5 0 1 0 2,19 Z M3.4,19 A1.1,1.1 0 1 0 5.6,19 A1.1,1.1 0 1 0 3.4,19 Z M9.5,19 A2.5,2.5 0 1 0 14.5,19 A2.5,2.5 0 1 0 9.5,19 Z M10.9,19 A1.1,1.1 0 1 0 13.1,19 A1.1,1.1 0 1 0 10.9,19 Z M17,19 A2.5,2.5 0 1 0 22,19 A2.5,2.5 0 1 0 17,19 Z M18.4,19 A1.1,1.1 0 1 0 20.6,19 A1.1,1.1 0 1 0 18.4,19 Z M11.3,7.5 H12.7 V16 H11.3 Z M11.03,7.21 L9.77,6.59 L4.97,16.29 L6.23,16.91 Z M12.97,7.21 L14.23,6.59 L19.03,16.29 L17.77,16.91 Z</StreamGeometry>
+    <!-- Stop the crawl: a square in a ring -->
+    <StreamGeometry x:Key="CrawlStop">F0 M2,12 A10,10 0 1 0 22,12 A10,10 0 1 0 2,12 Z M3.9,12 A8.1,8.1 0 1 0 20.1,12 A8.1,8.1 0 1 0 3.9,12 Z M8,8 H16 V16 H8 Z</StreamGeometry>
     <!-- Revoked certificate: a certificate page with a struck-through seal -->
     <StreamGeometry x:Key="CertRevoked">F0 M3,3 H21 V14 H3 Z M5,5 V12 H19 V5 Z M7,7 H17 V8.4 H7 Z M7,9.6 H13 V11 H7 Z M3,16.6 H11 V18 H3 Z M3,19.4 H9 V20.8 H3 Z M13.8,18.4 A3.2,3.2 0 1 0 20.2,18.4 A3.2,3.2 0 1 0 13.8,18.4 Z M15.2,18.4 A1.8,1.8 0 1 0 18.8,18.4 A1.8,1.8 0 1 0 15.2,18.4 Z M15.66,17.62 L16.22,17.06 L18.34,19.18 L17.78,19.74 Z</StreamGeometry>
     <!-- Issued certificates: a list of certificates handed out, each a small page with a line, under an arrow going out -->
     <StreamGeometry x:Key="CertIssued">F0 M3,9 H15 V21 H3 Z M5,11 V19 H13 V11 Z M6.5,13 H11.5 V14.2 H6.5 Z M6.5,15.6 H9.5 V16.8 H6.5 Z M11,3 L17,3 L17,2 L21,5 L17,8 L17,7 L11,7 Z</StreamGeometry>
     <!-- Verified signature: a shield with a check mark -->
     <StreamGeometry x:Key="SignatureVerified">F0 M12,2 L20,5 V11.5 C20,16.5 16.5,20.5 12,22 C7.5,20.5 4,16.5 4,11.5 V5 Z M12,4.2 L18,6.5 V11.4 C18,15.3 15.4,18.5 12,19.8 C8.6,18.5 6,15.3 6,11.4 V6.5 Z M8.6,11.6 L10.9,13.9 L15.6,9.2 L16.8,10.4 L10.9,16.3 L7.4,12.8 Z</StreamGeometry>
+    <!-- Data bindings: a live source feeding a target (a dot, a pulse and an arrow into a box) -->
+    <StreamGeometry x:Key="DataBindings">F0 M2,9 A2.5,2.5 0 1 0 7,9 A2.5,2.5 0 1 0 2,9 Z M7,8.2 H12 V6 L16,9 L12,12 V9.8 H7 Z M17,3 H22 V15 H17 Z M18.4,4.4 V13.6 H20.6 V4.4 Z M2,18 H6 L8,14.5 L11,21 L13.5,16.5 L15,18 H22 V19.4 H15.6 L13.3,20.5 L11.2,23 L8,17 L6.6,19.4 H2 Z</StreamGeometry>
+    <!-- One data binding: a dot feeding a box -->
+    <StreamGeometry x:Key="DataBinding">F0 M2,12 A3,3 0 1 0 8,12 A3,3 0 1 0 2,12 Z M8,11.2 H13 V8.5 L18,12 L13,15.5 V12.8 H8 Z M18,5 H22 V19 H18 Z M19.4,6.4 V17.6 H20.6 V6.4 Z</StreamGeometry>
+    <!-- Task: a Silo file (a page with lines) -->
+    <StreamGeometry x:Key="TaskSiloFile">F0 M5,2 H14.5 L19,6.5 V22 H5 Z M7,4 V20 H17 V7.3 H13.2 V4 Z M9,11.5 H15 V12.9 H9 Z M9,15 H15 V16.4 H9 Z</StreamGeometry>
+    <!-- Task: an import (an arrow down into a tray) -->
+    <StreamGeometry x:Key="TaskImport">F0 M4,15 H6 V19 H18 V15 H20 V21 H4 Z M11,3 H13 V10 H16 L12,15 L8,10 H11 Z</StreamGeometry>
+    <!-- Task: text editing (lines of text and a caret) -->
+    <StreamGeometry x:Key="TaskTextEditor">F0 M4,5 H20 V7 H4 Z M4,9.5 H20 V11.5 H4 Z M4,14 H14 V16 H4 Z M16,13 H17.5 V19 H16 Z</StreamGeometry>
+    <!-- Task: a table (a grid of cells) -->
+    <StreamGeometry x:Key="TaskTable">F0 M3,4 H21 V20 H3 Z M5,6 V9 H9.5 V6 Z M11.5,6 V9 H19 V6 Z M5,11 V14 H9.5 V11 Z M11.5,11 V14 H19 V11 Z M5,16 V18 H9.5 V16 Z M11.5,16 V18 H19 V16 Z</StreamGeometry>
+    <!-- Task: the file system (a folder) -->
+    <StreamGeometry x:Key="TaskFileSystem">F0 M2,5 H9 L11,7.5 H22 V20 H2 Z M4,7 V18 H20 V9.5 H10.2 L8.2,7 Z</StreamGeometry>
+    <!-- Task: the Explorer (a tree) -->
+    <StreamGeometry x:Key="TaskExplorer">F0 M3,3 H9 V8 H3 Z M5.5,8 H6.5 V19 H5.5 Z M6.5,11 H11 V12 H6.5 Z M11,9.5 H21 V13.5 H11 Z M6.5,17 H11 V18 H6.5 Z M11,15.5 H21 V19.5 H11 Z</StreamGeometry>
+    <!-- Task: sync (an arrow each way) -->
+    <StreamGeometry x:Key="TaskSync">F0 M4,8 H16 V5 L21,9 L16,13 V10 H4 Z M20,14 H8 V11 L3,15 L8,19 V16 H20 Z</StreamGeometry>
+
+    <!-- Registry: a hive (a root with branches), a key (a key), a value (a framed list of lines) -->
+    <StreamGeometry x:Key="RegHive">F0 M9,3 H15 V8 H9 Z M11.2,8 H12.8 V11.2 H11.2 Z M6,11.2 H18 V12.8 H6 Z M5.2,12.8 H6.8 V15 H5.2 Z M17.2,12.8 H18.8 V15 H17.2 Z M3,15 H9 V20 H3 Z M15,15 H21 V20 H15 Z</StreamGeometry>
+    <StreamGeometry x:Key="RegKey">F0 M3,12 A5,5 0 1 0 13,12 A5,5 0 1 0 3,12 Z M5.5,12 A2.5,2.5 0 1 0 10.5,12 A2.5,2.5 0 1 0 5.5,12 Z M13,10.8 H21 V13.2 H13 Z M15.5,13.2 H17 V16.5 H15.5 Z M19.4,13.2 H21 V16 H19.4 Z</StreamGeometry>
+    <StreamGeometry x:Key="RegValue">F0 M4,3 H20 V21 H4 Z M6,5 H18 V19 H6 Z M8,8 H16 V10 H8 Z M8,11 H16 V13 H8 Z M8,14 H13 V16 H8 Z</StreamGeometry>
 </ResourceDictionary>

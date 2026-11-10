@@ -35,6 +35,9 @@ public sealed class SavedItem : INodeDetails, IRealmed
 
     public string Name => Record.Key;
 
+    /// <summary>What the Explorer calls it: the key, except where the key is only an id (a certificate is called by its subject).</summary>
+    public string DisplayName => Certificates.CertificateVault.DisplayNameOf(Record) ?? Record.Key;
+
     public string TypeName => TypeLabel;
 
     public Uri Uri { get; }

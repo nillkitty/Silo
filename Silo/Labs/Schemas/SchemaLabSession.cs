@@ -252,6 +252,17 @@ public sealed partial class SchemaLabSession : LabSession<SchemaDraft>, ILabLive
         }
     }
 
+    /// <summary>Asks for the selected construct's new name (F2) and renames it.</summary>
+    private void RenameWithPrompt()
+    {
+        if (Selected is not { } item) return;
+
+        string? name = LabUi.Ask("Rename " + item.Kind.Title().ToLowerInvariant(), "New name (whatever refers to it follows):", item.Name);
+        if (string.IsNullOrWhiteSpace(name) || name == item.Name) return;
+
+        if (RenameSelected(name.Trim()) is { } refusal) Say(refusal);
+    }
+
     /// <summary>Sets a property of the selected construct; a value that cannot be set is refused with the reason, and nothing changes.</summary>
     public string? SetProp(string key, string? text, bool now = true)
     {
@@ -641,6 +652,7 @@ public sealed partial class SchemaLabSession : LabSession<SchemaDraft>, ILabLive
             yield return ProvidedCommand.From("add-class", "Add _Class", () => AddConstruct(ConstructKind.Class), ConstructKind.Class.IconKey(), null, "Add a class") with { Gesture = "Ctrl+Shift+N" };
             yield return ProvidedCommand.From("add-member", "Add Attribute to Cl_ass", NewMember, ConstructKind.Attribute.IconKey(), () => Selected is { Kind: ConstructKind.Class }, "Make an attribute and give it to the selected class");
             yield return ProvidedCommand.From("add-value", "Add Enum _Value", AddValue, "Token", () => Selected is { Kind: ConstructKind.Enum }, "Add a value to the selected enum");
+            yield return ProvidedCommand.From("rename-construct", "Re_name...", RenameWithPrompt, "Design", () => Selected is { Kind: not ConstructKind.Relation }, "Give the selected construct another name; whatever refers to it follows") with { Gesture = "F2" };
             yield return ProvidedCommand.From("delete-construct", "_Delete", RemoveSelected, "TbDelete", () => Selected is not null, "Take the selected construct out of the draft") with { Gesture = "Delete" };
         }
     }

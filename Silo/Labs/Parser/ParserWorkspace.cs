@@ -94,7 +94,8 @@ public sealed class ParserWorkspace
         {
             if (_problemsVersion != _version)
             {
-                _problems        = [.. Compiled.Diagnostics, .. SpecChecks.Run(Doc, Env)];
+                var diagnostics = Doc.Mode == SpecMode.Binary ? Spec.CompiledBinary.Diagnostics : Compiled.Diagnostics;
+                _problems        = [.. diagnostics, .. SpecChecks.Run(Doc, Env)];
                 _problemsVersion = _version;
             }
 
@@ -427,10 +428,28 @@ public sealed class ParserWorkspace
             case "unicode": return SpecNode.Unicode(string.IsNullOrEmpty(item.Id) ? "L" : item.Id);
             case "xrule" when item.Id.Split('|') is [{ Length: > 0 } spec, { Length: > 0 } rule]: return SpecNode.Ref(rule, spec);
             case "rule": return SpecNode.Ref(item.Id);
+            case "bin": return MakeBinary(item.Id);
             case "json": return Newtonsoft.Json.JsonConvert.DeserializeObject<SpecNode>(item.Id); // a whole piece, as the Lab's model makes it
             case "comb": return SpecCatalog.Combinator(item.Id)?.Make(target);
             default: return null;
         }
+    }
+
+    /// <summary>A binary node from <c>kind|text</c> ("int|u16", "bits|a:4,b:4", "counted", "offsets|u16").</summary>
+    private static SpecNode? MakeBinary(string id)
+    {
+        string[] f    = id.Split('|', 2);
+        string?  text = f.Length > 1 ? f[1] : null;
+        return f[0] switch
+               {
+                   "int"     => SpecNode.Int(text ?? "u16"),
+                   "bits"    => SpecNode.Bits(text ?? "a:4,b:4"),
+                   "bytes"   => new SpecNode { Kind = "bytes", Text = text ?? "00" },
+                   "skip"    => new SpecNode { Kind = "skip", Text = text ?? "2" },
+                   "counted" => SpecNode.Counted(SpecNode.Int("u16"), new SpecNode { Kind = "seq" }),
+                   "offsets" => SpecNode.Offsets(text ?? "u16", new SpecNode { Kind = "seq" }),
+                   _         => null
+               };
     }
 
     /// <summary>

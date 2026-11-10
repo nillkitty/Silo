@@ -200,7 +200,8 @@ public sealed class ResultFilter
 
         foreach (int cp in all)
         {
-            if ((++tick & 0x3FFF) == 0) cancel.ThrowIfCancellationRequested();
+            // a filter that is no longer wanted stops quietly, with nothing kept (the caller drops it), rather than by an exception
+            if ((++tick & 0x3FFF) == 0 && cancel.IsCancellationRequested) return new FilterOutcome([], 0, 0);
 
             if (DisabledBlocks is not null && DisabledBlocks.Contains(cp))
             {

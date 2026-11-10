@@ -82,6 +82,22 @@ public sealed class SpecNode
 
     public static SpecNode Convert(SpecNode item, string to) => new() { Kind = "convert", Text = to, Children = [item] };
 
+    // ---- binary mode (see CompiledBinarySpec) ----------------------------------------------------
+
+    /// <summary>A number: <c>u8 s8 u16 s16 u32 s32</c>, with <c>le</c> for little-endian (big-endian otherwise).</summary>
+    public static SpecNode Int(string type) => new() { Kind = "int", Text = type };
+
+    /// <summary>A word cut into fields, most significant first (<c>"pri:1,pal:2,tile:13"</c>).</summary>
+    public static SpecNode Bits(string fields) => new() { Kind = "bits", Text = fields };
+
+    /// <summary>A count, then that many of the item.</summary>
+    public static SpecNode Counted(SpecNode count, SpecNode item) => new() { Kind = "counted", Children = [count, item] };
+
+    /// <summary>A table of offsets (of <paramref name="entry" /> type, from the start of the table) to items.</summary>
+    public static SpecNode Offsets(string entry, SpecNode item) => new() { Kind = "offsets", Text = entry, Children = [item] };
+
+    public static SpecNode Named(string name, SpecNode item) => new() { Kind = "named", Name = name, Children = [item] };
+
     public SpecNode Dropped()
     {
         Ignore = true;
@@ -223,7 +239,10 @@ public enum SpecMode
     Parser,
 
     /// <summary>Rules that cut text into tokens (a <c>Tokenizer</c>).</summary>
-    Tokenizer
+    Tokenizer,
+
+    /// <summary>Rules over bytes: numbers, bit fields, counted lists and offset tables (<see cref="CompiledBinarySpec" />).</summary>
+    Binary
 }
 
 /// <summary>
@@ -251,6 +270,9 @@ public sealed class ParserSpecDoc
     public List<string> ExitOn { get; set; } = [];
 
     public SpecMode Mode { get; set; }
+
+    /// <summary>The editor the spec asks for to edit its data (<see cref="Silo.Providers.Data.IDataEditor" />); null for none.</summary>
+    public Silo.Providers.Data.DataEditorSpec? Editor { get; set; }
 
     /// <summary>The rule being defined (what a sample is parsed with when no rule is named).</summary>
     public string? Root { get; set; }

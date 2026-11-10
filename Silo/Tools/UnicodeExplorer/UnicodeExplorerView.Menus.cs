@@ -21,7 +21,7 @@ public sealed partial class UnicodeExplorerView
     private Menu BuildMenuBar()
     {
         // not the main menu: Alt and F10 stay with the application's own
-        var bar = new Menu { IsMainMenu = false, Padding = new Thickness(2, 1, 2, 1) };
+        var bar = new WindowSafeMenu { IsMainMenu = false, Padding = new Thickness(2, 1, 2, 1) };
         bar.Items.Add(TopMenu("_Tool", ToolItems));
         bar.Items.Add(TopMenu("_Edit", EditItems));
         bar.Items.Add(TopMenu("C_ategory", CategoryItems));
@@ -169,7 +169,7 @@ public sealed partial class UnicodeExplorerView
             return;
         }
 
-        Copy(string.Concat(_tray.Select(c => c.CodePoint.Text)), $"{_tray.Count:N0} characters");
+        Copy(GlyphClipboard.ForCopy(string.Concat(_tray.Select(c => c.CodePoint.Text))), $"{_tray.Count:N0} characters");
     }
 
     /// <summary>The block the person means: the one chosen in the Blocks menu, else the one the shown character is in.</summary>
@@ -395,6 +395,16 @@ public sealed partial class UnicodeExplorerView
                              Check("Glyph", _settings.ColorMode == ColorMode.Glyph, () => SetColorMode(ColorMode.Glyph), tip: "The character is drawn in its color"),
                              Check("Background", _settings.ColorMode == ColorMode.Background, () => SetColorMode(ColorMode.Background), tip: "The area behind the character is tinted"),
                              Check("Accent", _settings.ColorMode == ColorMode.Accent, () => SetColorMode(ColorMode.Accent), tip: "A bar of the color along the bottom of the character's cell")
+                         ]);
+        yield return Sub("Glyph Size",
+                         [
+                             UiKit.Item("Results: Larger", () => SetGlyphSize(_view.CellSize + 6), tip: "Larger cells in the results grid (Ctrl and the mouse wheel over it does the same)"),
+                             UiKit.Item("Results: Smaller", () => SetGlyphSize(_view.CellSize - 6)),
+                             UiKit.Item("Results: Usual Size", () => SetGlyphSize(null)),
+                             UiKit.Rule(),
+                             UiKit.Item("Collection: Larger", () => SetTraySize(TrayCell + 6), tip: "Larger cells in the collection (Ctrl and the mouse wheel over it does the same)"),
+                             UiKit.Item("Collection: Smaller", () => SetTraySize(TrayCell - 6)),
+                             UiKit.Item("Collection: Usual Size", () => SetTraySize(null))
                          ]);
         yield return Sub("Results as",
                          [

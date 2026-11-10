@@ -14,6 +14,7 @@ using Silo.Providers.Format;
 using Silo.Providers.Tree;
 using Silo.Remote;
 using Silo.Settings;
+using Silo.Tasks;
 using Silo.Ui.Windows;
 using Silo.Ui.Windows.Connecting;
 using Silo.ViewModel;
@@ -353,26 +354,42 @@ public partial class OpenSilo : ModelBase
     /// <param name="offerConvert">After a successful save, offer to convert a grown simple-format Silo to the archive format.</param>
     public async Task SaveAsync(bool offerConvert = true)
     {
-        await RunSaveHooksAsync();
+        var task = TaskCenter.Begin($"Saving {Name ?? "Silo"}", "Silo file");
         try
         {
-            await Data!.SaveAsync();
-        }
-        catch (RemoteSyncException ex)
-        {
-            // Saved on this computer; only the upload failed. The document is clean, but not in sync with the remote.
+            await RunSaveHooksAsync();
+            try
+            {
+                await Data!.SaveAsync();
+            }
+            catch (RemoteSyncException ex)
+            {
+                // Saved on this computer; only the upload failed. The document is clean, but not in sync with the remote.
+                SyncFileFromProvider();
+                SetDirty(false);
+                StateChanged?.Invoke(this, EventArgs.Empty);
+                Logger.Warning(ex, "Silo saved locally but not uploaded");
+                App.Status(ex.Message);
+                task.Succeed("Saved on this computer; the upload failed: " + ex.Message, 1, FileTasks.SizeOf(FilePath));
+                return;
+            }
+
             SyncFileFromProvider();
             SetDirty(false);
             StateChanged?.Invoke(this, EventArgs.Empty);
-            Logger.Warning(ex, "Silo saved locally but not uploaded");
-            App.Status(ex.Message);
-            return;
+            Logger.Debug("Silo saved to {path}", FilePath);
+            task.Succeed(null, 1, FileTasks.SizeOf(FilePath));
         }
-
-        SyncFileFromProvider();
-        SetDirty(false);
-        StateChanged?.Invoke(this, EventArgs.Empty);
-        Logger.Debug("Silo saved to {path}", FilePath);
+        catch (OperationCanceledException)
+        {
+            task.MarkCancelled("Save cancelled");
+            throw;
+        }
+        catch (Exception ex)
+        {
+            task.Fail(ex);
+            throw;
+        }
 
         if (offerConvert) await OfferConvertToArchiveAsync();
     }
@@ -424,25 +441,33 @@ public partial class OpenSilo : ModelBase
     {
         if (Data is not ISiloFile { Format: SiloStorageFormat.Simple } f) return;
 
-        await RunSaveHooksAsync();
-        await f.ExplodeToArchiveAsync();
-        SyncFileFromProvider();
-        SetDirty(false);
-        App.Status($"{Name} converted to the archive format");
+        await FileTasks.RunAsync($"Converting {Name ?? "Silo"} to the archive format", "Silo file", async task =>
+                                                                                                    {
+                                                                                                        await RunSaveHooksAsync();
+                                                                                                        await f.ExplodeToArchiveAsync();
+                                                                                                        SyncFileFromProvider();
+                                                                                                        SetDirty(false);
+                                                                                                        App.Status($"{Name} converted to the archive format");
+                                                                                                        task.SetResult(1, FileTasks.SizeOf(FilePath));
+                                                                                                    });
     }
 
     /// <summary>Saves the document under a new name; it keeps being the open document, now at the new path.</summary>
     public async Task SaveAsAsync(string path)
     {
         path.Required();
-        await RunSaveHooksAsync();
-        await Data!.MigrateToCopyAsync(path);
+        await FileTasks.RunAsync($"Saving {Path.GetFileName(path)}", "Silo file", async task =>
+                                                                               {
+                                                                                   await RunSaveHooksAsync();
+                                                                                   await Data!.MigrateToCopyAsync(path);
 
-        File      = new SiloFile(Data is ISiloFile saved ? saved.FilePath : Path.GetFullPath(path));
-        RemoteUri = null; // a copy saved under a new name no longer syncs with the URL
-        SetDirty(false);
-        StateChanged?.Invoke(this, EventArgs.Empty);
-        Logger.Debug("Silo saved as {path}", FilePath);
+                                                                                   File      = new SiloFile(Data is ISiloFile saved ? saved.FilePath : Path.GetFullPath(path));
+                                                                                   RemoteUri = null; // a copy saved under a new name no longer syncs with the URL
+                                                                                   SetDirty(false);
+                                                                                   StateChanged?.Invoke(this, EventArgs.Empty);
+                                                                                   Logger.Debug("Silo saved as {path}", FilePath);
+                                                                                   task.SetResult(1, FileTasks.SizeOf(FilePath));
+                                                                               });
     }
 
     private async Task RunSaveHooksAsync()

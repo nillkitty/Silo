@@ -41,6 +41,7 @@ public class LocalSilo : VirtualRoot<OpenSilo>, INodeProvider<OpenSilo>, IUriCon
     }
 
     private bool      _refreshQueued;
+    private bool      _hadObjects, _hadScalars;
     private SiloNode? _saved;
     private SiloNode? _scalars;
     private SiloNode? _security;
@@ -109,12 +110,18 @@ public class LocalSilo : VirtualRoot<OpenSilo>, INodeProvider<OpenSilo>, IUriCon
     {
         var level = AppDesignLevel.Instance;
 
+        // a container with nothing in it is left out (unless an author asked to see them)
+        var items     = GetSavedItems();
+        var showEmpty = level.ShowEmptyContainers;
+        _hadObjects = items.Any(i => i.Shape != DataShape.Scalar);
+        _hadScalars = items.Any(i => i.Shape == DataShape.Scalar);
+
         // what the person saved is open from the start: it should not take a hunt to find
         _saved = Folder("Saved Objects", Under("saved-objects"), "DataStructure", MakeObjectShapeFolders, expanded: true);
-        yield return _saved;
+        if (showEmpty || _hadObjects) yield return _saved;
 
         _scalars = Folder("Saved Scalars", Under("saved-scalars"), "Record", () => MakeTypeFolders(DataShape.Scalar), expanded: true);
-        yield return _scalars;
+        if (showEmpty || _hadScalars) yield return _scalars;
 
         if (level.IsAtLeast(DesignLevel.Developer))
             yield return Folder("Dependencies", Under("dependencies"), "Layers",
@@ -174,14 +181,30 @@ public class LocalSilo : VirtualRoot<OpenSilo>, INodeProvider<OpenSilo>, IUriCon
 
     private static SiloNode MakeItemNode(SavedItem item)
     {
-        return new SiloNode(item, item.Name, item.Uri, item.Icon, null);
+        return new SiloNode(item, item.DisplayName, item.Uri, item.Icon, null);
     }
 
+    /// <summary>The assemblies Silo depends on (what it references), not everything the process has loaded: that is the Runtime connector's.</summary>
     private static IEnumerable<SiloNode> MakeAssemblies()
     {
-        return AppDomain.CurrentDomain.GetAssemblies()
-                        .OrderBy(a => a.GetName().Name, StringComparer.OrdinalIgnoreCase)
-                        .Select(a => (SiloNode)new AssemblyNode(a));
+        var loaded = AppDomain.CurrentDomain.GetAssemblies();
+        var found  = new List<global::System.Reflection.Assembly>();
+        foreach (var reference in typeof(LocalSilo).Assembly.GetReferencedAssemblies())
+        {
+            var assembly = loaded.FirstOrDefault(a => string.Equals(a.GetName().Name, reference.Name, StringComparison.OrdinalIgnoreCase));
+            try
+            {
+                assembly ??= global::System.Reflection.Assembly.Load(reference);
+            }
+            catch (Exception ex) when (ex is IOException or BadImageFormatException or UnauthorizedAccessException)
+            {
+                Log.Debug(ex, "Dependency {Name} could not be loaded", reference.Name);
+            }
+
+            if (assembly is not null) found.Add(assembly);
+        }
+
+        return found.OrderBy(a => a.GetName().Name, StringComparer.OrdinalIgnoreCase).Select(a => (SiloNode)new AssemblyNode(a)).ToList();
     }
 
     /// <summary>The Silo's secrets by name, kind and provider. What a secret holds is never shown.</summary>
@@ -289,6 +312,13 @@ public class LocalSilo : VirtualRoot<OpenSilo>, INodeProvider<OpenSilo>, IUriCon
                                               _refreshQueued = false;
                                               try
                                               {
+                                                  if (!everything && !AppDesignLevel.Instance.ShowEmptyContainers)
+                                                  {
+                                                      // a container may have just become empty, or stopped being so
+                                                      var now = GetSavedItems();
+                                                      everything = now.Any(i => i.Shape != DataShape.Scalar) != _hadObjects || now.Any(i => i.Shape == DataShape.Scalar) != _hadScalars;
+                                                  }
+
                                                   if (everything)
                                                   {
                                                       // the design level can add or take away whole folders
@@ -359,7 +389,7 @@ public class LocalSilo : VirtualRoot<OpenSilo>, INodeProvider<OpenSilo>, IUriCon
         private void OnLevel(object? sender, PropertyChangedEventArgs e)
         {
             if (!_target.TryGetTarget(out var t)) Stop();
-            else if (e.PropertyName == nameof(AppDesignLevel.Level)) t.QueueRefresh(true);
+            else if (e.PropertyName is nameof(AppDesignLevel.Level) or nameof(AppDesignLevel.ShowEmptyContainers)) t.QueueRefresh(true);
         }
 
         private void Stop()

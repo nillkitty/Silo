@@ -499,7 +499,7 @@ public sealed class TextEditorView : UserControl, IDocumentContent, IEditContrib
     {
         try
         {
-            target.Save(_content with { Text = _editor.Text });
+            Silo.Tasks.FileTasks.Write($"Saving {target.Title}", "Text editor", target.Location?.ToString() ?? string.Empty, () => target.Save(_content with { Text = _editor.Text }), 1);
         }
         catch (Exception ex)
         {

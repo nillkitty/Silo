@@ -51,6 +51,31 @@ public sealed class YourConstants
         return name is not null && NamePattern.IsMatch(name);
     }
 
+    /// <summary>
+    ///     A valid constant name made from any text (a group's name, say): anything that is not a letter, digit or underscore becomes an underscore
+    ///     (runs of them one), a leading digit gets an underscore before it, and the result is cut to 64 characters. Null when nothing usable is left.
+    /// </summary>
+    public static string? NameFrom(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return null;
+
+        var sb = new System.Text.StringBuilder();
+        foreach (char c in text.Trim())
+        {
+            char next = char.IsAsciiLetterOrDigit(c) || c == '_' ? c : '_';
+            if (next == '_' && sb.Length > 0 && sb[^1] == '_') continue;
+
+            sb.Append(next);
+        }
+
+        string name = sb.ToString().Trim('_');
+        if (name.Length == 0) return null;
+
+        if (char.IsAsciiDigit(name[0])) name = "_" + name;
+        if (name.Length > 64) name = name[..64].TrimEnd('_');
+        return IsValidName(name) ? name : null;
+    }
+
     /// <summary>What a constant is stored under: <c>your:green</c>.</summary>
     public static string KeyFor(string name)
     {

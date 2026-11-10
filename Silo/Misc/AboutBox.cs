@@ -1,4 +1,5 @@
-﻿using System.Windows.Controls;
+﻿using System.Reflection;
+using System.Windows.Controls;
 using Silo.Commanding;
 using Silo.Model;
 using Silo.Ui.Controls;
@@ -40,7 +41,30 @@ public static class AboutBox
     [ModalDialog]
     public class AboutModel : ModelBase
     {
-        internal string AboutText => App.Instance!.FindResource("AboutText")?.ToString() ?? "\n\nCant find about text resource!\n\n";
+        /// <summary>The About text: the template resource with the version, authors, address, info, thanks and memorial lines filled in.</summary>
+        internal string AboutText
+        {
+            get
+            {
+                if (App.Instance?.TryFindResource("AboutText")?.ToString() is not { } template) return "\n\nCant find about text resource!\n\n";
+
+                string Part(string key) => App.Instance.TryFindResource(key)?.ToString()?.Trim() is { } s && s != "-" ? s : string.Empty;
+
+                string version = System.Reflection.Assembly.GetEntryAssembly()?.GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>()?.InformationalVersion
+                                 ?? System.Reflection.Assembly.GetEntryAssembly()?.GetName().Version?.ToString() ?? "?";
+                int plus = version.IndexOf('+'); // the build's commit hash
+
+                try
+                {
+                    return string.Format(template, plus > 0 ? version[..plus] : version, Part("AboutAuthors"), Part("AboutUrl"), Part("AboutInfo"), Part("AboutThanks"), Part("AboutMemory"))
+                                 .Replace("\n\n\n", "\n\n").Trim();
+                }
+                catch (FormatException)
+                {
+                    return template;
+                }
+            }
+        }
 
         internal UIElement Content => new ScrollViewer
                                       {

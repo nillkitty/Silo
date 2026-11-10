@@ -89,6 +89,15 @@ public sealed class PalettePage
 
     /// <summary>The characters, in order; each at most once on a page.</summary>
     public List<int> CodePoints { get; set; } = [];
+
+    /// <summary>The group each character is in (a character that is not here is in none); see <see cref="GlyphGroups" />.</summary>
+    public Dictionary<int, string> Groups { get; set; } = [];
+
+    /// <summary>The groups shown folded (their characters hidden under the header).</summary>
+    public List<string> Collapsed { get; set; } = [];
+
+    /// <summary>The group a character is in, or null.</summary>
+    public string? GroupOf(int codePoint) => Groups.TryGetValue(codePoint, out var group) ? group : null;
 }
 
 /// <summary>The rules for naming palettes, arranging their characters and keeping their windows where they can be reached.</summary>
@@ -97,6 +106,46 @@ public static class PaletteRules
     public const double DefaultTileSize = 40;
     public const double MinTileSize     = 24;
     public const double MaxTileSize     = 120;
+
+    /// <summary>
+    ///     The pages of a palette made of collected characters: all on one page with their groups as the page's groups (the groups in
+    ///     <paramref name="folded" /> shown folded), or -- with <paramref name="pagePerGroup" /> and at least one group -- a page for each group in the
+    ///     order they first appear, the characters in none last on a page called "Ungrouped". A character held twice is on a page once.
+    /// </summary>
+    public static List<PalettePage> PagesFromCollection(IReadOnlyList<CollectedCharacter> items, IEnumerable<string> folded, bool pagePerGroup)
+    {
+        var pages = new List<PalettePage>();
+
+        if (pagePerGroup && items.Any(c => GlyphGroups.Clean(c.Group) is not null))
+        {
+            var runs = items.GroupBy(c => GlyphGroups.Clean(c.Group)).ToList();
+            foreach (var run in runs.Where(r => r.Key is not null).Concat(runs.Where(r => r.Key is null)))
+            {
+                pages.Add(new PalettePage
+                          {
+                              Name       = UniqueName(pages.Select(p => p.Name), run.Key ?? "Ungrouped", "Page"),
+                              CodePoints = run.Select(c => c.CodePoint.Value).Distinct().ToList()
+                          });
+            }
+
+            return pages;
+        }
+
+        var page = new PalettePage { Name = "Glyphs" };
+        foreach (var c in items)
+        {
+            int cp = c.CodePoint.Value;
+            if (page.CodePoints.Contains(cp)) continue;
+
+            page.CodePoints.Add(cp);
+            if (GlyphGroups.Clean(c.Group) is { } group) page.Groups[cp] = group;
+        }
+
+        var used = page.Groups.Values.ToHashSet();
+        page.Collapsed = folded.Where(used.Contains).Distinct().ToList();
+        pages.Add(page);
+        return pages;
+    }
 
     /// <summary>
     ///     Makes a palette read from storage whole: a first page for characters kept before pages existed (or an empty one), a current page that
@@ -112,6 +161,12 @@ public static class PaletteRules
         {
             page.CodePoints ??= [];
             page.Name       =   string.IsNullOrWhiteSpace(page.Name) ? "Glyphs" : page.Name;
+            page.Groups     ??= [];
+            page.Collapsed  ??= [];
+
+            // a group is kept only for a character that is on the page
+            var on = page.CodePoints.ToHashSet();
+            foreach (int cp in page.Groups.Keys.Where(cp => !on.Contains(cp) || string.IsNullOrWhiteSpace(page.Groups[cp])).ToList()) page.Groups.Remove(cp);
         }
 
         if (palette.Pages.Count == 0)

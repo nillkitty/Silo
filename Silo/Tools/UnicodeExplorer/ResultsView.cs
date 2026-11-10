@@ -25,7 +25,11 @@ internal sealed record MapSegment(int Start, int Count, string Name, int Plane);
 /// </remarks>
 internal sealed class ResultsView : Grid
 {
+    /// <summary>The size of a cell of the grid when nothing else was chosen.</summary>
     public const double GridCell = 46;
+
+    public const double MinCell  = 28;
+    public const double MaxCell  = 160;
     public const double ListRow  = 28;
 
     private const double CellGap = 2; // a pixel around every cell
@@ -40,6 +44,7 @@ internal sealed class ResultsView : Grid
     private bool                                  _settingBar;
     private double                                _offset;
     private int                                   _cols = 1;
+    private double                                _cell = GridCell;
     private double                                _rowHeight = GridCell + CellGap;
     private int                                   _shownFirst = -2, _shownLast = -2;
 
@@ -118,6 +123,27 @@ internal sealed class ResultsView : Grid
     /// <summary>What is in view changed (scrolled, resized, new results).</summary>
     public event Action? ViewChanged;
 
+    /// <summary>The size of a cell of the grid in pixels (the glyph is drawn at about half of it); changing it redraws the grid around the character at its top.</summary>
+    public double CellSize
+    {
+        get => _cell;
+        set
+        {
+            double size = double.IsFinite(value) ? Math.Clamp(Math.Round(value), MinCell, MaxCell) : GridCell;
+            if (size == _cell) return;
+
+            int keep = FirstVisible;
+            _cell = size;
+            _pool.Clear();
+            _canvas.Children.Clear();
+            Relayout(keepFirst: false, keepIndex: keep);
+            CellSizeChanged?.Invoke();
+        }
+    }
+
+    /// <summary>The user (or the settings) made the cells larger or smaller.</summary>
+    public event Action? CellSizeChanged;
+
     /// <summary>Whether the results are a list (a row each, with the name) rather than a grid.</summary>
     public bool ListMode
     {
@@ -194,8 +220,8 @@ internal sealed class ResultsView : Grid
         double height = _canvas.ActualHeight;
         int    keep   = keepFirst ? FirstVisible : keepIndex;
 
-        _cols      = _listMode ? 1 : Math.Max(1, (int)(width / (GridCell + CellGap)));
-        _rowHeight = _listMode ? ListRow + 1 : GridCell + CellGap;
+        _cols      = _listMode ? 1 : Math.Max(1, (int)(width / (_cell + CellGap)));
+        _rowHeight = _listMode ? ListRow + 1 : _cell + CellGap;
 
         double content = Math.Ceiling(Count / (double)_cols) * _rowHeight + 2;
         double max     = Math.Max(0, content - height);
@@ -229,8 +255,15 @@ internal sealed class ResultsView : Grid
 
     private void OnWheel(object sender, MouseWheelEventArgs e)
     {
-        // three rows to a notch; with Ctrl, a screenful
-        double step = Keyboard.Modifiers == ModifierKeys.Control ? Math.Max(_rowHeight, _canvas.ActualHeight - _rowHeight) : _rowHeight * 3;
+        // with Ctrl the wheel makes the cells larger or smaller (in the grid); otherwise three rows to a notch
+        if (Keyboard.Modifiers == ModifierKeys.Control)
+        {
+            if (!_listMode) CellSize += Math.Sign(e.Delta) * Math.Max(2, Math.Round(_cell * 0.08)) * Math.Max(1, Math.Abs(e.Delta) / 120.0);
+            e.Handled = true;
+            return;
+        }
+
+        double step = _rowHeight * 3;
         SetOffset(_offset - Math.Sign(e.Delta) * step * Math.Max(1, Math.Abs(e.Delta) / 120.0));
         e.Handled = true;
     }
@@ -271,7 +304,7 @@ internal sealed class ResultsView : Grid
             }
 
             int row = k / _cols, col = k % _cols;
-            Canvas.SetLeft(cell.Root, _listMode ? 1 : col * (GridCell + CellGap) + 1);
+            Canvas.SetLeft(cell.Root, _listMode ? 1 : col * (_cell + CellGap) + 1);
             Canvas.SetTop(cell.Root, (firstRow + row) * _rowHeight - _offset + 1);
             if (_listMode) cell.Root.Width = Math.Max(40, width - 2);
             cell.Root.Visibility = Visibility.Visible;
@@ -361,14 +394,14 @@ internal sealed class ResultsView : Grid
     {
         var glyph = new TextBlock
                     {
-                        FontFamily = UiKit.GlyphFont, FontSize = 22, HorizontalAlignment = HorizontalAlignment.Center,
+                        FontFamily = UiKit.GlyphFont, FontSize = Math.Round(_cell * 0.48), HorizontalAlignment = HorizontalAlignment.Center,
                         VerticalAlignment = VerticalAlignment.Center, TextAlignment = TextAlignment.Center
                     }.Themed(TextBlock.ForegroundProperty, "Theme.Text");
         var strip = new Rectangle { Height = 4, RadiusX = 1.5, RadiusY = 1.5, VerticalAlignment = VerticalAlignment.Bottom, Margin = new Thickness(5, 0, 5, 2), Visibility = Visibility.Collapsed, IsHitTestVisible = false };
         var inner = new Grid();
         inner.Children.Add(glyph);
         inner.Children.Add(strip);
-        return Wire(new Cell { Root = Frame(inner, GridCell, GridCell), Glyph = glyph, Strip = strip });
+        return Wire(new Cell { Root = Frame(inner, _cell, _cell), Glyph = glyph, Strip = strip });
     }
 
     private Cell MakeRow()

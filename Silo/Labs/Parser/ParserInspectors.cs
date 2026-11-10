@@ -246,6 +246,17 @@ internal sealed class TokensInspector(ParserWorkspace workspace) : PaletteInspec
                                               new DragItem("token", f.Name), false, f.Node?.Kind switch { "chars" => "characters", "literal" => "text", "unicode" => "unicode", _ => "token" }, false);
         }
 
+        if (Ws.Doc.Mode == SpecMode.Binary)
+        {
+            yield return new PaletteEntry("Data1", "Binary data (the Binary mode reads bytes)", string.Empty, null, true);
+            yield return new PaletteEntry("Data1", "int", "A number: u8 s8 u16 s16 u32 s32, le for little-endian (edit it on the canvas)", new DragItem("bin", "int|u16"), false, "number");
+            yield return new PaletteEntry("Data1", "bits", "A word cut into fields, most significant first: pri:1,pal:2,tile:13", new DragItem("bin", "bits|a:4,b:4"), false, "fields");
+            yield return new PaletteEntry("Literal", "bytes", "Bytes that must be there (a signature), as hex", new DragItem("bin", "bytes|00"), false, "bytes");
+            yield return new PaletteEntry("Token", "skip", "Pass over some bytes", new DragItem("bin", "skip|2"), false, "bytes");
+            yield return new PaletteEntry("Quantifier", "counted", "A count, then that many of the item", new DragItem("bin", "counted"), false, "list");
+            yield return new PaletteEntry("Quantifier", "offsets", "A table of offsets to items (the first one says how long the table is)", new DragItem("bin", "offsets|u16"), false, "table");
+        }
+
         yield return new PaletteEntry("Token", "Text and characters", string.Empty, null, true);
         yield return new PaletteEntry("Literal", "literal", "A fixed piece of text (edit it on the canvas)", new DragItem("literal", "text"), false, "text");
         yield return new PaletteEntry("CharSet", "chars", "One character out of a set you type (or none of them)", new DragItem("chars", "abc"), false, "characters");
@@ -451,6 +462,15 @@ internal sealed class SyntaxInspector : ParserInspector
         _list.KeyDown += (_, e) =>
                          {
                              if (e.Key == System.Windows.Input.Key.Enter && _list.SelectedItem is ListBoxItem { Tag: Tag tag }) Activate(tag);
+                             else if (e.Key == System.Windows.Input.Key.F2 && _list.SelectedItem is ListBoxItem { Tag: Tag renamed })
+                             {
+                                 // F2 renames the selected rule or saved piece
+                                 var rename = CommandsOf(renamed).FirstOrDefault(c => c.Id == "rename");
+                                 if (rename is null) return;
+
+                                 e.Handled = true;
+                                 rename.Command.Execute(rename.Parameter);
+                             }
                          };
 
         // the Explorer's right-click menu for what is kept in the Silo; what is specific to the Lab is added above it by each row

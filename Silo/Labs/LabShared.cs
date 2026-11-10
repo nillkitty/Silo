@@ -353,8 +353,14 @@ public static class LabProfile
 /// <summary>Makes a Lab's icon into the picture a window shows in its title bar and the task bar.</summary>
 internal static class LabWindowIcon
 {
-    /// <summary>The Lab's icon as white on a blue tile; null when the Lab has none (or the icon set is not loaded).</summary>
-    public static ImageSource? For(string? iconKey)
+    /// <summary>The Lab's icon as white on a tile in the Lab's own color; null when the Lab has none (or the icon set is not loaded).</summary>
+    public static ImageSource? For(ILab lab) => For(lab.IconKey, LabColors.For(lab));
+
+    /// <summary>The icon for a menu entry: the colored tile at 16 pixels; null when the Lab has no icon.</summary>
+    public static Image? Badge(ILab lab) => For(lab) is { } source ? new Image { Source = source, Width = 16, Height = 16 } : null;
+
+    /// <summary>The icon as white on a tile of <paramref name="tile" /> (the Labs' blue by default).</summary>
+    public static ImageSource? For(string? iconKey, Brush? tile = null)
     {
         var geometry = Silo.Toolbar.ToolbarIcons.Find(iconKey);
         if (geometry is null) return null;
@@ -364,18 +370,18 @@ internal static class LabWindowIcon
             var bounds = geometry.Bounds;
             if (bounds.IsEmpty || bounds.Width <= 0 || bounds.Height <= 0) return null;
 
-            const double tile = 32, glyph = 20;
+            const double size = 32, glyph = 20;
             double scale = glyph / Math.Max(bounds.Width, bounds.Height);
             var transform = new TransformGroup();
             transform.Children.Add(new TranslateTransform(-bounds.X - bounds.Width / 2, -bounds.Y - bounds.Height / 2));
             transform.Children.Add(new ScaleTransform(scale, scale));
-            transform.Children.Add(new TranslateTransform(tile / 2, tile / 2));
+            transform.Children.Add(new TranslateTransform(size / 2, size / 2));
 
             var shape = geometry.Clone();
             shape.Transform = transform;
 
             var group = new DrawingGroup();
-            group.Children.Add(new GeometryDrawing(LabUi.Blue, null, new RectangleGeometry(new Rect(0, 0, tile, tile), 6, 6)));
+            group.Children.Add(new GeometryDrawing(tile ?? LabUi.Blue, null, new RectangleGeometry(new Rect(0, 0, size, size), 6, 6)));
             group.Children.Add(new GeometryDrawing(Brushes.White, null, shape));
             group.Freeze();
 
@@ -388,6 +394,61 @@ internal static class LabWindowIcon
             Log.Debug(ex, "Making the window icon {Icon} failed", iconKey);
             return null;
         }
+    }
+}
+
+/// <summary>A color of its own for each Lab, used for its window icon and its menu entry. Known Labs have a fixed one; a new Lab gets one from its id.</summary>
+internal static class LabColors
+{
+    private static readonly Dictionary<string, (byte R, byte G, byte B)> Known = new(StringComparer.OrdinalIgnoreCase)
+                                                                              {
+                                                                                  ["web"]    = (0x3B, 0x82, 0xD6), // blue
+                                                                                  ["regex"]  = (0x8E, 0x4C, 0xC8), // purple
+                                                                                  ["schema"] = (0x1F, 0x9D, 0x8F), // teal
+                                                                                  ["stream"] = (0xE0, 0x7B, 0x1F), // orange
+                                                                                  ["syntax"] = (0xC2, 0x3B, 0x6E), // raspberry
+                                                                                  ["parser"] = (0x4C, 0x9A, 0x2A), // green
+                                                                                  ["image"]  = (0xD6, 0x4A, 0x3A), // red
+                                                                                  ["qr"]     = (0x4A, 0x55, 0x68), // slate
+                                                                                  ["menu"]   = (0xB8, 0x8A, 0x0E), // ochre
+                                                                                  ["state"]  = (0x2F, 0x6F, 0xB0), // steel blue
+                                                                                  ["shell"]  = (0x6B, 0x4F, 0xBB)  // indigo
+                                                                              };
+
+    private static readonly Dictionary<string, Brush> Cache = new(StringComparer.OrdinalIgnoreCase);
+
+    public static Brush For(ILab lab) => For(lab.Id);
+
+    /// <summary>The Lab's color as a frozen brush.</summary>
+    public static Brush For(string id)
+    {
+        lock (Cache)
+        {
+            if (Cache.TryGetValue(id, out var cached)) return cached;
+
+            var (r, g, b) = Known.TryGetValue(id, out var known) ? known : FromId(id);
+            var brush = new SolidColorBrush(Color.FromRgb(r, g, b));
+            brush.Freeze();
+            return Cache[id] = brush;
+        }
+    }
+
+    /// <summary>A stable color for an id with none of its own: a hue from the id, at the saturation and lightness the others have.</summary>
+    private static (byte, byte, byte) FromId(string id)
+    {
+        int hash = 17;
+        foreach (char c in id.ToLowerInvariant()) hash = unchecked(hash * 31 + c);
+
+        double h = (uint)hash % 360 / 60.0, s = 0.55, l = 0.46;
+        double q = l + s - l * s, p = 2 * l - q;
+
+        static double Channel(double p, double q, double t)
+        {
+            t = (t % 6 + 6) % 6;
+            return t < 1 ? p + (q - p) * t : t < 3 ? q : t < 4 ? p + (q - p) * (4 - t) : p;
+        }
+
+        return ((byte)(Channel(p, q, h + 2) * 255), (byte)(Channel(p, q, h) * 255), (byte)(Channel(p, q, h - 2) * 255));
     }
 }
 

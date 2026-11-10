@@ -67,6 +67,46 @@ public sealed partial class ParserLabSession : LabSession<IDataSpec>
                                        null, "TbOpen", "Open a spec kept in the Silo");
     }
 
+    private ProvidedCommand OpenEditorCommand() =>
+        ProvidedCommand.From("open-data-editor", "Open Data _Editor", OpenDataEditor, "Edit", () => _ws.Spec.Editor is not null,
+                             "Edit data with the editor this spec asks for (its editor settings are kept in the spec)");
+
+    private ProvidedCommand EditorChoiceCommand()
+    {
+        var choices = Silo.DataEditing.DataEditors.All
+                          .Select(e => ProvidedCommand.From("editor:" + e.Kind, e.DisplayName.Replace("_", "__"), () => SetEditor(e), e.IconKey, null, "Make this the editor of the spec's data")
+                                  with { IsChecked = () => string.Equals(_ws.Doc.Editor?.Kind, e.Kind, StringComparison.OrdinalIgnoreCase) })
+                          .Append(ProvidedCommand.From("editor:none", "(none)", () => SetEditor(null), null, null, "The spec asks for no editor") with { IsChecked = () => _ws.Doc.Editor is null })
+                          .ToList();
+
+        return ProvidedCommand.Submenu("data-editor", "Data Edi_tor", choices, null, "Edit", "The editor that edits data with this spec");
+    }
+
+    private void SetEditor(Silo.Providers.Data.IDataEditor? editor)
+    {
+        _ws.Edit(d => d.Editor = editor is null ? null : Silo.Providers.Data.DataEditorSpec.For(editor), WorkspaceChange.Header);
+        Say(editor is null ? "The spec asks for no editor" : $"The spec asks for the {editor.DisplayName}: Spec > Open Data Editor");
+    }
+
+    private void OpenDataEditor()
+    {
+        var spec = _ws.Spec;
+        if (spec.Editor is not { } want || Silo.DataEditing.DataEditors.Find(want.Kind) is not { } editor)
+        {
+            Say("The spec asks for no editor that is installed");
+            return;
+        }
+
+        var problems = editor.CanEdit(spec, want) ? editor.Problems(spec, want) : ["The editor cannot work with this spec (is it in Binary mode?)"];
+        if (problems.Count > 0)
+        {
+            Say(problems[0]);
+            return;
+        }
+
+        editor.Open(spec, want);
+    }
+
     private ProvidedCommand SaveCommand() =>
         ProvidedCommand.From("save", "_Save Spec", Save, "TbSave", () => SpecStore.IsAvailable, "Keep the spec, its samples and its tests in the Silo") with { Gesture = "Ctrl+S" };
 
@@ -119,21 +159,25 @@ public sealed partial class ParserLabSession : LabSession<IDataSpec>
                 [
                     ProvidedCommand.From("parser-mode", "_Parser Mode", () => SetMode(SpecMode.Parser), "Rule", null, "Build rules over characters") with { IsChecked = () => _ws.Doc.Mode == SpecMode.Parser },
                     ProvidedCommand.From("tokenizer-mode", "T_okenizer Mode", () => SetMode(SpecMode.Tokenizer), "Token", null, "Build the tokenizer that cuts text into tokens") with { IsChecked = () => _ws.Doc.Mode == SpecMode.Tokenizer },
+                    ProvidedCommand.From("binary-mode", "_Binary Mode", () => SetMode(SpecMode.Binary), "Data1", null, "Build rules over bytes: numbers, bit fields, counted lists and offset tables") with { IsChecked = () => _ws.Doc.Mode == SpecMode.Binary },
                     null,
                     ProvidedCommand.From("separator-settings", "Se_parator and Ignored Tokens...", () => Host?.ShowInspector(LabParametersInspector.InspectorId), "Separator", null,
                                          "What the parser skips between tokens and what ends it: in the Lab's parameters"),
                     null,
                     BuildCommand(),
-                    CompileCommand()
+                    CompileCommand(),
+                    null,
+                    OpenEditorCommand(),
+                    EditorChoiceCommand()
                 ]),
                 new LabMenu("_Rules",
                 [
-                    ProvidedCommand.From("add-rule", "Add _Rule...", AddRule, "Plus", () => _ws.Doc.Mode == SpecMode.Parser, "Add a rule to the spec"),
+                    ProvidedCommand.From("add-rule", "Add _Rule...", AddRule, "Plus", () => _ws.Doc.Mode != SpecMode.Tokenizer, "Add a rule to the spec"),
                     ProvidedCommand.From("add-token-rule", "Add _Tokenizer Rule", () => _ws.AddTokenRule(), "Plus", () => _ws.Doc.Mode == SpecMode.Tokenizer, "Add a matcher to the tokenizer"),
                     null,
                     ProvidedCommand.From("configure-rule", "_Configure Rule", () => _canvas?.ConfigureRule(), "Sliders", () => _ws.Current is not null || tokenizer,
                                          "Show the rule and put the cursor in its settings") with { Gesture = "F4" },
-                    ProvidedCommand.From("rename-rule", "Re_name Rule...", RenameRule, "Rule", () => !tokenizer && _ws.Current is not null, "Give the current rule another name (and everything that uses it)"),
+                    ProvidedCommand.From("rename-rule", "Re_name Rule...", RenameRule, "Rule", () => !tokenizer && _ws.Current is not null, "Give the current rule another name (and everything that uses it)") with { Gesture = "F2" },
                     null,
                     ProvidedCommand.From("delete-rule", "_Delete Rule", DeleteRule, "TbDelete", () => !tokenizer && _ws.Current is not null, "Remove the current rule") with { IsDestructive = true }
                 ]),
@@ -173,7 +217,7 @@ public sealed partial class ParserLabSession : LabSession<IDataSpec>
             call => Task.FromResult<string?>(Test(call.Args))),
         new("sample", "sample <set> <text>        add a sample to a set (made if it is new)",
             call => Task.FromResult<string?>(Sample(call))),
-        new("mode", "mode parser|tokenizer      which part of the spec the canvas builds",
+        new("mode", "mode parser|tokenizer|binary   which part of the spec the canvas builds",
             call => Task.FromResult<string?>(Mode(call.Args)))
     ];
 
@@ -348,7 +392,7 @@ public sealed partial class ParserLabSession : LabSession<IDataSpec>
         _ = _ws.Compiled;
         var problems = _ws.Problems;
         if (problems.Count == 0)
-            Say(_ws.Doc.Mode == SpecMode.Parser
+            Say(_ws.Doc.Mode != SpecMode.Tokenizer
                     ? $"Built {_ws.Doc.Rules.Count} rule(s): no problems"
                     : $"Built {_ws.Doc.Tokenizer.Rules.Count} tokenizer rule(s): no problems");
         else
@@ -362,9 +406,16 @@ public sealed partial class ParserLabSession : LabSession<IDataSpec>
     {
         _ws.Spec.Invalidate();
         var compiled = _ws.Compiled;
-        if (compiled.Diagnostics.Count > 0)
+        var problems = _ws.Doc.Mode == SpecMode.Binary ? _ws.Spec.CompiledBinary.Diagnostics : compiled.Diagnostics;
+        if (problems.Count > 0)
         {
-            Say($"Cannot compile: {compiled.Diagnostics[0].Rule}: {compiled.Diagnostics[0].Message}");
+            Say($"Cannot compile: {problems[0].Rule}: {problems[0].Message}");
+            return;
+        }
+
+        if (_ws.Doc.Mode == SpecMode.Binary)
+        {
+            Say("The binary spec is ready: it reads bytes as it stands (try hex bytes in the Terminal or a sample)");
             return;
         }
 
@@ -670,7 +721,7 @@ public sealed partial class ParserLabSession : LabSession<IDataSpec>
     private string Mode(IReadOnlyList<string> args)
     {
         if (args.Count == 0) return _ws.Doc.Mode.ToString();
-        if (!Enum.TryParse<SpecMode>(args[0], true, out var mode)) throw new ArgumentException("mode parser|tokenizer");
+        if (!Enum.TryParse<SpecMode>(args[0], true, out var mode)) throw new ArgumentException("mode parser|tokenizer|binary");
 
         SetMode(mode);
         return mode.ToString();

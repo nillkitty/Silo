@@ -379,9 +379,9 @@ internal sealed class SchemaEditor : ContentControl
             desc.TextChanged  += (_, _) => Changed();
 
             var tools = new StackPanel { Orientation = Orientation.Horizontal };
-            tools.Children.Add(Small("▲", () => Move(() => _session.MoveValue(at, -1)), "Move up"));
-            tools.Children.Add(Small("▼", () => Move(() => _session.MoveValue(at, 1)), "Move down"));
-            tools.Children.Add(Small("✕", () => Move(() => _session.RemoveValue(at)), "Take the value out"));
+            tools.Children.Add(Small("ArrowUp", () => Move(() => _session.MoveValue(at, -1)), "Move up"));
+            tools.Children.Add(Small("ArrowDown", () => Move(() => _session.MoveValue(at, 1)), "Move down"));
+            tools.Children.Add(Small("Remove", () => Move(() => _session.RemoveValue(at)), "Take the value out"));
 
             Grid.SetRow(name, i);
             Grid.SetRow(value, i);

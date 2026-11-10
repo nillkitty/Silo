@@ -23,6 +23,7 @@ public static class SpecEval
         try
         {
             if (spec.Doc.Mode == SpecMode.Tokenizer) return Tokens(spec, text);
+            if (spec.Doc.Mode == SpecMode.Binary) return Bytes(spec, text, rule);
 
             var r = spec.Parse(text, rule);
             return r.Success
@@ -33,6 +34,26 @@ public static class SpecEval
         {
             return new EvalOutcome(false, string.Empty, ex.Message, 0, null);
         }
+    }
+
+    /// <summary>Reads <paramref name="text" /> as hex bytes ("00 04 FF"; 0x, commas and dashes allowed) with a Binary spec.</summary>
+    public static EvalOutcome Bytes(CompiledSpec spec, string text, string? rule)
+    {
+        string[] parts = text.Replace("0x", " ", StringComparison.OrdinalIgnoreCase).Split([' ', ',', '-', ':', '\t', '\r', '\n'], StringSplitOptions.RemoveEmptyEntries);
+        byte[]   data;
+        try
+        {
+            data = parts.SelectMany(p => p.Length % 2 == 0 ? Enumerable.Range(0, p.Length / 2).Select(i => Convert.ToByte(p.Substring(i * 2, 2), 16)) : throw new FormatException("odd number of hex digits")).ToArray();
+        }
+        catch (FormatException ex)
+        {
+            return new EvalOutcome(false, string.Empty, "not hex bytes: " + ex.Message, 0, null);
+        }
+
+        var r = CompiledBinarySpec.Compile(spec.Doc).Parse(data, rule);
+        return r.Success
+                   ? new EvalOutcome(true, SpecValues.Format(r.Value), null, -1, r.Value, r.Consumed)
+                   : new EvalOutcome(false, string.Empty, r.Error, r.ErrorPosition, null);
     }
 
     /// <summary>Cuts <paramref name="text" /> into tokens whatever the mode.</summary>

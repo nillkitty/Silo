@@ -57,9 +57,11 @@ public static class ClrTypes
 public sealed class ParserDataSpec : IDataSpec
 {
     private const int StreamWindow = 4096;
+    private const int BinaryLimit  = 16 * 1024 * 1024;
 
-    private readonly object        _gate = new();
-    private          CompiledSpec? _compiled;
+    private readonly object             _gate = new();
+    private          CompiledSpec?      _compiled;
+    private          CompiledBinarySpec? _binary;
 
     /// <summary>The parsers of the spec as it is now.</summary>
     public CompiledSpec Compiled
@@ -93,6 +95,8 @@ public sealed class ParserDataSpec : IDataSpec
 
     public string? Oid => string.IsNullOrWhiteSpace(Doc.Oid) ? null : Doc.Oid;
 
+    public IDataEditorSpec? Editor => Doc.Editor is { Kind.Length: > 0 } editor ? editor : null;
+
     /// <summary>Makes the spec stand for another document.</summary>
     public void Replace(ParserSpecDoc doc)
     {
@@ -106,6 +110,7 @@ public sealed class ParserDataSpec : IDataSpec
         lock (_gate)
         {
             _compiled = null;
+            _binary   = null;
         }
     }
 
@@ -117,6 +122,26 @@ public sealed class ParserDataSpec : IDataSpec
     public DataParseResult Parse(string text)
     {
         var r = Compiled.Parse(text);
+        return new DataParseResult(r.Success, r.Value, r.Consumed, r.ErrorPosition, r.Error);
+    }
+
+    /// <summary>The binary parsers of the spec as it is now (for <see cref="SpecMode.Binary" />).</summary>
+    public CompiledBinarySpec CompiledBinary
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _binary ??= CompiledBinarySpec.Compile(Doc);
+            }
+        }
+    }
+
+    public DataParseResult Parse(ReadOnlyMemory<byte> data)
+    {
+        if (Doc.Mode != SpecMode.Binary) return DataParseResult.Failure(0, "This specification reads text, not bytes.");
+
+        var r = CompiledBinary.Parse(data.Span);
         return new DataParseResult(r.Success, r.Value, r.Consumed, r.ErrorPosition, r.Error);
     }
 
@@ -134,11 +159,33 @@ public sealed class ParserDataSpec : IDataSpec
         }
     }
 
+    /// <summary>Binary formats point around inside themselves, so the whole stream (up to <see cref="BinaryLimit" />) is read.</summary>
+    private bool? MatchesBinary(Stream stream)
+    {
+        long start = stream.CanSeek ? stream.Position : -1;
+        using var copy = new MemoryStream();
+        var       buf  = new byte[StreamWindow];
+        int       n;
+        while (copy.Length < BinaryLimit && (n = stream.Read(buf, 0, buf.Length)) > 0)
+            copy.Write(buf, 0, n);
+
+        if (start >= 0) stream.Position = start;
+        if (copy.Length == 0) return null;
+
+        var r = CompiledBinary.Parse(copy.GetBuffer().AsSpan(0, (int)copy.Length));
+        if (r.Success) return true;
+
+        // it ran off the end of what there is: it might match with more data
+        return r.ErrorPosition >= copy.Length && copy.Length < BinaryLimit ? null : false;
+    }
+
     public bool? MatchesData(Stream stream)
     {
         ArgumentNullException.ThrowIfNull(stream);
 
-        long start  = stream.CanSeek ? stream.Position : -1;
+        if (Doc.Mode == SpecMode.Binary) return MatchesBinary(stream);
+
+        long start = stream.CanSeek ? stream.Position : -1;
         var  buffer = new byte[StreamWindow];
         int  read   = 0;
         while (read < buffer.Length)

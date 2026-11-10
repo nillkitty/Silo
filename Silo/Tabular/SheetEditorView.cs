@@ -1309,7 +1309,7 @@ public sealed class SheetEditorView : UserControl, IEditContributor
             string text  = SelectedFormat == SheetFormat.Html
                                ? SheetExport.ToHtmlDocument(sheet, Path.GetFileNameWithoutExtension(dlg.FileName))
                                : SheetExport.Write(sheet, SelectedFormat);
-            File.WriteAllText(dlg.FileName, text, new UTF8Encoding(false));
+            Silo.Tasks.FileTasks.Write($"Exporting table as {info.Name}", "Table", dlg.FileName, () => File.WriteAllText(dlg.FileName, text, new UTF8Encoding(false)), sheet.Rows.Count);
             SetStatus($"Saved {Path.GetFileName(dlg.FileName)}");
         }
         catch (Exception ex)

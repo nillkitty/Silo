@@ -1,12 +1,18 @@
 using System.Collections.ObjectModel;
+using System.Windows.Threading;
 using Serilog;
 using Silo.DbModel.Global;
+using Silo.Tasks;
 
 namespace Silo.ViewModel;
 
 public record SiloNode
 {
+    /// <summary>How many loaded children go into the tree at a time; a longer list is added in pieces with the window kept responsive between them.</summary>
+    private const int ChunkSize = 250;
+
     private Task? _loading;
+    private bool  _reloading;
 
     /// <summary>
     ///     Optional: produces the node's children the first time they are wanted (when the node is expanded), so a tree such
@@ -108,7 +114,8 @@ public record SiloNode
             }
         }
 
-        _loading = null; // a finished read stays in the field when its loader completed synchronously: it must not stand for this one
+        _loading   = null; // a finished read stays in the field when its loader completed synchronously: it must not stand for this one
+        _reloading = true;
         Children.Clear();
         ChildrenLoaded = false;
         LoadError      = null;
@@ -120,17 +127,44 @@ public record SiloNode
 
     private async Task LoadCoreAsync(CancellationToken cancel)
     {
+        // listed in the Tasks pane only when it takes a while (or fails): expanding a folder is mostly over in a blink
+        var task = TaskCenter.BeginDeferred($"{(_reloading ? "Reloading" : "Loading")} {Text ?? "node"}", "Explorer");
+        _reloading = false;
         try
         {
             var loaded = await ChildLoader!(cancel);
-            foreach (var child in loaded)
-                Children.Add(child);
+
+            // a big list is put in the tree in pieces, so the window stays alive and the task (shown from the first piece) says how far it is
+            var dispatcher = Application.Current?.Dispatcher;
+            bool pieces    = loaded.Count > ChunkSize && dispatcher is not null && dispatcher.CheckAccess();
+            if (pieces) TaskCenter.Queue(task);
+
+            for (int i = 0; i < loaded.Count; i++)
+            {
+                Children.Add(loaded[i]);
+                if (!pieces || (i + 1) % ChunkSize != 0 || i + 1 == loaded.Count) continue;
+
+                task.Report($"Adding items ({i + 1:N0} of {loaded.Count:N0})", i + 1);
+                cancel.ThrowIfCancellationRequested();
+                await Dispatcher.Yield(DispatcherPriority.Background);
+            }
+
             ChildrenLoaded = true;
             ChildrenLoadedChanged?.Invoke(this, EventArgs.Empty);
+
+            // the Explorer rebuilds its tree from this after the event; the task stays running until it has drawn it
+            if (pieces)
+            {
+                task.Report("Drawing the tree", loaded.Count);
+                await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
+            }
+
+            task.Succeed(null, loaded.Count);
         }
         catch (OperationCanceledException)
         {
             // cancelled: leave it unloaded so a later expansion tries again
+            task.MarkCancelled();
         }
         catch (Exception ex)
         {
@@ -138,6 +172,7 @@ public record SiloNode
             ChildrenLoaded = true;
             Log.Warning(ex, "Loading the children of {Node} failed", Text);
             Children.Add(new SiloNode(ex.Message, ex.Message, null, null, null));
+            task.Fail(ex);
         }
         finally
         {

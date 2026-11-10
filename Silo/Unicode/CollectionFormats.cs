@@ -12,7 +12,7 @@ namespace Silo.Unicode;
 /// </summary>
 /// <param name="CodePoint">The code point.</param>
 /// <param name="Label">The person's own name for it; null or empty when it has none.</param>
-public sealed record CollectedCharacter(CodePoint CodePoint, string? Label = null);
+public sealed record CollectedCharacter(CodePoint CodePoint, string? Label = null, string? Group = null);
 
 /// <summary>The file formats the tray can be saved in and loaded from.</summary>
 public enum CollectionFormat

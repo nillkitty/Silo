@@ -1,4 +1,4 @@
-﻿using System.Collections;
+using System.Collections;
 using System.Globalization;
 using System.Text.RegularExpressions;
 
@@ -98,7 +98,7 @@ public sealed partial class UnicodeDatabase
 
     /// <summary>The characters that match the query, as code points in tiers: names that equal the text, then whole-word matches, then the rest, each in code point order.</summary>
     /// <param name="query">What to look for.</param>
-    /// <param name="cancel">Stops a search that is no longer wanted (it throws <see cref="OperationCanceledException" />).</param>
+    /// <param name="cancel">Stops a search that is no longer wanted: it then returns no results at once (it does not throw, so a search that is replaced while the person types costs nothing), and the caller drops them.</param>
     public int[] Search(UnicodeQuery query, CancellationToken cancel = default)
     {
         var plan = new SearchPlan(this, query);
@@ -107,6 +107,14 @@ public sealed partial class UnicodeDatabase
         var seen   = new BitArray(CodePoint.MaxValue + 1);
         var tiers  = new List<int>[] { new(), new(), new() };
         int budget = 0;
+        bool stopped = false;
+
+        // checked now and then, not at every character; a stopped search is abandoned, not unwound by an exception
+        bool Stop(int mask)
+        {
+            if ((++budget & mask) == 0 && cancel.IsCancellationRequested) stopped = true;
+            return stopped;
+        }
 
         void Add(int tier, int cp)
         {
@@ -117,19 +125,23 @@ public sealed partial class UnicodeDatabase
 
         // explicit code points first
         foreach (var (lo, hi) in plan.CodeRanges)
+        {
             AddRange(lo, hi, 0, null);
+            if (stopped) return [];
+        }
 
         if (plan.Words.Count > 0 || plan.CodeRanges.Count == 0)
         {
             foreach (var r in _records)
             {
-                if ((++budget & 0x3FF) == 0) cancel.ThrowIfCancellationRequested();
+                if (Stop(0x3FF)) return [];
                 if (!plan.PassesRecord(r)) continue;
 
                 int tier = plan.Words.Count == 0 ? 1 : plan.WordTier(this, r);
                 if (tier < 0) continue;
 
                 AddRange(r.Start, r.End, tier, r);
+                if (stopped) return [];
             }
         }
 
@@ -137,7 +149,7 @@ public sealed partial class UnicodeDatabase
             foreach (var (lo, hi) in plan.ClipRanges)
                 for (int cp = lo; cp <= hi; cp++)
                 {
-                    if ((++budget & 0x3FFF) == 0) cancel.ThrowIfCancellationRequested();
+                    if (Stop(0x3FFF)) return [];
                     if (FindRecord(cp) is null && plan.PassesGap()) Add(2, cp);
                 }
 
@@ -163,7 +175,7 @@ public sealed partial class UnicodeDatabase
             foreach (var (clipLo, clipHi) in plan.ClipTo(lo, hi))
                 for (int cp = clipLo; cp <= clipHi; cp++)
                 {
-                    if ((++budget & 0x3FFF) == 0) cancel.ThrowIfCancellationRequested();
+                    if (Stop(0x3FFF)) return;
 
                     var r = known ?? FindRecord(cp);
                     if (r is null)

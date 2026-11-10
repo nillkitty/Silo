@@ -53,6 +53,12 @@ public static class TypeIcons
         ("Text", "Literal")
     ];
 
+    /// <summary>Declares every name rule as an <see cref="IconRole" /> so the Icon Editor lists them.</summary>
+    internal static void DeclareRoles()
+    {
+        foreach (var (fragment, key) in NameRules) IconRoles.Type(fragment, key);
+    }
+
     /// <summary>The words of a PascalCase name: runs of capitals (an acronym), then capitalised words, then digits.</summary>
     private static readonly Regex Words = new(@"[A-Z]+(?![a-z])|[A-Z]?[a-z]+|\d+", RegexOptions.Compiled);
 
@@ -116,7 +122,7 @@ public static class TypeIcons
             var words = Words.Matches(name).Select(m => m.Value).ToList();
             foreach (var (fragment, key) in NameRules)
                 if (words.Any(w => w.StartsWith(fragment, StringComparison.OrdinalIgnoreCase)))
-                    return key;
+                    return IconRoles.Type(fragment, key);
         }
 
         // WPF controls by family

@@ -123,7 +123,11 @@ public record RefreshFileCommand(FileModel Model, bool Contents)
     : FileCommand(Model, Contents ? "_Refresh Contents" : "_Refresh Metadata", null,
                   Contents ? "Reads the folder's contents again" : "Reads the item's details again", "Refresh")
 {
-    protected override Task OnExecute(object? parameter) => Target(parameter).RefreshAsync();
+    protected override Task OnExecute(object? parameter)
+    {
+        var f = Target(parameter);
+        return Silo.Tasks.FileTasks.RunAsync($"{(Contents ? "Reloading the contents of" : "Reloading the details of")} {f.Path}", "File system", _ => f.RefreshAsync());
+    }
 }
 
 /// <summary>Open External Terminal Here: a terminal window (Windows Terminal if it is installed, else a command prompt) in the folder.</summary>

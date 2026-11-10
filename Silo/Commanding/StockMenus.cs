@@ -34,6 +34,7 @@ public static class StockMenus
         MenuCommands.AddEntries(MenuGroups.DiagramList, DiagramEntries);
         MenuCommands.AddEntries(MenuGroups.LabsList, LabEntries);
         MenuCommands.AddEntries(MenuGroups.ToolsList, ToolEntries);
+        MenuCommands.AddEntries(MenuGroups.DiagramTools, DiagramToolEntries);
     }
 
     /// <summary>The commands that never change.</summary>
@@ -117,10 +118,17 @@ public static class StockMenus
         yield return ProvidedCommand.From("tools.break", "Break Debugger", Debugger.Break, null, () => Debugger.IsAttached, null, null, CommandPlacement.Menu, MenuGroups.ToolsMgmt);
     }
 
-    private static IEnumerable<Control> ToolEntries(MenuContext ctx)
+    /// <summary>The tools that are about diagrams: they are listed in the Diagram menu, not the Tools menu.</summary>
+    private static bool IsDiagramTool(ITool tool) => tool is DrawioCanvasTool or ConnectionDiagramTool;
+
+    private static IEnumerable<Control> ToolEntries(MenuContext ctx) => ToolItems(ctx, diagrams: false);
+
+    private static IEnumerable<Control> DiagramToolEntries(MenuContext ctx) => ToolItems(ctx, diagrams: true);
+
+    private static IEnumerable<Control> ToolItems(MenuContext ctx, bool diagrams)
     {
         string? group = null;
-        foreach (var tool in ToolbarCatalog.AllTools().Where(t => t.IsVisible))
+        foreach (var tool in ToolbarCatalog.AllTools().Where(t => t.IsVisible && IsDiagramTool(t) == diagrams))
         {
             if (group is not null && !string.Equals(group, tool.GroupName, StringComparison.Ordinal)) yield return new Separator();
             group = tool.GroupName;
@@ -204,7 +212,7 @@ public static class StockMenus
             var item = new MenuItem { Header = "Open " + l.Name.Replace("_", "__"), ToolTip = l.Description };
 
             // always set, even to nothing: inside the menu bar an implicit style would otherwise read an icon off the command
-            item.Icon  =  ToolbarIcons.Find(l.IconKey) is { } geometry ? new AppIcon { Icon = geometry, Size = 16 } : null;
+            item.Icon  =  LabWindowIcon.Badge(l) is { } badge ? badge : ToolbarIcons.Find(l.IconKey) is { } geometry ? new AppIcon { Icon = geometry, Size = 16 } : null;
             item.Click += (_, _) => LabHost.Open(l);
             yield return item;
         }

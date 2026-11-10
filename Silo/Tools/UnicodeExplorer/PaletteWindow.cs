@@ -270,7 +270,67 @@ internal sealed class PaletteWindow : Window
         var page   = _palette.Page();
         var colors = _palette.ShowColors ? _service.Colors() : default;
         _panel.Children.Clear();
-        for (int i = 0; i < page.CodePoints.Count; i++)
+
+        // groups: a header line over each run of characters in the same group (none when nothing is grouped); a folded group shows only its header
+        bool grouped = GlyphGroups.Any(page.CodePoints.Count, i => page.GroupOf(page.CodePoints[i]));
+        foreach (var run in GlyphGroups.Runs(page.CodePoints.Count, i => page.GroupOf(page.CodePoints[i])))
+        {
+            string key       = run.Name ?? string.Empty;
+            bool   collapsed = grouped && page.Collapsed.Contains(key);
+            if (grouped)
+                _panel.Children.Add(GroupHeaders.Create(_scroll, run.Name ?? "Ungrouped", run.Count, collapsed, run.Start, () => _service.ToggleGroup(_palette, key), () => GroupMenu(run.Name)));
+
+            if (collapsed) continue;
+
+            for (int i = run.Start; i < run.Start + run.Count; i++) AddTile(page, i, colors);
+        }
+
+        _hint.Visibility = page.CodePoints.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    /// <summary>The right-click menu of a group's header (null: the characters that are in no group).</summary>
+    private IEnumerable<Control> GroupMenu(string? group)
+    {
+        bool editable = !_palette.TilesAreLocked();
+        if (group is not null)
+        {
+            yield return UiKit.Item("Rename Group…", () => _service.RenameGroup(_palette, group, this), editable);
+            yield return UiKit.Item("Ungroup (keep the characters)", () => _service.Ungroup(_palette, group), editable);
+            yield return UiKit.Rule();
+        }
+
+        yield return UiKit.Item("Fold All Groups", () => _service.SetAllGroupsFolded(_palette, true));
+        yield return UiKit.Item("Unfold All Groups", () => _service.SetAllGroupsFolded(_palette, false));
+    }
+
+    /// <summary>The "Group" submenu of a tile: a new group, or one of the page's groups, or none.</summary>
+    private MenuItem GroupItems(int codePoint)
+    {
+        var page     = _palette.Page();
+        bool editable = !_palette.TilesAreLocked();
+        var item     = new MenuItem { Header = "Group", IsEnabled = editable };
+        item.Items.Add(UiKit.Item("New Group…", () =>
+                                                {
+                                                    string? name = PromptDialog.Ask("New group", "A name for the new group:", "Group", string.Empty);
+                                                    if (GlyphGroups.Clean(name) is { } clean) _service.Group(_palette, codePoint, clean);
+                                                }));
+        foreach (string name in GlyphGroups.Names(page.CodePoints.Count, i => page.GroupOf(page.CodePoints[i])))
+        {
+            string captured = name;
+            item.Items.Add(new MenuItem { Header = name.Replace("_", "__"), IsChecked = page.GroupOf(codePoint) == name, Command = new PickPage(() => _service.Group(_palette, codePoint, captured)) });
+        }
+
+        if (page.GroupOf(codePoint) is not null)
+        {
+            item.Items.Add(UiKit.Rule());
+            item.Items.Add(UiKit.Item("Remove from Group", () => _service.Group(_palette, codePoint, null)));
+        }
+
+        return item;
+    }
+
+    private void AddTile(PalettePage page, int i, (Func<int, Color?> ColorOf, ColorMode Mode) colors)
+    {
         {
             int    index = i;
             int    value = page.CodePoints[i];
@@ -306,13 +366,13 @@ internal sealed class PaletteWindow : Window
                                        {
                                            cell.ContextMenu!.Items.Clear();
                                            cell.ContextMenu.Items.Add(UiKit.Item($"Remove {new CodePoint(value).Hex}", () => _service.Remove(_palette, value), !_palette.TilesAreLocked()));
+                                           cell.ContextMenu.Items.Add(GroupItems(value));
                                            cell.ContextMenu.Items.Add(UiKit.Rule());
                                            FillCommon(cell.ContextMenu);
                                        };
+            GlyphDrag.SetIndex(cell, index);
             _panel.Children.Add(cell);
         }
-
-        _hint.Visibility = page.CodePoints.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
     }
 
     /// <summary>The tab strip: shown when the palette has more than one page; a click shows a page, a drag (when tabs are not locked) moves it.</summary>
@@ -410,7 +470,7 @@ internal sealed class PaletteWindow : Window
         else
         {
             e.Effects = ReferenceEquals(payload.Source, _palette.Page()) ? DragDropEffects.Move : DragDropEffects.Copy;
-            GlyphDrag.Mark(_panel, GlyphDrag.DropIndex(_panel, e.GetPosition(_panel)));
+            GlyphDrag.Mark(_panel, GlyphDrag.DropIndex(_panel, e.GetPosition(_panel), _palette.Page().CodePoints.Count));
         }
 
         e.Handled = true;
@@ -423,15 +483,20 @@ internal sealed class PaletteWindow : Window
         e.Handled = true;
         if (GlyphDrag.Read(e.Data) is not { } payload || _palette.TilesAreLocked()) return;
 
-        int at = GlyphDrag.DropIndex(_panel, e.GetPosition(_panel));
-        if (ReferenceEquals(payload.Source, _palette.Page()))
+        var page = _palette.Page();
+        var spot = GlyphDrag.Spot(_panel, e.GetPosition(_panel), page.CodePoints.Count);
+        int at   = spot.Index;
+
+        // what is dropped joins the group it lands in
+        string? group = spot.GroupFrom >= 0 && spot.GroupFrom < page.CodePoints.Count ? page.GroupOf(page.CodePoints[spot.GroupFrom]) : null;
+        if (ReferenceEquals(payload.Source, page))
         {
-            _service.MoveTiles(_palette, payload.Indexes, at);
+            _service.MoveTiles(_palette, payload.Indexes, at, group);
             e.Effects = DragDropEffects.Move;
         }
         else
         {
-            _service.Insert(_palette, payload.CodePoints, at);
+            _service.Insert(_palette, payload.CodePoints, at, group);
             e.Effects = DragDropEffects.Copy;
         }
     }
