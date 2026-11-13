@@ -1,7 +1,10 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using Newtonsoft.Json.Linq;
+using Silo.Actions;
 using Silo.Connectors.Web.Mcp;
+using Silo.Hosting;
 
 namespace Silo.Cli;
 
@@ -21,8 +24,61 @@ internal static class SiloCli
         {
             ["help"]    = ("Show this help.", _ => Help()),
             ["version"] = ("Show the Silo version.", _ => Version()),
-            ["mcp"]     = ("Relay an AI tool's MCP session (standard input/output) to the running Silo.", McpBridge.Run)
+            ["mcp"]     = ("Relay an AI tool's MCP session (standard input/output) to the running Silo.", McpBridge.Run),
+            ["action"]  = ("Run a registered action in the running Silo: action <name> [arg=value ...]; action --list.", RunAction)
         };
+
+    /// <summary>
+    ///     <c>silo action &lt;name&gt; [arg=value ...]</c>: asks the stock instance to run the action and prints what it returns.
+    ///     <c>silo action --list</c> shows the actions it will accept.
+    /// </summary>
+    private static int RunAction(string[] args)
+    {
+        if (args.Length == 0)
+        {
+            Console.Error.WriteLine("Usage: silo action <name> [arg=value ...]   |   silo action --list");
+            return 2;
+        }
+
+        string request;
+        if (args[0] is "--list" or "-l")
+            request = ActionProtocol.ListVerb;
+        else
+        {
+            var values = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+            foreach (var arg in args[1..])
+            {
+                var eq = arg.IndexOf('=');
+                if (eq <= 0)
+                {
+                    Console.Error.WriteLine($"silo: '{arg}' is not name=value.");
+                    return 2;
+                }
+
+                values[arg[..eq]] = arg[(eq + 1)..];
+            }
+
+            request = ActionProtocol.BuildRequest(args[0], values);
+        }
+
+        var reply = SingleInstance.SendAction(request);
+        if (reply is null)
+        {
+            Console.Error.WriteLine("silo: Silo is not running (start it first), or it did not answer.");
+            return 1;
+        }
+
+        var json = JObject.Parse(reply);
+        if (json["ok"]?.Value<bool>() != true)
+        {
+            Console.Error.WriteLine("silo: " + json["error"]);
+            return 1;
+        }
+
+        if (json["result"] is { Type: not JTokenType.Null } result)
+            Console.WriteLine(result is JValue v ? v.ToString(System.Globalization.CultureInfo.InvariantCulture) : result.ToString());
+        return 0;
+    }
 
     public static int Run(string[] args)
     {

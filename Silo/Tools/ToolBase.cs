@@ -1,4 +1,4 @@
-using System.ComponentModel;
+﻿using System.ComponentModel;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Windows.Input;
@@ -29,6 +29,9 @@ public abstract class ToolBase : ITool, ICommand, INotifyPropertyChanged
     ///     data binding only sees members declared on the concrete runtime type.
     /// </summary>
     public string Header => DisplayName ?? Name;
+
+    /// <summary>The name for a window or pane title: <see cref="Header" /> without its access-key underscores ("__" stays one "_").</summary>
+    public string WindowTitle => Header.Replace("__", "\0").Replace("_", "").Replace("\0", "_");
 
     public IconRef? Icon { get; set; }
 
@@ -154,7 +157,7 @@ public abstract class ToolBase : ITool, ICommand, INotifyPropertyChanged
         {
             _window = new Window
                       {
-                          Title   = DisplayName ?? Name,
+                          Title   = WindowTitle,
                           Content = ctrl
                       };
 
@@ -177,7 +180,7 @@ public abstract class ToolBase : ITool, ICommand, INotifyPropertyChanged
     {
         var pane = new LayoutAnchorable
                {
-                   Title          = DisplayName,
+                   Title          = WindowTitle,
                    ContentId      = "tool:" + Name,
                    Content        = content.Required(),
                    CanFloat       = true,

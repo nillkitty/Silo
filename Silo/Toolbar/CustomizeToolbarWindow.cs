@@ -419,15 +419,10 @@ internal sealed class IconPickerWindow : Window
             var geometry = ToolbarIcons.Find(key);
             if (geometry is null) continue;
 
-            var button = new ToggleButton
-                         {
-                             Content   = new AppIcon { Icon = geometry, Size = 22 },
-                             Width     = 38,
-                             Height    = 38,
-                             Margin    = new Thickness(2),
-                             ToolTip   = key,
-                             IsChecked = key == SelectedKey
-                         };
+            // sized by the zoom, with no button padding to squeeze the icon (a padded 38px tile cut 22px icons off)
+            var button = Ui.Controls.IconZoom.Tile(new AppIcon { Icon = geometry });
+            button.ToolTip   = key;
+            button.IsChecked = key == SelectedKey;
             string k = key;
             button.Click += (_, _) =>
                             {
@@ -482,7 +477,11 @@ internal sealed class IconPickerWindow : Window
         bottom.Children.Add(_name);
         root.Children.Add(bottom);
 
-        root.Children.Add(new ScrollViewer { Content = _panel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto });
+        var scroll = new ScrollViewer { Content = _panel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
+        var zoom   = Ui.Controls.IconZoom.Bar(scroll);
+        DockPanel.SetDock(zoom, Dock.Bottom);
+        root.Children.Add(zoom);
+        root.Children.Add(scroll);
         Content = root;
 
         _filter.TextChanged += (_, _) => Fill();

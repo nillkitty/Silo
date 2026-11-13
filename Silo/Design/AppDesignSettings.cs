@@ -69,6 +69,37 @@ public sealed class AppDesignSettings : INotifyPropertyChanged
         }
     } = 16;
 
+    /// <summary>
+    ///     The size of the icons in the icon grids (the Icon Editor, Change Icon...): their zoom. The tiles grow with the icon,
+    ///     so an icon always has room.
+    /// </summary>
+    public double PickerIconSize
+    {
+        get;
+        set
+        {
+            double clamped = Math.Clamp(value, 12, 96);
+            if (Math.Abs(field - clamped) < 0.01) return;
+            field = clamped;
+            _save();
+            OnPropertyChanged();
+        }
+    } = 24;
+
+    /// <summary>The Explorer's view (see <c>ExplorerViewPresets</c>): "grouped" or "flat".</summary>
+    public string ExplorerViewId
+    {
+        get;
+        set
+        {
+            string id = string.IsNullOrWhiteSpace(value) ? "grouped" : value;
+            if (field == id) return;
+            field = id;
+            _save();
+            OnPropertyChanged();
+        }
+    } = "grouped";
+
     public static void Apply()
     {
         try
@@ -78,6 +109,8 @@ public sealed class AppDesignSettings : INotifyPropertyChanged
             {
                 if (snapshot.IconSize is { } iconSize) Instance.IconSize = iconSize;
                 if (snapshot.ExplorerIconSize is { } explorerIconSize) Instance.ExplorerIconSize = explorerIconSize;
+                if (snapshot.PickerIconSize is { } pickerIconSize) Instance.PickerIconSize = pickerIconSize;
+                if (snapshot.ExplorerViewId is { } viewId) Instance.ExplorerViewId = viewId;
             }
         }
         catch
@@ -91,7 +124,7 @@ public sealed class AppDesignSettings : INotifyPropertyChanged
         try
         {
             Directory.CreateDirectory(Path.GetDirectoryName(SettingsFile)!);
-            File.WriteAllText(SettingsFile, JsonSerializer.Serialize(new Snapshot { IconSize = IconSize, ExplorerIconSize = ExplorerIconSize }));
+            File.WriteAllText(SettingsFile, JsonSerializer.Serialize(new Snapshot { IconSize = IconSize, ExplorerIconSize = ExplorerIconSize, PickerIconSize = PickerIconSize, ExplorerViewId = ExplorerViewId }));
         }
         catch
         {
@@ -109,5 +142,9 @@ public sealed class AppDesignSettings : INotifyPropertyChanged
         public double? IconSize { get; set; }
 
         public double? ExplorerIconSize { get; set; }
+
+        public double? PickerIconSize { get; set; }
+
+        public string? ExplorerViewId { get; set; }
     }
 }

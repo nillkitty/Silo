@@ -1,4 +1,4 @@
-﻿using System.Windows.Automation;
+using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
@@ -67,80 +67,179 @@ internal sealed class EqualColumnPanel : Panel
 
 /// <summary>
 ///     Names the icon a button gets when its caller gave none, from the words on it, so every button in the Labs carries
-///     an icon and its text
-///     (never one without the other).
+///     an icon and its text (never one without the other). Each concept has alternates, most fitting first: where two
+///     different actions would share an icon, <see cref="LabIconScope" /> gives the second one the next alternate.
 /// </summary>
-internal static class LabIcons
+public static class LabIcons
 {
-    private static readonly (string[] Words, string Icon)[] Map =
+    /// <summary>Whole phrases, looked for anywhere in the text before the single words: they say more than their verb.</summary>
+    private static readonly (string Phrase, string[] Icons)[] Phrases =
     [
-        (["new", "add", "insert", "create", "plus"], "Plus"),
-        (["open", "load", "import"], "TbOpen"),
-        (["save as"], "TbSaveAs"),
-        (["save", "keep", "store"], "TbSave"),
-        (["copy", "duplicate", "clone"], "TbCopy"),
-        (["cut"], "TbCut"),
-        (["paste"], "TbPaste"),
-        (["delete", "remove", "discard", "drop"], "TbDelete"),
-        (["clear", "reset", "empty"], "Clear"),
-        (["undo", "back"], "Undo"),
-        (["redo", "forward"], "TbRedo"),
-        (["run all", "test all", "all tests"], "RunAll"),
-        (["failing"], "RunFailing"),
-        (["run", "play", "start", "go", "apply", "execute", "try"], "Run"),
-        (["stop", "cancel", "halt"], "Stop"),
-        (["pause"], "Pause"),
-        (["record", "capture"], "Record"),
-        (["build"], "Build"),
-        (["compile"], "Compile"),
-        (["export", "download", "write", "send", "generate", "render"],
-         "TbExport"),
-        (["find", "search", "next", "previous", "locate", "match"], "Search"),
-        (["refresh", "reload", "sync", "update", "rescan"], "Refresh"),
-        (["check", "validate", "verify", "ok", "accept", "approve"], "Check"),
-        (["settings", "options", "preferences", "configure"], "Sliders"),
-        (["template", "built in", "library", "example", "sample"],
-         "Template"),
-        (["up", "earlier", "raise"], "ArrowUp"),
-        (["down", "later", "lower"], "ArrowDown"),
-        (["indent", "into"], "Indent"),
-        (["outdent", "out of"], "Outdent"),
-        (["separator", "line"], "Separator"),
-        (["submenu", "sub"], "Submenu"),
-        (["select all", "all"], "TbSelectAll"),
-        (["help", "explain", "about", "what"], "TbHelp"),
-        (["link", "join", "connect"], "Link"),
-        (["promote"], "TbExport"),
-        (["revert"], "Undo"),
-        (["inherits", "inherit"], "HierarchyStructure"),
-        (["includes", "include"], "Puzzle"),
-        (["show"], "Layers"),
-        (["lock", "protect"], "Lock"),
-        (["hide", "close"], "Hide"),
-        (["rename", "edit", "change", "set"], "Property")
+        ("copy as json", ["Code", "Icon043Clipboard"]),
+        ("copy as c#", ["Coding", "Icon097Clipboard"]),
+        ("copy as csharp", ["Coding", "Icon097Clipboard"]),
+        ("copy as xml", ["Icon029Xml", "Icon115Clipboard"]),
+        ("copy as yaml", ["SourceCode", "Icon115Clipboard"]),
+        ("copy as", ["Icon043Clipboard", "Icon097Clipboard", "Icon115Clipboard", "Icon005Clipboard"]),
+        ("run to rest", ["PlayButton1", "RunAll", "Icon091PlayCircle"]),
+        ("run to end", ["PlayButton1", "RunAll", "Icon091PlayCircle"]),
+        ("reset run", ["Restore", "History", "Icon034FolderRestore"]),
+        ("initial", ["Icon020Flag", "Icon003Target", "Icon016Target"]),
+        ("any transition", ["Icon224Workflow", "Icon223FlowChart", "Icon100FlowChart"]),
+        ("transition", ["Icon223FlowChart", "Icon100FlowChart", "Icon224Workflow"]),
+        ("delete saved", ["Icon026TrashFolder", "Icon031Delete", "Icon032Delete"]),
+        ("save as", ["TbSaveAs", "Icon023SaveFolder"]),
+        ("new window", ["TbNew", "AddFile"]),
+        ("step", ["Icon092PlayPause", "Icon090Play", "Icon089Play"])
     ];
 
-    /// <summary>The key of an icon that fits the text on a button.</summary>
+    private static readonly (string[] Words, string[] Icons)[] Map =
+    [
+        (["new", "add", "insert", "create", "plus"], ["Plus", "Add", "Add1", "Add2", "Icon094Plus", "Icon097PlusSmall", "AddFile"]),
+        (["open", "load", "import"], ["TbOpen", "TbImport", "TaskImport", "Download"]),
+        (["save", "keep", "store"], ["TbSave", "Icon008Save", "Icon103Save", "Icon023SaveFolder"]),
+        (["copy", "duplicate", "clone"], ["TbCopy", "Icon005Clipboard", "Icon043Clipboard", "Icon097Clipboard", "Icon115Clipboard"]),
+        (["cut"], ["TbCut"]),
+        (["paste"], ["TbPaste", "Icon010Paste", "TbPasteTable"]),
+        (["delete", "remove", "discard", "drop"], ["TbDelete", "Icon001Trash", "Icon031Delete", "Icon032Delete", "Icon050Delete", "Icon055Delete1", "Remove", "Icon048Remove", "Icon049Remove"]),
+        (["clear", "reset", "empty"], ["Clear", "Restore", "History", "Icon034FolderRestore"]),
+        (["undo", "back", "revert"], ["Undo", "Restore", "History"]),
+        (["redo", "forward"], ["TbRedo"]),
+        (["run all", "test all", "all tests"], ["RunAll", "PlayButton1"]),
+        (["failing"], ["RunFailing"]),
+        (["run", "play", "start", "go", "apply", "execute", "try"], ["Run", "Play", "PlayButton", "Icon089Play", "Icon090Play", "Icon091PlayCircle", "PlayButton2"]),
+        (["stop", "cancel", "halt"], ["Stop", "Stop1", "CrawlStop"]),
+        (["pause"], ["Pause", "Icon012Pause", "Icon013PauseCircle"]),
+        (["record", "capture"], ["Record", "Record1", "Record2", "Icon190Record"]),
+        (["build"], ["Build"]),
+        (["compile"], ["Compile"]),
+        (["export", "download", "write", "send", "generate", "render", "promote"], ["TbExport", "Icon021Export", "Upload", "Icon027Upload"]),
+        (["find", "search", "next", "previous", "locate", "match"], ["Search", "Icon015Filter", "Icon024Filter", "Icon253Filter"]),
+        (["refresh", "reload", "sync", "update", "rescan"], ["Refresh", "Refresh1", "Icon033Refresh", "Icon046Refresh", "Icon108Refresh", "Sync", "Icon009Sync"]),
+        (["check", "validate", "verify", "ok", "accept", "approve"], ["Check", "Checklist", "Icon101Checking", "Icon097Availability"]),
+        (["settings", "options", "preferences", "configure"], ["Sliders", "Settings"]),
+        (["template", "built in", "library", "example", "sample"], ["Template"]),
+        (["up", "earlier", "raise"], ["ArrowUp"]),
+        (["down", "later", "lower"], ["ArrowDown"]),
+        (["indent", "into"], ["Indent"]),
+        (["outdent", "out of"], ["Outdent"]),
+        (["separator", "line"], ["Separator"]),
+        (["submenu", "sub"], ["Submenu"]),
+        (["select all", "all"], ["TbSelectAll"]),
+        (["help", "explain", "about", "what"], ["TbHelp"]),
+        (["link", "join", "connect", "connecting"], ["Link", "Link1", "Icon047Connect", "Icon081Connect1", "Icon160Connector"]),
+        (["inherits", "inherit"], ["HierarchyStructure"]),
+        (["includes", "include"], ["Puzzle"]),
+        (["show"], ["Layers"]),
+        (["lock", "protect"], ["Lock"]),
+        (["hide", "close"], ["Hide", "TbCloseSilo"]),
+        (["rename", "edit", "change", "set"], ["Property"])
+    ];
+
+    /// <summary>Icons with no particular meaning, for an action nothing above fits once the fitting ones are taken.</summary>
+    private static readonly string[] Spare =
+    [
+        "Command", "Icon100Bolt", "Icon089Lightning", "Icon035MagicTool", "Icon003Target", "Icon016Target", "Icon010Pin", "Icon017Pin",
+        "Icon035Pin", "Icon017Merge", "Icon211Exchange", "Icon021Stopwatch", "Icon029Testing", "Flask", "DataStructure", "Data"
+    ];
+
+    /// <summary>The text as it is matched: no access-key marks or ellipses, lower case.</summary>
+    public static string Normalize(string? text)
+    {
+        return (text ?? string.Empty).Replace("_", string.Empty)
+                                     .Replace("&", string.Empty)
+                                     .Replace("ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦", string.Empty)
+                                     .Replace("...", string.Empty)
+                                     .Replace("ÃƒÂ¢Ã¢â‚¬â€œÃ‚Â¾", string.Empty)
+                                     .Replace(".", string.Empty)
+                                     .Trim()
+                                     .ToLowerInvariant();
+    }
+
+    private static bool Has(string t, string word)
+    {
+        return t == word || t.StartsWith(word + " ", StringComparison.Ordinal) || t.EndsWith(" " + word, StringComparison.Ordinal) ||
+               t.Contains(" " + word + " ", StringComparison.Ordinal) || (word.Contains(' ') && t.Contains(word, StringComparison.Ordinal));
+    }
+
+    /// <summary>The key of the icon that fits the text on a button best.</summary>
     public static string For(string? text)
     {
-        string t = (text ?? string.Empty).Replace("_", string.Empty)
-                                         .Replace("&", string.Empty)
-                                         .Replace("…", string.Empty)
-                                         .Replace(".", string.Empty)
-                                         .Trim()
-                                         .ToLowerInvariant();
-        foreach (var (words, icon) in Map)
+        return Candidates(text, null).FirstOrDefault(k => ToolbarIcons.Find(k) is not null) ?? "Command";
+    }
+
+    /// <summary>
+    ///     The icons for an action, best first: the one its author gave (<paramref name="preferred" />), those of the phrases in
+    ///     its text, those of its words (the first word that fits leads), then spare ones. Keys that may not exist are included:
+    ///     the caller skips them.
+    /// </summary>
+    public static IEnumerable<string> Candidates(string? text, string? preferred)
+    {
+        if (!string.IsNullOrEmpty(preferred)) yield return preferred;
+
+        string t = Normalize(text);
+        foreach (var (phrase, icons) in Phrases)
+            if (t.Contains(phrase, StringComparison.Ordinal))
+                foreach (string icon in icons)
+                    yield return icon;
+
+        // the words in the order they come in the text: "Delete Selected" is about deleting first
+        var matches = new List<(int At, string[] Icons)>();
+        foreach (var (words, icons) in Map)
         {
-            foreach (string word in words)
-                if (t == word || t.StartsWith(word + " ", StringComparison.Ordinal) || t.EndsWith(" " + word, StringComparison.Ordinal) ||
-                    (word.Contains(' ') && t.Contains(word, StringComparison.Ordinal)))
-                    return icon;
+            int at = words.Where(w => Has(t, w)).Select(w => t.IndexOf(w, StringComparison.Ordinal)).DefaultIfEmpty(-1).Min();
+            if (at >= 0) matches.Add((at, icons));
         }
 
-        return "Command";
+        foreach (var (_, icons) in matches.OrderBy(m => m.At))
+        foreach (string icon in icons)
+            yield return icon;
+
+        foreach (string icon in Spare) yield return icon;
     }
 }
 
+/// <summary>
+///     Hands out the icons of one Lab window's buttons -- its menus, command bar, toolbar and panes -- so no two different
+///     actions there share an icon, and the same action (by its text) has the same icon everywhere in the window. The first
+///     action to ask for an icon keeps it; another that would have had it gets its next alternate (see
+///     <see cref="LabIcons.Candidates" />), and when every fitting one is taken, the next unused icon of the app's set.
+/// </summary>
+public sealed class LabIconScope
+{
+    private readonly Dictionary<string, string> _byAction = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, string> _byIcon   = new(StringComparer.OrdinalIgnoreCase);
+    private          List<string>?              _all;
+
+    /// <summary>The icon for the action with this text; <paramref name="preferred" /> is the one its author gave, if any.</summary>
+    public string For(string? text, string? preferred = null)
+    {
+        string action = LabIcons.Normalize(text);
+        if (action.Length == 0) return preferred ?? LabIcons.For(text);
+        if (_byAction.TryGetValue(action, out string? kept)) return kept;
+
+        foreach (string candidate in LabIcons.Candidates(text, preferred).Concat(_all ??= Toolbar.IconPickerWindow.IconKeys().ToList()))
+        {
+            if (_byIcon.ContainsKey(candidate) || ToolbarIcons.Find(candidate) is null) continue;
+
+            _byAction[action]  = candidate;
+            _byIcon[candidate] = action;
+            return candidate;
+        }
+
+        return preferred ?? LabIcons.For(text);
+    }
+
+    /// <summary>The scope of the Lab window an element is in (a floating pane counts as its owner's); null outside the Labs.</summary>
+    public static LabIconScope? Of(DependencyObject element)
+    {
+        for (var window = Window.GetWindow(element); window is not null; window = window.Owner)
+            if (window is LabWindow lab)
+                return lab.Icons;
+
+        return null;
+    }
+}
 internal static partial class LabUi
 {
     /// <summary>An icon of the app's icon set, drawn in the inherited foreground color; null when there is no such icon.</summary>
@@ -157,7 +256,8 @@ internal static partial class LabUi
     public static Button Tool(string text, string? icon, Action click, string? tip = null, bool enabled = true)
     {
         var content = new StackPanel { Orientation = Orientation.Horizontal };
-        if (Icon(icon ?? LabIcons.For(text), 14) is { } glyph)
+        var glyph   = Icon(icon ?? LabIcons.For(text), 14);
+        if (glyph is not null)
         {
             glyph.Margin = new Thickness(0, 0, 5, 0);
             content.Children.Add(glyph);
@@ -170,6 +270,7 @@ internal static partial class LabUi
                          ToolTip = tip ?? text.Replace("_", string.Empty), IsEnabled = enabled
                      };
         button.Click += (_, _) => click();
+        if (glyph is not null) UseScopeIcon(button, glyph, text, icon);
         return button;
     }
 
@@ -183,7 +284,22 @@ internal static partial class LabUi
                      };
         AutomationProperties.SetName(button, tip);
         button.Click += (_, _) => click();
+        if (button.Content is AppIcon glyph) UseScopeIcon(button, glyph, tip, icon);
         return button;
+    }
+
+    /// <summary>
+    ///     Once the button is in a Lab window, its icon is the one the window's <see cref="LabIconScope" /> gives the action (so
+    ///     two different actions there never share one); outside the Labs it keeps the icon it was made with.
+    /// </summary>
+    internal static void UseScopeIcon(FrameworkElement button, AppIcon glyph, string action, string? preferred)
+    {
+        button.Loaded += (_, _) =>
+                         {
+                             if (LabIconScope.Of(button) is not { } scope) return;
+
+                             if (ToolbarIcons.Find(scope.For(action, preferred)) is { } geometry) glyph.Icon = geometry;
+                         };
     }
 
     /// <summary>Check boxes laid out in aligned columns.</summary>

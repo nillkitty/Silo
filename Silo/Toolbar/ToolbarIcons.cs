@@ -8,6 +8,8 @@ public static class ToolbarIcons
     /// <summary>The geometry resource with this key, or null (no such icon, or no key).</summary>
     public static Geometry? Find(string? key)
     {
-        return string.IsNullOrWhiteSpace(key) ? null : Application.Current?.TryFindResource(key) as Geometry;
+        if (string.IsNullOrWhiteSpace(key)) return null;
+
+        return Application.Current?.TryFindResource(key) as Geometry ?? Silo.Design.IconCatalog.Find(key)?.Geometry;
     }
 }

@@ -42,6 +42,10 @@ public sealed class ExplorerView : UserControl, IClipboardSurface
     private readonly DispatcherTimer                    _settleTimer;
     private readonly TextBlock                          _title;
     private readonly TreeView                           _tree;
+    private readonly ComboBox                           _viewPicker;
+    private          ExplorerViewPreset                 _view;
+    private          string?                            _builtViewId;
+    private readonly Dictionary<string, HashSet<string>> _expandedByView = new(StringComparer.Ordinal);
     private          (Point Start, ExplorerNode Node)?  _dragArm;
     private          bool                               _freshSelection;
     private          string?                            _lastSelectedKey;
@@ -263,7 +267,7 @@ public sealed class ExplorerView : UserControl, IClipboardSurface
         IReadOnlyList<ExplorerNode> built;
         try
         {
-            built = silo is null ? [] : ExplorerTree.Build(silo);
+            built = silo is null ? [] : _view.Arrange(ExplorerTree.Build(silo));
         }
         catch (Exception ex)
         {
@@ -286,13 +290,31 @@ public sealed class ExplorerView : UserControl, IClipboardSurface
             }
         }
 
-        string signature = string.Join("\n", built.SelectMany(r => r.Descendants()).Select(n => n.Key + "|" + n.Header + "|" + n.Stamp));
+        string signature = _view.Id + "\n" + string.Join("\n", built.SelectMany(r => r.Descendants()).Select(n => n.Key + "|" + n.Header + "|" + n.Stamp));
         if (!force && signature == _signature) return;
         _signature = signature;
 
-        var all      = _roots.SelectMany(r => r.Descendants()).ToList();
-        var before   = all.Select(n => n.Key).ToHashSet(StringComparer.Ordinal);
+        var all    = _roots.SelectMany(r => r.Descendants()).ToList();
+        var before = all.Select(n => n.Key).ToHashSet(StringComparer.Ordinal);
         var expanded = newSilo ? [] : all.Where(n => n.IsExpanded).Select(n => n.Key).ToHashSet();
+
+        // switching views: each view keeps what was expanded in it, and gets it back when it is chosen again
+        if (newSilo) _expandedByView.Clear();
+        if (!newSilo && _builtViewId is { } previous && previous != _view.Id)
+        {
+            _expandedByView[previous] = expanded;
+            if (_expandedByView.TryGetValue(_view.Id, out var kept))
+            {
+                expanded = kept;
+                before   = built.SelectMany(r => r.Descendants()).Select(n => n.Key).ToHashSet(StringComparer.Ordinal);
+            }
+            else
+            {
+                before = [];
+            }
+        }
+
+        _builtViewId = _view.Id;
         var selected = newSilo ? null : all.FirstOrDefault(n => n.IsSelected)?.Key;
         var restored = new List<NodeStateRecord>();
 
@@ -320,7 +342,8 @@ public sealed class ExplorerView : UserControl, IClipboardSurface
             _rebuilding = false;
         }
 
-        _title.Text      = silo is null ? "EXPLORER" : $"EXPLORER — {silo.Name ?? "Untitled"}";
+        _title.Text      = silo is null ? string.Empty : silo.Name ?? "Untitled";
+        _title.ToolTip   = silo is null ? null : $"{_view.Name} view of {silo.Name ?? "Untitled"}";
         _hint.Visibility = silo is null ? Visibility.Visible : Visibility.Collapsed;
         _tree.Visibility = silo is null ? Visibility.Collapsed : Visibility.Visible;
 
@@ -434,6 +457,9 @@ public sealed class ExplorerView : UserControl, IClipboardSurface
         if (silo is not { RememberExplorerTree: true } || silo.Data is not INodeStateStore store || silo.IsClosing ||
             !OpenSilo.OpenSilos.Contains(silo)) return;
 
+        // what the Silo remembers is the grouped tree; another view leaves out its folders, which would be forgotten
+        if (!ReferenceEquals(_view, ExplorerViewPresets.Grouped)) return;
+
         try
         {
             var pinned = (PinnedDocuments?.Invoke() ?? []).ToHashSet(StringComparer.Ordinal);
@@ -472,6 +498,7 @@ public sealed class ExplorerView : UserControl, IClipboardSurface
     private void Settle()
     {
         _settleTimer.Stop();
+        if (!ReferenceEquals(_view, ExplorerViewPresets.Grouped)) return; // another view leaves folders out: they did not go away
 
         var keep    = _roots.SelectMany(r => r.Descendants()).Where(n => n.Model is PendingConnection).Select(n => n.Key).ToList();
         int dropped = _remembered.DropUnmatched(keep);
@@ -640,13 +667,44 @@ public sealed class ExplorerView : UserControl, IClipboardSurface
 
     private void OnDragOver(object sender, DragEventArgs e)
     {
-        e.Effects = AppClipboard.DragEffect(e.Data, TargetsAt(e.OriginalSource), e.AllowedEffects,
-                                            (e.KeyStates & DragDropKeyStates.ControlKey) != 0);
+        var targets = TargetsAt(e.OriginalSource);
+        e.Effects = targets.Count == 0 && OpenableFiles(e.Data).Count > 0
+                        ? DragDropEffects.Copy
+                        : AppClipboard.DragEffect(e.Data, targets, e.AllowedEffects, (e.KeyStates & DragDropKeyStates.ControlKey) != 0);
         e.Handled = true;
+    }
+
+    /// <summary>
+    ///     The container files (zip, tar, ISO, cabinet) and data files (JSON, YAML, XML) dragged in from another program: dropped
+    ///     on the tree away from any node, each opens as a connection of the Silo.
+    /// </summary>
+    private static IReadOnlyList<string> OpenableFiles(IDataObject data)
+    {
+        try
+        {
+            // a drag of this app's own nodes is not looked at: their files may only be made (taken out of an archive) when dropped
+            if (!data.GetDataPresent(ClipboardFormats.SiloItems, false) && data.GetDataPresent(DataFormats.FileDrop) &&
+                data.GetData(DataFormats.FileDrop) is string[] files)
+                return files.Where(f => File.Exists(f) && Connectors.Containers.ContainerOpen.CanOpen(f)).ToList();
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "Reading the dropped files failed");
+        }
+
+        return [];
     }
 
     private void OnDrop(object sender, DragEventArgs e)
     {
+        if (TargetsAt(e.OriginalSource).Count == 0 && OpenableFiles(e.Data) is { Count: > 0 } openable)
+        {
+            foreach (var path in openable) Connectors.Containers.ContainerOpen.Open(path);
+            e.Effects = DragDropEffects.Copy;
+            e.Handled = true;
+            return;
+        }
+
         try
         {
             e.Effects = AppClipboard.Drop(e.Data, TargetsAt(e.OriginalSource), e.AllowedEffects,
@@ -670,11 +728,34 @@ public sealed class ExplorerView : UserControl, IClipboardSurface
     {
         _title = new TextBlock
                  {
-                     FontWeight   = FontWeights.SemiBold, Margin = new Thickness(8, 6, 8, 6),
+                     Margin = new Thickness(8, 6, 8, 6), VerticalAlignment = VerticalAlignment.Center,
                      TextTrimming = TextTrimming.CharacterEllipsis
                  };
+        _title.SetResourceReference(TextBlock.ForegroundProperty, "Theme.TextMuted");
 
-        var header = new Border { BorderThickness = new Thickness(0, 0, 0, 1), Child = _title };
+        // the header is the choice of view: how the same nodes are arranged (see ExplorerViewPresets)
+        _view       = ExplorerViewPresets.Find(AppDesignSettings.Instance.ExplorerViewId);
+        _viewPicker = new ComboBox
+                      {
+                          ItemsSource = ExplorerViewPresets.All, SelectedItem = _view, FontWeight = FontWeights.SemiBold,
+                          Margin      = new Thickness(6, 4, 0, 4), MinWidth = 96, VerticalAlignment = VerticalAlignment.Center,
+                          ToolTip     = "How the Explorer arranges the Silo: " + string.Join("; ", ExplorerViewPresets.All.Select(v => $"{v.Name}: {v.Description}"))
+                      };
+        _viewPicker.SelectionChanged += (_, _) =>
+                                        {
+                                            if (_viewPicker.SelectedItem is not ExplorerViewPreset view || ReferenceEquals(view, _view)) return;
+
+                                            _view                                     = view;
+                                            AppDesignSettings.Instance.ExplorerViewId = view.Id;
+                                            Refresh(true);
+                                        };
+
+        var headerRow = new DockPanel();
+        DockPanel.SetDock(_viewPicker, Dock.Left);
+        headerRow.Children.Add(_viewPicker);
+        headerRow.Children.Add(_title);
+
+        var header = new Border { BorderThickness = new Thickness(0, 0, 0, 1), Child = headerRow };
         header.SetResourceReference(Border.BackgroundProperty,  "Theme.BackgroundAlt");
         header.SetResourceReference(Border.BorderBrushProperty, "Theme.Border");
         DockPanel.SetDock(header, Dock.Top);

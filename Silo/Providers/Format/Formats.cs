@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using Silo.Providers.Archive;
 using Silo.Providers.Document;
 using Silo.Providers.Reflection;
@@ -54,7 +54,7 @@ public static class Formats
     // ---- containers ----------------------------------------------------------------------------------------------
 
     /// <summary>The extensions of the archive (container) formats the application opens.</summary>
-    public static IReadOnlyList<string> Archives => All.Where(f => f is IArchiveFormat).SelectMany(f => f.FileExtensions).ToList();
+    public static IReadOnlyList<string> Archives => All.Where(f => f is IArchiveFormat or IContainerFormat).SelectMany(f => f.FileExtensions).ToList();
 
     /// <summary>
     ///     Makes a format known (one that was made by hand, not registered). A format of a type that is listed already is
@@ -137,6 +137,10 @@ public static class Formats
         yield return new YamlFormat();
         yield return new MarkdownFormat();
         yield return new ZipFormat();
+        yield return new Containers.TarFormat();
+        yield return new Containers.TarGzFormat();
+        yield return new Containers.IsoFormat();
+        yield return new Containers.CabFormat();
         yield return new CsvFormat();
         yield return new TsvFormat();
         yield return new SiloFileFormat();

@@ -3,6 +3,7 @@ using System.IO.Pipes;
 using System.Security.Principal;
 using System.Text;
 using Serilog;
+using Silo.Actions;
 
 namespace Silo.Hosting;
 
@@ -90,10 +91,34 @@ public static class SingleInstance
     }
 
     /// <summary>
-    ///     Starts listening for requests from later launches. <paramref name="onRequest" /> gets the full path to open (null
-    ///     for "just come to the front") on a thread-pool thread.
+    ///     Runs an action in the stock instance (see <see cref="ActionProtocol" />) and returns its one-line JSON reply, or null
+    ///     if the stock instance could not be reached. Waits as long as the action takes.
     /// </summary>
-    public static void StartServer(Action<string?> onRequest)
+    public static string? SendAction(string requestLine, int connectTimeoutMs = 5000)
+    {
+        try
+        {
+            using var client = new NamedPipeClientStream(".", PipeName, PipeDirection.InOut, PipeOptions.CurrentUserOnly);
+            client.Connect(connectTimeoutMs);
+
+            using var writer = new StreamWriter(client, new UTF8Encoding(false), 1024, true) { AutoFlush = true };
+            writer.WriteLine(requestLine);
+            using var reader = new StreamReader(client, Encoding.UTF8, false, 1024, true);
+            return reader.ReadLine();
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Could not reach the stock Silo instance");
+            return null;
+        }
+    }
+
+    /// <summary>
+    ///     Starts listening for requests from later launches. <paramref name="onRequest" /> gets the full path to open (null
+    ///     for "just come to the front") on a thread-pool thread. <paramref name="onAction" /> answers action requests (it is
+    ///     given the request line and returns the reply line); each runs on its own, so a long action does not hold up the rest.
+    /// </summary>
+    public static void StartServer(Action<string?> onRequest, Func<string, Task<string>>? onAction = null)
     {
         _cts = new CancellationTokenSource();
         var ct = _cts.Token;
@@ -103,15 +128,31 @@ public static class SingleInstance
                          while (!ct.IsCancellationRequested)
                              try
                              {
-                                 await using var server = new NamedPipeServerStream(PipeName, PipeDirection.In,
-                                                                                    NamedPipeServerStream.MaxAllowedServerInstances,
-                                                                                    PipeTransmissionMode.Byte,
-                                                                                    PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
-                                 await server.WaitForConnectionAsync(ct);
+                                 var server = new NamedPipeServerStream(PipeName, PipeDirection.InOut,
+                                                                        NamedPipeServerStream.MaxAllowedServerInstances,
+                                                                        PipeTransmissionMode.Byte,
+                                                                        PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
+                                 try
+                                 {
+                                     await server.WaitForConnectionAsync(ct);
 
-                                 using var reader = new StreamReader(server, Encoding.UTF8);
-                                 var       line   = await reader.ReadLineAsync(ct);
-                                 Handle(line, onRequest);
+                                     var reader = new StreamReader(server, Encoding.UTF8, false, 1024, true);
+                                     var line   = await reader.ReadLineAsync(ct);
+                                     if (ActionProtocol.IsActionLine(line) && onAction is not null)
+                                     {
+                                         _ = AnswerAsync(server, line!, onAction); // takes over (and disposes) the connection
+                                         continue;
+                                     }
+
+                                     Handle(line, onRequest);
+                                 }
+                                 catch
+                                 {
+                                     await server.DisposeAsync();
+                                     throw;
+                                 }
+
+                                 await server.DisposeAsync();
                              }
                              catch (OperationCanceledException)
                              {
@@ -123,6 +164,21 @@ public static class SingleInstance
                                  await Task.Delay(500, CancellationToken.None);
                              }
                      }, ct);
+    }
+
+    private static async Task AnswerAsync(NamedPipeServerStream server, string line, Func<string, Task<string>> onAction)
+    {
+        await using (server)
+            try
+            {
+                var reply = await onAction(line);
+                await using var writer = new StreamWriter(server, new UTF8Encoding(false), 1024, true) { AutoFlush = true };
+                await writer.WriteLineAsync(reply);
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "Could not answer an action request");
+            }
     }
 
     public static void StopServer()

@@ -7,6 +7,7 @@ using System.Windows.Media;
 using Silo.Converters;
 using Silo.Design;
 using Silo.Toolbar;
+using Silo.Ui.Controls;
 
 using Telefrag.DI;
 
@@ -20,8 +21,6 @@ namespace Silo.Tools;
 [Transient(typeof(ITool))]
 public class IconEditor : ToolBase
 {
-    private const double TileSize = 38;
-
     private readonly WrapPanel  _palette   = new();
     private readonly ListView   _roles     = new() { Margin = new Thickness(0, 6, 0, 0) };
     private readonly TextBox    _roleFilter = new();
@@ -66,7 +65,11 @@ public class IconEditor : ToolBase
         rightHead.Children.Add(_iconFilter);
         DockPanel.SetDock(rightHead, Dock.Top);
         right.Children.Add(rightHead);
-        right.Children.Add(new ScrollViewer { Content = _palette, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Margin = new Thickness(0, 6, 0, 0) });
+        var paletteScroll = new ScrollViewer { Content = _palette, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Margin = new Thickness(0, 6, 0, 0) };
+        var zoom          = IconZoom.Bar(paletteScroll);
+        DockPanel.SetDock(zoom, Dock.Bottom);
+        right.Children.Add(zoom);
+        right.Children.Add(paletteScroll);
         Grid.SetColumn(right, 2);
         root.Children.Add(right);
 
@@ -153,30 +156,40 @@ public class IconEditor : ToolBase
     /// <summary>The icons to choose from, the selected role's current one marked.</summary>
     private void FillPalette()
     {
-        _palette.Children.Clear();
+        // every icon the catalog has (resource dictionaries, Paths.xaml, embedded and loose SVG/PNG); the tiles are made once
+        if (_tiles.Count == 0)
+            foreach (var entry in IconCatalog.All)
+            {
+                FrameworkElement content = entry.Geometry is { } geometry
+                                               ? new AppIcon { Icon = geometry }
+                                               : new Image { Source = entry.Image, Stretch = Stretch.Uniform };
+
+                // sized by the zoom, with no button padding to squeeze the icon (a padded 38px tile cut 22px icons off)
+                var tile = IconZoom.Tile(content);
+                tile.ToolTip = entry.Key == entry.Origin ? entry.Key : $"{entry.Key}\n{entry.Origin}";
+                string captured = entry.Key;
+                tile.Click += (_, _) => Assign(captured);
+                _tiles.Add((entry.Key, tile));
+                _palette.Children.Add(tile);
+            }
+
         string filter  = _iconFilter.Text.Trim();
         string current = Selected?.Key ?? string.Empty;
 
-        foreach (string key in IconPickerWindow.IconKeys())
+        ToggleButton? chosen = null;
+        foreach (var (key, tile) in _tiles)
         {
-            if (filter.Length > 0 && !key.Contains(filter, StringComparison.OrdinalIgnoreCase)) continue;
-            if (ToolbarIcons.Find(key) is not { } geometry) continue;
-
-            var tile = new ToggleButton
-                       {
-                           Content   = new AppIcon { Icon = geometry, Size = 22 },
-                           Width     = TileSize,
-                           Height    = TileSize,
-                           Margin    = new Thickness(2),
-                           ToolTip   = key,
-                           IsChecked = string.Equals(key, current, StringComparison.OrdinalIgnoreCase),
-                           IsEnabled = Selected is not null
-                       };
-            string captured = key;
-            tile.Click += (_, _) => Assign(captured);
-            _palette.Children.Add(tile);
+            tile.Visibility = filter.Length == 0 || key.Contains(filter, StringComparison.OrdinalIgnoreCase) ? Visibility.Visible : Visibility.Collapsed;
+            tile.IsChecked  = string.Equals(key, current, StringComparison.OrdinalIgnoreCase);
+            tile.IsEnabled  = Selected is not null;
+            if (tile.IsChecked == true && tile.Visibility == Visibility.Visible) chosen = tile;
         }
+
+        // show the role's current icon (after layout, so a tile that was just made visible has a place)
+        if (chosen is not null) _palette.Dispatcher.BeginInvoke(() => chosen.BringIntoView(), System.Windows.Threading.DispatcherPriority.Loaded);
     }
+
+    private readonly List<(string Key, ToggleButton Tile)> _tiles = [];
 
     private static DataTemplate GroupHeader()
     {
@@ -192,9 +205,9 @@ public class IconEditor : ToolBase
         var panel = new FrameworkElementFactory(typeof(StackPanel));
         panel.SetValue(StackPanel.OrientationProperty, Orientation.Horizontal);
 
-        var icon = new FrameworkElementFactory(typeof(AppIcon));
-        icon.SetBinding(AppIcon.IconProperty, new Binding(nameof(RoleRow.Geometry)));
-        icon.SetValue(AppIcon.SizeProperty, 20.0);
+        // a ContentControl, so a role remapped to a picture shows it as well as one remapped to a vector icon
+        var icon = new FrameworkElementFactory(typeof(ContentControl));
+        icon.SetBinding(ContentControl.ContentProperty, new Binding(nameof(RoleRow.Key)) { Converter = IconRefToVisualConverter.Instance, ConverterParameter = "20" });
         icon.SetValue(FrameworkElement.WidthProperty, 20.0);
         icon.SetValue(FrameworkElement.HeightProperty, 20.0);
         icon.SetValue(FrameworkElement.MarginProperty, new Thickness(0, 0, 8, 0));

@@ -21,11 +21,11 @@ public static class IconResolver
     public static object? Resolve(IconRef? icon)
     {
         if (icon is null) return null;
-        return icon.Key is { } key ? FindGeometry(key) : Picture(icon.Source!);
+        return icon.Key is { } key ? FindGeometry(key) : IconCatalog.GeometryFor(icon.Source) ?? (object?)Picture(icon.Source!);
     }
 
-    /// <summary>The icon's geometry: null for a picture, or for a key no icon dictionary has.</summary>
-    public static Geometry? GeometryOf(IconRef? icon) => icon?.Key is { } key ? FindGeometry(key) : null;
+    /// <summary>The icon's geometry: for a key no icon dictionary has, or a picture that is not an SVG, null.</summary>
+    public static Geometry? GeometryOf(IconRef? icon) => icon?.Key is { } key ? FindGeometry(key) : IconCatalog.GeometryFor(icon?.Source);
 
     /// <summary>The picture: null for an icon key, or for an address that cannot be read.</summary>
     public static ImageSource? ImageOf(IconRef? icon) => icon?.Source is { } source ? Picture(source) : null;
@@ -51,7 +51,7 @@ public static class IconResolver
         foreach (string candidate in Candidates(key))
             if (app.TryFindResource(candidate) is Geometry g)
                 return g;
-        return null;
+        return IconCatalog.Find(key)?.Geometry;
     }
 
     /// <summary>The spellings tried for a key, in order (the same as <see cref="IconKeyConverter" />).</summary>
@@ -71,6 +71,8 @@ public static class IconResolver
         {
             try
             {
+                if (uri.Scheme == "embedded") return IconCatalog.ImageFor(uri); // an embedded resource has no address to open
+
                 var image = new BitmapImage();
                 image.BeginInit();
                 image.UriSource   = uri;

@@ -1,17 +1,119 @@
 using System.IO;
 using System.IO.Compression;
 using Silo.Providers.Archive;
+using Silo.Providers.Format.Containers;
 using Silo.Providers.Reflection;
 using Telefrag.DI;
 
 namespace Silo.Providers.Format;
 
 [Singleton(typeof(IFileFormat))]
-public class ZipFormat : IFileFormat, IArchiveFormat
+public class ZipFormat : IFileFormat, IArchiveFormat, IContainerFormat
 {
     public string DisplayName   { get; } = "Zip Archive";
     public string FileExtension { get; } = "zip";
     public string ContentType   { get; } = "application/zip";
+
+    // ---- as a container (IContainerFormat) ----------------------------------------------------------------------
+
+    public bool CanWrite => true;
+
+    public IReadOnlyList<ContainerEntry> List(string container, CancellationToken cancel = default)
+    {
+        using var zip = ZipFile.OpenRead(container);
+        var entries = new List<ContainerEntry>();
+        foreach (var entry in zip.Entries)
+        {
+            cancel.ThrowIfCancellationRequested();
+            bool isDirectory = entry.FullName.EndsWith('/') || entry.FullName.EndsWith('\\');
+            entries.Add(new ContainerEntry(entry.FullName, isDirectory, isDirectory ? 0 : entry.Length, entry.LastWriteTime));
+        }
+
+        return ContainerPaths.Complete(entries);
+    }
+
+    public Stream OpenEntry(string container, string entry)
+    {
+        using var zip   = ZipFile.OpenRead(container);
+        var       found = Find(zip, entry) ?? throw new FileNotFoundException($"\"{entry}\" is not in the archive.", entry);
+        using var data  = found.Open();
+        return ContainerPaths.Buffer(data, found.Length);
+    }
+
+    public void Create(string container)
+    {
+        using var file = new FileStream(container, FileMode.Create, FileAccess.Write, FileShare.None);
+        using var zip  = new ZipArchive(file, ZipArchiveMode.Create);
+    }
+
+    public void CreateFrom(string container, string directory, CancellationToken cancel = default)
+    {
+        if (File.Exists(container)) File.Delete(container);
+        ZipFile.CreateFromDirectory(directory, container, CompressionLevel.Optimal, false);
+    }
+
+    /// <summary>
+    ///     Changes a copy of the archive in place and puts the copy where the archive was once every change is made, so a
+    ///     change that fails leaves the archive as it was.
+    /// </summary>
+    public void Update(string container, IReadOnlyList<ContainerChange> changes, CancellationToken cancel = default)
+    {
+        string next = Staging.BesideFile(container);
+        try
+        {
+            File.Copy(container, next);
+            using (var zip = ZipFile.Open(next, ZipArchiveMode.Update))
+            {
+                foreach (var change in changes)
+                {
+                    cancel.ThrowIfCancellationRequested();
+                    switch (change)
+                    {
+                        case ContainerChange.Remove remove:
+                            Delete(zip, ContainerPaths.Normalize(remove.Path));
+                            break;
+                        case ContainerChange.AddFile add:
+                        {
+                            string path = ContainerPaths.Normalize(add.Path);
+                            Delete(zip, path);
+                            zip.CreateEntryFromFile(add.SourceFile, path, CompressionLevel.Optimal);
+                            break;
+                        }
+                        case ContainerChange.AddDirectory dir:
+                        {
+                            string path = ContainerPaths.Normalize(dir.Path);
+                            if (!zip.Entries.Any(e => ContainerPaths.IsSameOrInside(ContainerPaths.Normalize(e.FullName), path)))
+                                zip.CreateEntry(path + "/");
+                            break;
+                        }
+                    }
+                }
+            }
+
+            File.Move(next, container, true);
+        }
+        finally
+        {
+            if (File.Exists(next)) File.Delete(next);
+        }
+    }
+
+    private static ZipArchiveEntry? Find(ZipArchive zip, string entry)
+    {
+        string wanted = ContainerPaths.Normalize(entry);
+        return zip.Entries.FirstOrDefault(e => ContainerPaths.Normalize(e.FullName) == wanted && !e.FullName.EndsWith('/')) ??
+               zip.Entries.FirstOrDefault(e => string.Equals(ContainerPaths.Normalize(e.FullName), wanted, StringComparison.OrdinalIgnoreCase) &&
+                                               !e.FullName.EndsWith('/'));
+    }
+
+    /// <summary>Deletes the entry at <paramref name="path" />, and everything under it when it is a folder.</summary>
+    private static void Delete(ZipArchive zip, string path)
+    {
+        foreach (var entry in zip.Entries.Where(e => ContainerPaths.IsSameOrInside(ContainerPaths.Normalize(e.FullName), path)).ToList())
+            entry.Delete();
+    }
+
+    // ---- as an archive tree (IArchiveFormat) --------------------------------------------------------------------
 
     public IArchivedDirectory Read(FileStream stream)
     {

@@ -31,9 +31,35 @@ public static class AboutBox
 {
     public static bool? Show()
     {
+        // Built by hand rather than through ModelControl: the generic UI builder shows a model's public properties, and what this box
+        // has to show (the text from App.xaml, and what other components add) is not that.
         var model = new AboutModel();
-        var ctrl  = new ModelControl<AboutModel>(model);
-        var win   = new ContentWindow(ctrl);
+        var ok = new Button { Content = "OK", IsDefault = true, IsCancel = true, MinWidth = 80, Margin = new Thickness(8), HorizontalAlignment = HorizontalAlignment.Right };
+        var panel = new DockPanel { LastChildFill = true };
+        DockPanel.SetDock(ok, Dock.Bottom);
+        panel.Children.Add(ok);
+        panel.Children.Add(model.Content);
+
+        var win = new Window
+                  {
+                      Title                 = "About Silo",
+                      Content               = panel,
+                      Width                 = 460,
+                      SizeToContent         = SizeToContent.Height,
+                      MaxHeight             = 560,
+                      ShowInTaskbar         = false,
+                      ResizeMode            = ResizeMode.NoResize,
+                      WindowStartupLocation = WindowStartupLocation.CenterScreen
+                  };
+        win.SetResourceReference(Control.BackgroundProperty, "Theme.Background");
+        win.SetResourceReference(Control.ForegroundProperty, "Theme.Text");
+        if (Application.Current?.MainWindow is { IsVisible: true } owner)
+        {
+            win.Owner                 = owner;
+            win.WindowStartupLocation = WindowStartupLocation.CenterOwner;
+        }
+
+        ok.Click += (_, _) => win.Close();
         return win.ShowDialog();
     }
 

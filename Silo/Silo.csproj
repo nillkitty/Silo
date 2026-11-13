@@ -11,10 +11,20 @@
     <StartupObject>Silo.Program</StartupObject>
     <!-- The icon of Silo.exe (and Silo.com), and of every window that does not set its own. -->
     <ApplicationIcon>Assets\Silo.ico</ApplicationIcon>
+    <!-- Silo.xml beside Silo.dll: the Type Map tool (Tools/TypeMap) shows the summaries, remarks and examples. Missing or malformed doc comments are not warnings. -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1570;CS1572;CS1573;CS1574;CS1580;CS1581;CS1584;CS1587;CS1589;CS1591;CS1658;CS1710;CS1711;CS1712;CS1723;CS1734</NoWarn>
   </PropertyGroup>
 	<PropertyGroup>
 		<WarningsAsErrors>$(WarningsAsErrors);SILO001</WarningsAsErrors>
 	</PropertyGroup>
+  <ItemGroup>
+    <!--
+      WPF's pen/touch stack (PenIMC) registers a native COM component per process and throws "SxS COM registration of PenIMC_cor3.dll failed"
+      on its own thread, unhandled, on some machines (notably under the debugger). Silo needs no pen input: mouse and touch-as-mouse still work.
+    -->
+    <RuntimeHostConfigurationOption Include="Switch.System.Windows.Input.Stylus.DisableStylusAndTouchSupport" Value="true" />
+  </ItemGroup>
   <ItemGroup>
     <PackageReference Include="easywindowsterminalcontrol" Version="1.0.38" />
     <PackageReference Include="LibGit2Sharp" Version="0.32.0" />

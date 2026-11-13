@@ -1,4 +1,4 @@
-﻿using System.ComponentModel;
+using System.ComponentModel;
 using System.IO;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -62,6 +62,9 @@ public sealed class LabWindow : Window, IWindowLayout, ILabHost, ILabCreator
 
     private readonly ILabModel?                          _model;
     private readonly WrapPanel                           _commandBar   = new() { VerticalAlignment = VerticalAlignment.Center };
+    private readonly List<UIElement>                     _commandItems = [];
+    private readonly List<UIElement>                     _contextItems = [];
+    private readonly List<UIElement>                     _valueItems   = [];
     private readonly TabControl                          _ribbon       = new() { VerticalAlignment = VerticalAlignment.Top };
     private readonly StackPanel                          _selectors    = new() { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
     private readonly ComboBox                            _partCombo    = new() { MinWidth = 150, MaxWidth = 280, Margin = new Thickness(4, 0, 10, 0), ToolTip = "The active part of the subject: what part menu and part parameters are about" };
@@ -379,10 +382,23 @@ public sealed class LabWindow : Window, IWindowLayout, ILabHost, ILabCreator
     // ---- what each menu holds: lists of commands, a null being a separator (the menu bar and the command bar are made from the same) -----
 
     /// <summary>A command of the session, noted by the macro recorder when it runs.</summary>
-    private ProvidedCommand Wrap(ProvidedCommand command) => LabMenus.Wrapped(command, c =>
-                                                                                      {
-                                                                                          if (c.Id.IndexOfAny([' ', '\t']) < 0) NoteLine(c.Id);
-                                                                                      });
+    private ProvidedCommand Wrap(ProvidedCommand command) => Iconed(LabMenus.Wrapped(command, c =>
+                                                                                              {
+                                                                                                  if (c.Id.IndexOfAny([' ', '\t']) < 0) NoteLine(c.Id);
+                                                                                              }));
+
+    /// <summary>The icons of this window's buttons and menus: one per action, never one shared by two (see <see cref="LabIconScope" />).</summary>
+    internal LabIconScope Icons { get; } = new();
+
+    /// <summary>The command with the icon this window gives its action (and its submenu's, each theirs).</summary>
+    private ProvidedCommand Iconed(ProvidedCommand command)
+    {
+        return command with
+               {
+                   IconKey  = Icons.For(command.Header, LabMenus.IconFor(command)),
+                   Children = command.Children?.Select(Iconed).ToList()
+               };
+    }
 
     /// <summary>A command of the window's own: runs <paramref name="run" />, and the macro records <paramref name="line" /> for it.</summary>
     private ProvidedCommand Own(string id, string header, string line, Action run, string? icon = null, Func<bool>? canRun = null, string? tip = null, Func<bool>? isChecked = null)
@@ -722,8 +738,9 @@ public sealed class LabWindow : Window, IWindowLayout, ILabHost, ILabCreator
     // ---- the menus ----------------------------------------------------------------------------------
 
     /// <summary>Fills a menu from a list of commands: runs between the nulls are laid out together (by group), a separator between them.</summary>
-    private static void FillMenu(MenuItem menu, List<ProvidedCommand?> items)
+    private void FillMenu(MenuItem menu, List<ProvidedCommand?> items)
     {
+        items = items.Select(c => c is null ? null : Iconed(c)).ToList();
         var run = new List<ProvidedCommand>();
 
         void Flush()
@@ -750,7 +767,7 @@ public sealed class LabWindow : Window, IWindowLayout, ILabHost, ILabCreator
     {
         var items = FileItems();
         // a Lab's own File content keeps its order and separators; the window's New Window and Close follow
-        LabMenus.Fill(menu, items);
+        LabMenus.Fill(menu, items, Iconed);
     }
 
     private void FillEditMenu(MenuItem menu)
@@ -854,8 +871,23 @@ public sealed class LabWindow : Window, IWindowLayout, ILabHost, ILabCreator
                                            };
         }
 
-        if (_session.UseRibbon) panel.Children.Add(_ribbon);
-        else panel.Children.Add(_commandBar);
+        if (_session.UseRibbon)
+        {
+            panel.Children.Add(_ribbon);
+        }
+        else
+        {
+            // the value being studied, at the end of the strip's first row
+            _valueBox.MinWidth = 160;
+            _valueBox.MaxWidth = 320;
+            _valueBox.Width    = 220;
+            _valueBox.Margin   = new Thickness(6, 0, 6, 3);
+            _valueBox.VerticalAlignment = VerticalAlignment.Top;
+            DockPanel.SetDock(_valueBox, Dock.Right);
+            panel.Children.Add(_valueBox);
+            panel.Children.Add(_commandBar);
+        }
+
         return panel;
     }
 
@@ -864,7 +896,7 @@ public sealed class LabWindow : Window, IWindowLayout, ILabHost, ILabCreator
     {
         if (_closed) return;
 
-        _commandBar.Children.Clear();
+        _commandItems.Clear();
 
         var named = new List<(string Title, List<ProvidedCommand?> Items)> { ("File", FileItems()) };
         if (OwnMenu("edit") is not null || Sorted(LabMenuPlace.Edit).Count > 0) named.Add(("Edit", EditItems()));
@@ -906,17 +938,47 @@ public sealed class LabWindow : Window, IWindowLayout, ILabHost, ILabCreator
                     continue;
                 }
 
-                _commandBar.Children.Add(CommandButton(command));
+                _commandItems.Add(CommandButton(command));
                 any = true;
             }
 
-            if (any) _commandBar.Children.Add(new Border { Width = 1, Height = 18, Margin = new Thickness(5, 0, 7, 3), Opacity = 0.5 }.Also(b => b.SetResourceReference(Border.BackgroundProperty, "Theme.TextMuted")));
+            if (any) _commandItems.Add(new Border { Width = 1, Height = 18, Margin = new Thickness(5, 0, 7, 3), Opacity = 0.5 }.Also(b => b.SetResourceReference(Border.BackgroundProperty, "Theme.TextMuted")));
         }
 
         var panes = new Button { Padding = new Thickness(6, 3, 6, 3), Margin = new Thickness(0, 0, 3, 3), ToolTip = "Panes: show or hide the Lab's panes" };
         panes.Content = IconContent("Layers", true);
         panes.Click += (_, _) => DropDown(panes, FillViewMenu);
-        _commandBar.Children.Add(panes);
+        _commandItems.Add(panes);
+        ComposeStrip();
+    }
+
+    /// <summary>
+    ///     Lays the command bar's buttons, then the actions of the moment, then the value's actions, out in one strip that wraps
+    ///     only when the window is too narrow: one row where there is room, instead of a short row over a crowded one.
+    /// </summary>
+    private void ComposeStrip()
+    {
+        if (_session.UseRibbon) return;
+
+        _commandBar.Children.Clear();
+        foreach (var group in new[] { _commandItems, _contextItems, _valueItems })
+        {
+            if (group.Count == 0) continue;
+
+            if (_commandBar.Children.Count > 0 && _commandBar.Children[^1] is not Border) _commandBar.Children.Add(StripSeparator());
+            foreach (var item in group)
+            {
+                if (item is FrameworkElement element) element.VerticalAlignment = VerticalAlignment.Center;
+                _commandBar.Children.Add(item);
+            }
+        }
+    }
+
+    private static Border StripSeparator()
+    {
+        var line = new Border { Width = 1, Height = 18, Margin = new Thickness(5, 0, 7, 3), Opacity = 0.5, VerticalAlignment = VerticalAlignment.Center };
+        line.SetResourceReference(Border.BackgroundProperty, "Theme.TextMuted");
+        return line;
     }
 
     /// <summary>The command bar as a ribbon: a tab for each menu, and in it big buttons (icon over text) in groups the menu's separators make.</summary>
@@ -962,7 +1024,7 @@ public sealed class LabWindow : Window, IWindowLayout, ILabHost, ILabCreator
         }
 
         var view = new TabItem { Header = "View", Content = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(2, 4, 2, 4) } };
-        var panes = new Button { Padding = new Thickness(8, 4, 8, 4), Margin = new Thickness(0, 0, 3, 3), MinWidth = 56, ToolTip = "Panes: show or hide the Lab's panes", Content = LabelledContent("Layers", "Panes ▾") };
+        var panes = new Button { Padding = new Thickness(8, 4, 8, 4), Margin = new Thickness(0, 0, 3, 3), MinWidth = 56, ToolTip = "Panes: show or hide the Lab's panes", Content = LabelledContent("Layers", "Panes Ã¢â€“Â¾") };
         panes.Click += (_, _) => DropDown(panes, FillViewMenu);
         ((StackPanel)view.Content).Children.Add(panes);
         _ribbon.Items.Add(view);
@@ -1009,7 +1071,7 @@ public sealed class LabWindow : Window, IWindowLayout, ILabHost, ILabCreator
     {
         var row = new StackPanel { Orientation = Orientation.Horizontal };
         if (LabUi.Icon(icon, 15) is { } glyph) row.Children.Add(glyph);
-        if (dropdown) row.Children.Add(new TextBlock { Text = "▾", Margin = new Thickness(3, 0, 0, 0), FontSize = 9, VerticalAlignment = VerticalAlignment.Center });
+        if (dropdown) row.Children.Add(new TextBlock { Text = "Ã¢â€“Â¾", Margin = new Thickness(3, 0, 0, 0), FontSize = 9, VerticalAlignment = VerticalAlignment.Center });
         return row;
     }
 
@@ -1019,7 +1081,7 @@ public sealed class LabWindow : Window, IWindowLayout, ILabHost, ILabCreator
     ];
 
     /// <summary>
-    ///     Folds the "Copy as ...", "Copy to ..." and "Save as ..." commands into one dropdown each (Copy As ▾, Save As ▾), put where
+    ///     Folds the "Copy as ...", "Copy to ..." and "Save as ..." commands into one dropdown each (Copy As Ã¢â€“Â¾, Save As Ã¢â€“Â¾), put where
     ///     the first of them was. A verb with a single command is left as it is.
     /// </summary>
     private static List<ProvidedCommand?> FoldVerbs(IEnumerable<ProvidedCommand?> items)
@@ -1048,12 +1110,13 @@ public sealed class LabWindow : Window, IWindowLayout, ILabHost, ILabCreator
 
     private UIElement CommandButton(ProvidedCommand command, bool labelled = false)
     {
+        command = Iconed(command);
         string header = LabTerminal.Strip(command.Header);
         string tip    = string.IsNullOrEmpty(command.ToolTip) ? header : $"{header}: {command.ToolTip}";
         if (!string.IsNullOrWhiteSpace(command.Gesture)) tip += $" ({command.Gesture})";
 
         var pad = labelled ? new Thickness(6, 4, 6, 4) : new Thickness(6, 3, 6, 3);
-        UIElement Face(bool dropdown) => labelled ? LabelledContent(LabMenus.IconFor(command), dropdown ? header + " ▾" : header) : IconContent(LabMenus.IconFor(command), dropdown);
+        UIElement Face(bool dropdown) => labelled ? LabelledContent(LabMenus.IconFor(command), dropdown ? header + " Ã¢â€“Â¾" : header) : IconContent(LabMenus.IconFor(command), dropdown);
 
         if (command.Children is { Count: > 0 } children)
         {
@@ -1185,7 +1248,14 @@ public sealed class LabWindow : Window, IWindowLayout, ILabHost, ILabCreator
                                      Keyboard.ClearFocus();
                                  }
                              };
-        panel.Children.Add(_valueBox);
+        if (_session.UseRibbon)
+        {
+            panel.Children.Add(_valueBox);
+            return panel;
+        }
+
+        // without a ribbon everything is in the strip above (see ComposeStrip), the value box beside it: this row is not needed
+        panel.Visibility = Visibility.Collapsed;
         return panel;
     }
 
@@ -1222,7 +1292,7 @@ public sealed class LabWindow : Window, IWindowLayout, ILabHost, ILabCreator
         DockPanel.SetDock(_statusText, Dock.Right);
         DockPanel.SetDock(_outputText, Dock.Right);
 
-        var prompt = new TextBlock { Text = "›", FontSize = 16, Margin = new Thickness(0, 0, 6, 0), VerticalAlignment = VerticalAlignment.Center };
+        var prompt = new TextBlock { Text = "Ã¢â‚¬Âº", FontSize = 16, Margin = new Thickness(0, 0, 6, 0), VerticalAlignment = VerticalAlignment.Center };
         prompt.SetResourceReference(TextBlock.ForegroundProperty, "Theme.TextMuted");
         DockPanel.SetDock(prompt, Dock.Left);
 
@@ -1274,8 +1344,22 @@ public sealed class LabWindow : Window, IWindowLayout, ILabHost, ILabCreator
         foreach (var binding in _bindings) InputBindings.Remove(binding);
         _bindings.Clear();
 
-        FillBar(_contextBar, SafeActions(() => _session.ContextActions).Select(Wrap).ToList(), 4);
-        FillBar(_valueBar,   SafeActions(() => _session.ValueActions).Select(Wrap).ToList(),   0);
+        var context = ActionButtons(SafeActions(() => _session.ContextActions).Select(Wrap));
+        var value   = ActionButtons(SafeActions(() => _session.ValueActions).Select(Wrap));
+        if (_session.UseRibbon)
+        {
+            // the ribbon keeps its own row for them, under the tabs
+            FillBar(_contextBar, context, 4);
+            FillBar(_valueBar,   value,   0);
+        }
+        else
+        {
+            _contextItems.Clear();
+            _contextItems.AddRange(context);
+            _valueItems.Clear();
+            _valueItems.AddRange(value);
+            ComposeStrip();
+        }
 
         foreach (var action in LabMenus.All(_session))
         {
@@ -1310,9 +1394,17 @@ public sealed class LabWindow : Window, IWindowLayout, ILabHost, ILabCreator
         }
     }
 
-    private static void FillBar(StackPanel bar, IEnumerable<ProvidedCommand> actions, double gap)
+    private static void FillBar(StackPanel bar, IEnumerable<UIElement> buttons, double gap)
     {
         bar.Children.Clear();
+        foreach (var button in buttons) bar.Children.Add(button);
+        bar.Margin = new Thickness(0, 0, gap, 0);
+    }
+
+    /// <summary>A button (icon and text) for each action.</summary>
+    private List<UIElement> ActionButtons(IEnumerable<ProvidedCommand> actions)
+    {
+        var buttons = new List<UIElement>();
         foreach (var action in actions)
         {
             // only the ones with an icon or a short header earn a button; the menu has them all
@@ -1322,7 +1414,7 @@ public sealed class LabWindow : Window, IWindowLayout, ILabHost, ILabCreator
                              Command          = action.Command,
                              CommandParameter = action.Parameter,
                              Padding          = new Thickness(7, 3, 8, 3),
-                             Margin           = new Thickness(0, 0, 3, 0),
+                             Margin           = new Thickness(0, 0, 3, 3),
                              MinWidth         = 28,
                              ToolTip          = string.IsNullOrEmpty(action.ToolTip) ? header : $"{header}: {action.ToolTip}"
                          };
@@ -1337,10 +1429,10 @@ public sealed class LabWindow : Window, IWindowLayout, ILabHost, ILabCreator
 
             content.Children.Add(new TextBlock { Text = header, VerticalAlignment = VerticalAlignment.Center });
             button.Content = content;
-            bar.Children.Add(button);
+            buttons.Add(button);
         }
 
-        bar.Margin = new Thickness(0, 0, gap, 0);
+        return buttons;
     }
 
     // ---- the value and the title -------------------------------------------------------------

@@ -1,4 +1,4 @@
-﻿using System.Windows.Controls;
+using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
@@ -196,6 +196,7 @@ internal sealed class LabParametersView : Grid
             {
                 glyph.Margin = new Thickness(0, 0, 5, 0);
                 content.Children.Add(glyph);
+                LabUi.UseScopeIcon(button, glyph, command.Header, LabMenus.IconFor(command));
             }
 
             content.Children.Add(new TextBlock { Text = LabTerminal.Strip(command.Header), VerticalAlignment = VerticalAlignment.Center });

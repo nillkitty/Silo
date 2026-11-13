@@ -917,10 +917,12 @@ public partial class MainWindow : Window, IWindowLayout
         if (((FrameworkElement)sender).DataContext is not AppNavNode node)
             return;
 
-        // clicking the rail button of the branch that is already active opens the flyout (the full tree)
-        bool wasActive = node.IsActiveRoot;
+        // clicking the rail button of the branch that is already active opens the flyout (the full tree); Settings opens it at once,
+        // since its sections are what the person came to see
+        bool wasActive  = node.IsActiveRoot;
+        bool isSettings = _bottomRoots.Contains(node) && node.Item.Text == AppNavTree.SettingsText;
         Select(node);
-        if (wasActive && NavCollapseToggle.IsChecked == true)
+        if ((wasActive || isSettings) && NavCollapseToggle.IsChecked == true)
         {
             NavCollapseToggle.IsChecked = false;
             ApplyNavState(false);

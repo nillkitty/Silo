@@ -78,6 +78,12 @@ public partial class App : Application, IContainerHost
     public static AppCommand ExitCommand => new AppExitCommand();
 
     /// <summary>
+    ///     The actions that can be invoked by name: from scripts and Flows, and -- the registered ones -- from outside
+    ///     (<c>silo action</c>). The App actions are in it from the start.
+    /// </summary>
+    public Silo.Actions.ActionRegistry Actions { get; } = new();
+
+    /// <summary>
     ///     The app instance representing this process
     /// </summary>
     public static App? Instance => Current as App;
@@ -373,7 +379,9 @@ public partial class App : Application, IContainerHost
         base.OnStartup(e);
 
         // Later launches hand their documents to the stock instance through a named pipe.
-        if (Launch.ServeRequests) SingleInstance.StartServer(HandleLaunchRequest);
+        Silo.Actions.AppActions.Register(Actions, new Silo.Actions.AppHost(this));
+        if (Launch.ServeRequests)
+            SingleInstance.StartServer(HandleLaunchRequest, line => Silo.Actions.ActionProtocol.HandleAsync(Actions, line));
 
         // The document this launch is for (decided in Program.Main -- double-click in Explorer, "silo.exe file.silo", a URL) opens
         // once the window is up.

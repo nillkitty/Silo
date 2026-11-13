@@ -60,6 +60,7 @@ public sealed class DrawioProfiles
     public const string Canvas          = "canvas";
     public const string Traceroute      = "traceroute";
     public const string CrawlMap        = "crawlmap";
+    public const string TypeMap         = "typemap";
 
     private static readonly string SettingsFile =
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Silo", "drawio-profiles.json");
@@ -141,6 +142,22 @@ public sealed class DrawioProfiles
                                   ShowLinkIcons           = true,
                                   LiveThrottleMs          = 200,
                                   LiveDeferWhileEditingMs = 800
+                              }));
+
+        Add(new DrawioProfile(TypeMap,
+                              "The Type Map of an assembly's public types: the generated boxes can be moved and deleted, room for notes.",
+                              new DrawioOptions
+                              {
+                                  ShowLibraries          = false,
+                                  HideSidebar            = true,
+                                  HideAllMoreShapes      = true,
+                                  DisableCustomLibraries = true,
+                                  HideTemplates          = true,
+                                  HideMenus              = ["file", "extras", "help"],
+                                  LockGeneratedCells     = false,
+                                  ZoomWheel              = true,
+                                  FitOnLoad              = true,
+                                  ShowLinkIcons          = false
                               }));
 
         Load();

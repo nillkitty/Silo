@@ -59,13 +59,16 @@
                 <Setter Property="Template">
                     <Setter.Value>
                         <ControlTemplate TargetType="{x:Type converters:AppIcon}">
-                            <Viewbox Width="{TemplateBinding Size}" Height="{TemplateBinding Size}">
+                            <!-- A sized cell with the Path stretched to it: a Viewbox around a stretched Path clipped the edges of some glyphs. -->
+                            <Grid Width="{TemplateBinding Size}" Height="{TemplateBinding Size}">
                                 <Path Data="{TemplateBinding Icon}"
                                       Stretch="Uniform"
+                                      HorizontalAlignment="Center"
+                                      VerticalAlignment="Center"
                                       Fill="{TemplateBinding Foreground}"
                                       Stroke="{TemplateBinding Foreground}"
                                       StrokeThickness="{TemplateBinding StrokeThickness}" />
-                            </Viewbox>
+                            </Grid>
                         </ControlTemplate>
                     </Setter.Value>
                 </Setter>

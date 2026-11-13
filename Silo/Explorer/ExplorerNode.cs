@@ -191,6 +191,12 @@ public sealed class ExplorerNode : INotifyPropertyChanged, IOverridableNode, ICo
     /// <summary>The node above this one; set by <see cref="LinkParents" /> once the tree is built (null for a top-level node).</summary>
     public ExplorerNode? Parent { get; private set; }
 
+    /// <summary>Makes this a top-level node (a view that lists it on its own, away from the folder it was built in).</summary>
+    public void MakeRoot()
+    {
+        Parent = null;
+    }
+
     /// <summary>Points every node below this one at its parent.</summary>
     public void LinkParents()
     {

@@ -1,7 +1,7 @@
 using System.IO;
 using System.Text;
 
-namespace Silo.Tools;
+namespace Silo.Providers.Conversion;
 
 /// <summary>
 ///     Converts a Super Magic Drive (<c>.smd</c>) dump of a Mega Drive / Genesis game to the plain ROM image (<c>.bin</c>) that assemblers and
