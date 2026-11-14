@@ -33,21 +33,49 @@ public class ExplorerViewPresetTests
     }
 
     [Test]
-    public void Flat_lists_every_named_item_by_name_without_the_folders()
+    public void Flat_lists_the_Silos_items_by_name_without_the_folders()
+    {
+        var flat = ExplorerViewPresets.Flat.Arrange(Grouped());
+        var silo = flat.Single(n => n.Kind == "Silo");
+
+        Assert.That(silo.Children.Select(n => n.Header), Is.EqualTo(new[] { "alpha", "Colour", "Zebra" }));
+        Assert.That(silo.Children.All(n => n.Parent == silo), Is.True);
+    }
+
+    [Test]
+    public void Flat_by_type_sorts_the_Silos_items_by_kind_then_name()
+    {
+        var silo = ExplorerViewPresets.FlatByType.Arrange(Grouped()).Single(n => n.Kind == "Silo");
+
+        Assert.That(silo.Children.Select(n => n.Header), Is.EqualTo(new[] { "Colour", "alpha", "Zebra" }));
+    }
+
+    [Test]
+    public void Flat_items_note_their_short_kind()
+    {
+        var flat = ExplorerViewPresets.Flat.Arrange(Grouped());
+        var silo = flat.Single(n => n.Kind == "Silo");
+
+        Assert.That(silo.Children.Select(n => n.KindNote), Is.EqualTo(new[] { "Saved Object", "Enum", "Table" }));
+        Assert.That(flat.Single(n => n.Header == "Backup.zip").KindNote, Is.Null);
+        Assert.That(FlatView.ShortKind("DataBinding"), Is.EqualTo("Binding"));
+    }
+
+    [Test]
+    public void Flat_leaves_the_roots_outside_the_Silo_as_a_tree()
     {
         var flat = ExplorerViewPresets.Flat.Arrange(Grouped());
 
-        Assert.That(flat.Select(n => n.Header), Is.EqualTo(new[] { "alpha", "Backup.zip", "Colour", "Zebra" }));
-        Assert.That(flat.All(n => n.Parent is null), Is.True);
+        Assert.That(flat.Select(n => n.Header), Is.EqualTo(new[] { "Your Silo", "Backup.zip", "Unicode Explorer" }));
+        Assert.That(flat.Single(n => n.Header == "Backup.zip").Children.Select(c => c.Header), Is.EqualTo(new[] { "inside.txt" }));
     }
 
     [Test]
     public void Flat_items_keep_what_is_in_them()
     {
-        var flat = ExplorerViewPresets.Flat.Arrange(Grouped());
+        var silo = ExplorerViewPresets.Flat.Arrange(Grouped()).Single(n => n.Kind == "Silo");
 
-        Assert.That(flat.Single(n => n.Header == "Colour").Children.Select(c => c.Header), Is.EqualTo(new[] { "Red" }));
-        Assert.That(flat.Single(n => n.Header == "Backup.zip").Children, Has.Count.EqualTo(1));
+        Assert.That(silo.Children.Single(n => n.Header == "Colour").Children.Select(c => c.Header), Is.EqualTo(new[] { "Red" }));
     }
 
     [Test]
@@ -55,5 +83,6 @@ public class ExplorerViewPresetTests
     {
         Assert.That(ExplorerViewPresets.Find("nope"), Is.SameAs(ExplorerViewPresets.Grouped));
         Assert.That(ExplorerViewPresets.Find("FLAT"), Is.SameAs(ExplorerViewPresets.Flat));
+        Assert.That(ExplorerViewPresets.Find("flat-by-type"), Is.SameAs(ExplorerViewPresets.FlatByType));
     }
 }

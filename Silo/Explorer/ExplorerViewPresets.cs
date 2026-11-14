@@ -27,9 +27,11 @@ public static class ExplorerViewPresets
 {
     public static ExplorerViewPreset Grouped { get; } = new GroupedView();
 
-    public static ExplorerViewPreset Flat { get; } = new FlatView();
+    public static ExplorerViewPreset Flat { get; } = new FlatView(false);
 
-    public static IReadOnlyList<ExplorerViewPreset> All { get; } = [Grouped, Flat];
+    public static ExplorerViewPreset FlatByType { get; } = new FlatView(true);
+
+    public static IReadOnlyList<ExplorerViewPreset> All { get; } = [Grouped, Flat, FlatByType];
 
     /// <summary>The view with the id; <see cref="Grouped" /> for an unknown or missing one.</summary>
     public static ExplorerViewPreset Find(string? id) => All.FirstOrDefault(v => string.Equals(v.Id, id, StringComparison.OrdinalIgnoreCase)) ?? Grouped;
@@ -46,12 +48,17 @@ public sealed class GroupedView : ExplorerViewPreset
 }
 
 /// <summary>
-///     Every named item of the Silo in one list by name, whatever its kind: tables, diagrams, bindings, enums, syntaxes, saved
-///     objects, connections and the rest. The folders and groups that hold them are left out; an item keeps what is in it (a
-///     connection still opens to its contents, an enum to its values).
+///     The Silo's node holds every named item it keeps in one list by name, whatever its kind: tables, diagrams, bindings,
+///     enums, syntaxes, saved objects and the rest. The folders and groups that hold them are left out; an item keeps what is
+///     in it (an enum still opens to its values). Only the Silo is flattened: its connections and what tools contribute stay
+///     as they are in the grouped tree. Each item shows its kind in gray after its name; the list is sorted by name, or by
+///     kind then name.
 /// </summary>
-public sealed class FlatView : ExplorerViewPreset
+public sealed class FlatView(bool byType) : ExplorerViewPreset
 {
+    /// <summary>Shorter words for kinds whose name is an identifier.</summary>
+    private static readonly Dictionary<string, string> ShortKinds = new(StringComparer.OrdinalIgnoreCase) { ["DataBinding"] = "Binding" };
+
     /// <summary>Kinds that are items in their own right; what is below them are parts of them, not items of the Silo.</summary>
     private static readonly HashSet<string> ItemKinds = new(StringComparer.OrdinalIgnoreCase)
                                                         {
@@ -61,19 +68,37 @@ public sealed class FlatView : ExplorerViewPreset
     /// <summary>Kinds that only hold or stand for other things: never items themselves.</summary>
     private static readonly HashSet<string> HolderKinds = new(StringComparer.OrdinalIgnoreCase) { "Folder", "World", "Silo", "Placeholder" };
 
-    public override string Id          => "flat";
-    public override string Name        => "Flat";
-    public override string Description => "Every named item in the Silo in one list by name, whatever its kind";
+    public override string Id          => byType ? "flat-by-type" : "flat";
+    public override string Name        => byType ? "Flat by type" : "Flat by name";
+    public override string Description => byType
+                                              ? "Everything the Silo keeps in one list by kind, then its connections"
+                                              : "Everything the Silo keeps in one list by name, then its connections";
+
+    /// <summary>The word shown after an item's name: its kind, shortened where the kind is an identifier.</summary>
+    public static string ShortKind(string kind) => ShortKinds.GetValueOrDefault(kind, kind);
 
     public override IReadOnlyList<ExplorerNode> Arrange(IReadOnlyList<ExplorerNode> grouped)
     {
-        var items = new List<ExplorerNode>();
-        var seen  = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var root in grouped)
-            Collect(root, items, seen);
+        foreach (var silo in grouped.Where(r => string.Equals(r.Kind, "Silo", StringComparison.OrdinalIgnoreCase)))
+        {
+            var items = new List<ExplorerNode>();
+            var seen  = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var child in silo.Children)
+                Collect(child, items, seen);
 
-        foreach (var item in items) item.MakeRoot();
-        return items.OrderBy(i => i.Display, StringComparer.CurrentCultureIgnoreCase).ThenBy(i => i.Kind, StringComparer.CurrentCultureIgnoreCase).ToList();
+            foreach (var item in items) item.KindNote = ShortKind(item.Kind);
+
+            var sorted = byType
+                             ? items.OrderBy(i => i.KindNote, StringComparer.CurrentCultureIgnoreCase).ThenBy(i => i.Display, StringComparer.CurrentCultureIgnoreCase)
+                             : items.OrderBy(i => i.Display, StringComparer.CurrentCultureIgnoreCase).ThenBy(i => i.KindNote, StringComparer.CurrentCultureIgnoreCase);
+
+            silo.Children.Clear();
+            foreach (var item in sorted)
+                silo.Children.Add(item);
+            silo.LinkParents();
+        }
+
+        return grouped;
     }
 
     /// <summary>Adds the items at or below <paramref name="node" />.</summary>

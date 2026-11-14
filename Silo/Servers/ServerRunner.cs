@@ -132,13 +132,13 @@ public sealed class ServerRunner : IAsyncDisposable
     private async Task ServeOne(TcpClient client, ServerEndpoint e, CancellationToken token)
     {
         using var _      = client;
-        var       remote = (IPEndPoint)client.Client.RemoteEndPoint!;
+        var       remote = Plain((IPEndPoint)client.Client.RemoteEndPoint!);
         try
         {
             Stream stream = client.GetStream();
             if (e.Tls == ServerTls.Implicit) stream = await TlsWrap.AsServerAsync(stream, Certificate!, token);
 
-            var connection = new Connection(e, (IPEndPoint)client.Client.LocalEndPoint!, remote, stream, e.Tls == ServerTls.Implicit,
+            var connection = new Connection(e, Plain((IPEndPoint)client.Client.LocalEndPoint!), remote, stream, e.Tls == ServerTls.Implicit,
                                             e.Tls == ServerTls.StartTls ? Certificate : null);
             try
             {
@@ -161,6 +161,15 @@ public sealed class ServerRunner : IAsyncDisposable
             _context.Log($"{remote}: {Service.DisplayName} failed: {ex.Message}");
             Serilog.Log.Warning(ex, "Server {Name} failed serving {Remote}", Config.Name, remote);
         }
+    }
+
+    /// <summary>
+    ///     An IPv4 address as IPv4: a socket listening on IPv6 and IPv4 at once sees an IPv4 client as <c>::ffff:127.0.0.1</c>,
+    ///     which is the same client but not how anyone writes it.
+    /// </summary>
+    public static IPEndPoint Plain(IPEndPoint endpoint)
+    {
+        return endpoint.Address.IsIPv4MappedToIPv6 ? new IPEndPoint(endpoint.Address.MapToIPv4(), endpoint.Port) : endpoint;
     }
 
     private async Task ReceiveLoop(Socket socket, ServerEndpoint e)
@@ -191,7 +200,7 @@ public sealed class ServerRunner : IAsyncDisposable
                          {
                              try
                              {
-                                 if (await Service.AnswerAsync(datagram, remote, _context, token) is { } reply)
+                                 if (await Service.AnswerAsync(datagram, Plain(remote), _context, token) is { } reply)
                                      await socket.SendToAsync(reply, SocketFlags.None, remote, token);
                              }
                              catch (Exception ex) when (ex is OperationCanceledException or ObjectDisposedException && token.IsCancellationRequested)

@@ -363,6 +363,22 @@ public class ServerRunnerTests
     }
 
     [Test]
+    public async Task AnIpv4ClientOfADualStackListenerIsSeenAsIpv4()
+    {
+        var tables = new MemoryTables();
+        await using var runner = Start(new SmtpStub(), tables, null, null, new ServerEndpoint(PortProtocol.Tcp, 0));
+
+        using var tcp = new TcpClient(AddressFamily.InterNetwork);
+        await tcp.ConnectAsync(IPAddress.Loopback, PortOf(runner));
+        var client = new Client(tcp.GetStream());
+        await client.Reply();
+        await client.Say("EHLO tester");
+        await SendMail(client, "mapped");
+
+        Assert.That(tables.Read("Mail")!.Rows.Single()[SmtpStub.Columns.ToList().IndexOf("Client")], Does.StartWith("127.0.0.1:"));
+    }
+
+    [Test]
     public void ImplicitTlsNeedsACertificate()
     {
         Assert.Throws<InvalidOperationException>(() => Start(new SmtpStub(), new MemoryTables(), null, null, new ServerEndpoint(PortProtocol.Tcp, 0, ServerTls.Implicit, "127.0.0.1")));

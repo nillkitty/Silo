@@ -14,6 +14,8 @@
                 <ResourceDictionary Source="/Resources/NavIcons.xaml" />
                 <!-- The domain name tree's icons, taken from the root Paths.xaml (which is not merged as a whole). -->
                 <ResourceDictionary Source="/Resources/DnsIcons.xaml" />
+                <!-- The external tools' icons (ping, WHOIS, the hashes...), likewise taken from the root Paths.xaml. -->
+                <ResourceDictionary Source="/Resources/ExternalToolIcons.xaml" />
                 <ResourceDictionary Source="/Resources/DataDef/BasicFormats.xaml" />
                 <!--
                     The app-wide control styles (Button, TextBox, MenuItem, TreeView, ToolBar, ...). Every brush in

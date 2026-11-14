@@ -66,6 +66,9 @@ public sealed class ExplorerNode : INotifyPropertyChanged, IOverridableNode, ICo
 
     public Geometry? Icon { get; }
 
+    /// <summary>A short word the tree shows in gray after the name (an item's kind, in a view that mixes kinds); null: nothing.</summary>
+    public string? KindNote { get; set; }
+
     /// <summary>Which of the Silo's databases the node's thing is kept in; drawn as a badge on the icon. <see cref="Realm.None" />: no badge.</summary>
     public Realm Realm { get; init; }
 
@@ -190,12 +193,6 @@ public sealed class ExplorerNode : INotifyPropertyChanged, IOverridableNode, ICo
 
     /// <summary>The node above this one; set by <see cref="LinkParents" /> once the tree is built (null for a top-level node).</summary>
     public ExplorerNode? Parent { get; private set; }
-
-    /// <summary>Makes this a top-level node (a view that lists it on its own, away from the folder it was built in).</summary>
-    public void MakeRoot()
-    {
-        Parent = null;
-    }
 
     /// <summary>Points every node below this one at its parent.</summary>
     public void LinkParents()

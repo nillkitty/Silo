@@ -144,7 +144,7 @@ public record OpenTerminalFileCommand(FileModel Model)
     }
 
     /// <summary>Whether a program is found in a folder on the PATH (Windows Terminal is an app-execution alias there).</summary>
-    private static bool OnPath(string program)
+    internal static bool OnPath(string program)
     {
         var folders = (Environment.GetEnvironmentVariable("PATH") ?? string.Empty).Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries);
         return folders.Any(d =>

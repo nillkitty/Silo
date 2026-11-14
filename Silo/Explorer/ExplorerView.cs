@@ -160,12 +160,32 @@ public sealed class ExplorerView : UserControl, IClipboardSurface
         iconHost.AppendChild(missing);
         row.AppendChild(iconHost);
 
+        // the name, then its kind note in gray right after it: the left-aligned panel is as wide as both until the row is too narrow,
+        // then the name (the filling last child) is what gets trimmed and the note stays in view
+        var line = new FrameworkElementFactory(typeof(DockPanel));
+        line.SetValue(HorizontalAlignmentProperty, HorizontalAlignment.Left);
+
+        var noteStyle = new Style(typeof(TextBlock));
+        var noNote    = new DataTrigger { Binding = new Binding(nameof(ExplorerNode.KindNote)), Value = null };
+        noNote.Setters.Add(new Setter(VisibilityProperty, Visibility.Collapsed));
+        noteStyle.Triggers.Add(noNote);
+
+        var note = new FrameworkElementFactory(typeof(TextBlock));
+        note.SetBinding(TextBlock.TextProperty, new Binding(nameof(ExplorerNode.KindNote)));
+        note.SetValue(DockPanel.DockProperty,    Dock.Right);
+        note.SetValue(MarginProperty,            new Thickness(6, 0, 0, 0));
+        note.SetValue(VerticalAlignmentProperty, VerticalAlignment.Center);
+        note.SetValue(StyleProperty,             noteStyle);
+        note.SetResourceReference(TextBlock.ForegroundProperty, "Theme.TextMuted");
+        line.AppendChild(note);
+
         var text = new FrameworkElementFactory(typeof(TextBlock));
         text.SetBinding(TextBlock.TextProperty, new Binding(nameof(ExplorerNode.Display)));
         text.SetValue(VerticalAlignmentProperty, VerticalAlignment.Center);
         text.SetValue(TextBlock.TextTrimmingProperty, TextTrimming.CharacterEllipsis);
         text.SetBinding(ToolTipProperty, new Binding(nameof(ExplorerNode.Display)));
-        row.AppendChild(text);
+        line.AppendChild(text);
+        row.AppendChild(line);
 
         template.VisualTree = row;
         return template;
